@@ -58,4 +58,24 @@ contextBridge.exposeInMainWorld('churchDisplay', {
   onProjectorBlackout: (callback) => {
     ipcRenderer.on('projector-blackout', () => callback());
   },
+
+  // ===== 文件管理 =====
+
+  /** 打开文件选择对话框 */
+  selectFiles: (options) => ipcRenderer.invoke('select-files', options),
+
+  /** 导入文件到媒体库 */
+  importFiles: (filePaths) => ipcRenderer.invoke('import-files', filePaths),
+
+  /** 获取媒体库文件列表 */
+  getMediaList: (type) => ipcRenderer.invoke('get-media-list', type),
+
+  /** 删除媒体文件 */
+  deleteMedia: (filePath) => ipcRenderer.invoke('delete-media', filePath),
+
+  /** 获取媒体目录路径 */
+  getMediaDir: () => ipcRenderer.invoke('get-media-dir'),
+
+  /** PPT 转图片 */
+  convertPpt: (pptPath) => ipcRenderer.invoke('convert-ppt', pptPath),
 });

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import MediaManager from './MediaManager';
 
 /**
  * 控制台主面板
@@ -82,6 +83,14 @@ function ControlPanel() {
     setCurrentSlide(null);
     if (isElectron) {
       window.churchDisplay.blackout();
+    }
+  }, [isElectron]);
+
+  // 媒体投屏回调
+  const handleProjectMedia = useCallback((mediaData) => {
+    setCurrentSlide(mediaData);
+    if (isElectron) {
+      window.churchDisplay.sendToProjector(mediaData);
     }
   }, [isElectron]);
 
@@ -314,13 +323,7 @@ function ControlPanel() {
         )}
 
         {activeSection === 'media' && (
-          <div className="empty-state animate-slide-in-up">
-            <div className="empty-state__icon">🎬</div>
-            <div className="empty-state__title">媒体管理</div>
-            <div className="empty-state__desc">
-              PPT、视频和 PDF 文件管理将在 Phase 2 中实现。敬请期待！
-            </div>
-          </div>
+          <MediaManager onProjectMedia={handleProjectMedia} />
         )}
       </div>
 
@@ -336,13 +339,38 @@ function ControlPanel() {
               <div style={{
                 padding: '12px',
                 textAlign: 'center',
-                fontSize: currentSlide.fontSize === 'large' ? '16px' : currentSlide.fontSize === 'medium' ? '12px' : '10px',
-                fontWeight: '700',
-                color: '#fff',
-                whiteSpace: 'pre-line',
-                lineHeight: '1.6',
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
               }}>
-                {currentSlide.text}
+                {currentSlide.type === 'text' && (
+                  <div style={{
+                    fontSize: currentSlide.fontSize === 'large' ? '16px' : currentSlide.fontSize === 'medium' ? '12px' : '10px',
+                    fontWeight: '700',
+                    color: '#fff',
+                    whiteSpace: 'pre-line',
+                    lineHeight: '1.6',
+                  }}>
+                    {currentSlide.text}
+                  </div>
+                )}
+                {currentSlide.type === 'image' && (
+                  <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>
+                    🖼️ {currentSlide.name}
+                  </div>
+                )}
+                {currentSlide.type === 'video' && (
+                  <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>
+                    🎬 {currentSlide.name}
+                  </div>
+                )}
+                {currentSlide.type === 'pdf' && (
+                  <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>
+                    📄 {currentSlide.name}
+                  </div>
+                )}
               </div>
             ) : (
               <span style={{ fontSize: '11px' }}>无内容</span>
