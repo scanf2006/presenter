@@ -1,0 +1,61 @@
+/**
+ * ChurchDisplay Pro - Preload 脚本
+ * 通过 contextBridge 安全地暴露 IPC 接口给渲染进程
+ */
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('churchDisplay', {
+  // ===== 显示器管理 =====
+  
+  /** 获取所有显示器列表 */
+  getDisplays: () => ipcRenderer.invoke('get-displays'),
+
+  /** 监听显示器变化事件 */
+  onDisplaysChanged: (callback) => {
+    ipcRenderer.on('displays-changed', (event, displays) => callback(displays));
+  },
+
+  // ===== 投影控制 =====
+  
+  /** 启动投影到指定显示器 */
+  startProjector: (displayId) => ipcRenderer.invoke('start-projector', displayId),
+
+  /** 停止投影 */
+  stopProjector: () => ipcRenderer.invoke('stop-projector'),
+
+  /** 获取投影状态 */
+  getProjectorStatus: () => ipcRenderer.invoke('get-projector-status'),
+
+  /** 监听投影状态变化 */
+  onProjectorStatus: (callback) => {
+    ipcRenderer.on('projector-status', (event, status) => callback(status));
+  },
+
+  // ===== 内容推送 =====
+  
+  /** 发送内容到投影窗口 */
+  sendToProjector: (data) => ipcRenderer.send('send-to-projector', data),
+
+  /** 发送过渡效果 */
+  sendTransition: (transitionData) => ipcRenderer.send('projector-transition', transitionData),
+
+  /** 投影黑屏 */
+  blackout: () => ipcRenderer.send('projector-blackout'),
+
+  // ===== 投影窗口接收 =====
+  
+  /** 监听投影内容更新（投影窗口使用） */
+  onProjectorContent: (callback) => {
+    ipcRenderer.on('projector-content', (event, data) => callback(data));
+  },
+
+  /** 监听过渡效果（投影窗口使用） */
+  onProjectorTransition: (callback) => {
+    ipcRenderer.on('projector-transition', (event, data) => callback(data));
+  },
+
+  /** 监听黑屏命令（投影窗口使用） */
+  onProjectorBlackout: (callback) => {
+    ipcRenderer.on('projector-blackout', () => callback());
+  },
+});
