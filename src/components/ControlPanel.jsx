@@ -357,18 +357,26 @@ function ControlPanel() {
                   </div>
                 )}
                 {currentSlide.type === 'image' && (
-                  <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>
-                    🖼️ {currentSlide.name}
-                  </div>
+                  <img 
+                    src={`local-media://${encodeURIComponent(currentSlide.path)}`} 
+                    alt={currentSlide.name}
+                    style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                  />
                 )}
                 {currentSlide.type === 'video' && (
-                  <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>
-                    🎬 {currentSlide.name}
-                  </div>
+                  <video 
+                    src={`local-media://${encodeURIComponent(currentSlide.path)}`} 
+                    style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                    muted
+                    autoPlay
+                    loop
+                  />
                 )}
                 {currentSlide.type === 'pdf' && (
-                  <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>
-                    📄 {currentSlide.name}
+                  <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '24px' }}>📄</span>
+                    <span>{currentSlide.name}</span>
+                    <span>(第 {currentSlide.page} 页)</span>
                   </div>
                 )}
               </div>

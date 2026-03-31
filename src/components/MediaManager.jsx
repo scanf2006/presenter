@@ -67,7 +67,9 @@ function MediaManager({ onProjectMedia }) {
     const files = Array.from(e.dataTransfer.files);
     if (files.length === 0) return;
 
-    const filePaths = files.map(f => f.path);
+    const filePaths = files.map(f => f.path).filter(Boolean);
+    if (filePaths.length === 0) return;
+    
     setImporting(true);
     await window.churchDisplay.importFiles(filePaths);
     await loadMediaFiles();
@@ -125,6 +127,8 @@ function MediaManager({ onProjectMedia }) {
         path: result.slides[0].path,
         name: `${file.name} - 第 1 页`,
       });
+    } else {
+      alert(`PPT 转换失败:\n${result.error || '未知错误'}\n\n可能原因：不支持的 PPT 格式，或者 Office 需要手动登录/激活。请检查任务栏是否有 PowerPoint 提示窗口。`);
     }
   }, [isElectron, onProjectMedia]);
 
@@ -259,34 +263,64 @@ function MediaManager({ onProjectMedia }) {
         </div>
       )}
 
-      {/* PPT 幻灯片导航 */}
+      {/* PPT 幻灯片网格选择区 */}
       {pptSlides && (
-        <div className="media-slide-nav">
-          <div className="media-slide-nav__title">
-            📊 PPT 幻灯片 ({currentSlideIndex + 1} / {pptSlides.length})
+        <div className="media-slide-selector" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: 'bold' }}>
+              📊 PPT 幻灯片选集 <span style={{ color: 'var(--color-text-secondary)', fontSize: '13px', fontWeight: 'normal' }}>({currentSlideIndex + 1} / {pptSlides.length})</span>
+            </h3>
+            <button className="btn btn--ghost" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => setPptSlides(null)}>关闭</button>
           </div>
-          <div className="media-slide-nav__controls">
-            <button
-              className="btn btn--ghost"
-              onClick={() => handleSlideNav(-1)}
-              disabled={currentSlideIndex === 0}
-            >
-              ◀ 上一页
-            </button>
-            <span className="media-slide-nav__page">
-              第 {currentSlideIndex + 1} 页
-            </span>
-            <button
-              className="btn btn--ghost"
-              onClick={() => handleSlideNav(1)}
-              disabled={currentSlideIndex === pptSlides.length - 1}
-            >
-              下一页 ▶
-            </button>
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', 
+            gap: '12px',
+            maxHeight: '400px',
+            overflowY: 'auto',
+            paddingRight: '6px'
+          }}>
+            {pptSlides.map((slide, index) => (
+              <div 
+                key={slide.path}
+                onClick={() => {
+                  setCurrentSlideIndex(index);
+                  onProjectMedia({
+                    type: 'image',
+                    path: slide.path,
+                    name: `PPT - 第 ${index + 1} 页`,
+                  });
+                }}
+                style={{
+                  cursor: 'pointer',
+                  border: currentSlideIndex === index ? '2px solid var(--color-primary)' : '2px solid transparent',
+                  borderRadius: '6px',
+                  overflow: 'hidden',
+                  position: 'relative',
+                  backgroundColor: '#000',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
+                }}
+              >
+                <img 
+                  src={`local-media://${encodeURIComponent(slide.path)}`} 
+                  alt={`Slide ${index + 1}`}
+                  style={{ width: '100%', display: 'block', aspectRatio: '16/9', objectFit: 'contain' }}
+                />
+                <div style={{ 
+                  position: 'absolute', 
+                  bottom: 0, right: 0, 
+                  background: currentSlideIndex === index ? 'var(--color-primary)' : 'rgba(0,0,0,0.7)', 
+                  color: '#fff', 
+                  fontSize: '12px', 
+                  fontWeight: 'bold',
+                  padding: '2px 8px',
+                  borderTopLeftRadius: '6px'
+                }}>
+                  {index + 1}
+                </div>
+              </div>
+            ))}
           </div>
-          <button className="btn btn--ghost" onClick={() => setPptSlides(null)} style={{ marginTop: '8px', width: '100%' }}>
-            关闭 PPT 导航
-          </button>
         </div>
       )}
 
@@ -320,10 +354,17 @@ function MediaManager({ onProjectMedia }) {
         </div>
       )}
 
-      {/* 文件列表 */}
-      <div className="media-file-list">
+      {/* 媒体文件网格选集 */}
+      <h3 style={{ fontSize: '15px', fontWeight: 'bold', marginTop: '24px', marginBottom: '16px' }}>
+        📁 媒体库文件库
+      </h3>
+      <div style={{ 
+        display: 'grid', 
+        gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', 
+        gap: '16px'
+      }}>
         {mediaFiles.length === 0 ? (
-          <div className="empty-state" style={{ padding: '40px 0' }}>
+          <div className="empty-state" style={{ padding: '40px 0', gridColumn: '1 / -1' }}>
             <div className="empty-state__icon">📭</div>
             <div className="empty-state__title">暂无媒体文件</div>
             <div className="empty-state__desc">
@@ -332,32 +373,100 @@ function MediaManager({ onProjectMedia }) {
           </div>
         ) : (
           mediaFiles.map((file) => (
-            <div key={file.id} className="media-file-item">
-              <div className="media-file-item__icon">{getTypeIcon(file.type)}</div>
-              <div className="media-file-item__info">
-                <div className="media-file-item__name">{file.name}</div>
-                <div className="media-file-item__meta">
-                  <span className="media-file-item__type-badge">
-                    {getTypeLabel(file.type)}
-                  </span>
-                  <span>{formatSize(file.size)}</span>
-                </div>
-              </div>
-              <div className="media-file-item__actions">
+            <div 
+              key={file.id} 
+              style={{
+                position: 'relative',
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-border)',
+                borderRadius: '8px',
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.borderColor = 'var(--color-primary)';
+                e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.4)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'none';
+                e.currentTarget.style.borderColor = 'var(--color-border)';
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+              onClick={() => handleProjectMedia(file)}
+              title={`点击投屏: ${file.name}`}
+            >
+              {/* 缩略图区域 */}
+              <div style={{ 
+                height: '110px', 
+                backgroundColor: '#0a0a0a', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                position: 'relative' 
+              }}>
+                {file.type === 'image' ? (
+                  <img src={`local-media://${encodeURIComponent(file.path)}`} alt={file.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : file.type === 'video' ? (
+                  <video src={`local-media://${encodeURIComponent(file.path)}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  <div style={{ fontSize: '48px' }}>{getTypeIcon(file.type)}</div>
+                )}
+                
+                {/* 悬浮操作：删除 */}
                 <button
-                  className="btn btn--success"
-                  onClick={() => handleProjectMedia(file)}
-                  title="投屏播放"
-                >
-                  📤 投屏
-                </button>
-                <button
-                  className="btn btn--ghost btn--icon"
-                  onClick={() => handleDelete(file)}
-                  title="删除"
+                  onClick={(e) => { 
+                    e.stopPropagation(); 
+                    if(window.confirm(`确定要删除 ${file.name} 吗？`)) handleDelete(file); 
+                  }}
+                  style={{ 
+                    position: 'absolute', top: '6px', right: '6px', 
+                    background: 'rgba(0,0,0,0.7)', border: 'none', borderRadius: '4px', 
+                    color: '#ff4d4f', padding: '4px', cursor: 'pointer', zIndex: 10,
+                    fontSize: '12px'
+                  }}
+                  title="删除此文件"
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.9)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.7)'}
                 >
                   🗑️
                 </button>
+
+                {/* 类型标签 */}
+                <div style={{ 
+                  position: 'absolute', bottom: '6px', left: '6px', 
+                  background: 'rgba(0,0,0,0.7)', borderRadius: '4px', 
+                  padding: '2px 6px', fontSize: '11px', color: '#fff', fontWeight: 'bold' 
+                }}>
+                  {getTypeIcon(file.type)} {getTypeLabel(file.type)}
+                </div>
+              </div>
+
+              {/* 文件信息区域 */}
+              <div style={{ padding: '10px' }}>
+                <div style={{ 
+                  fontSize: '13px', 
+                  fontWeight: '500', 
+                  whiteSpace: 'nowrap', 
+                  overflow: 'hidden', 
+                  textOverflow: 'ellipsis',
+                  color: 'var(--color-text-primary)'
+                }}>
+                  {file.name}
+                </div>
+                <div style={{ 
+                  fontSize: '11px', 
+                  color: 'var(--color-text-secondary)',
+                  marginTop: '4px',
+                  display: 'flex',
+                  justifyContent: 'space-between'
+                }}>
+                  <span>{formatSize(file.size)}</span>
+                  <span style={{ color: 'var(--color-primary)' }}>点击播放 ▶</span>
+                </div>
               </div>
             </div>
           ))

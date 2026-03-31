@@ -6,15 +6,15 @@ const { app, BrowserWindow, screen, ipcMain, dialog, protocol } = require('elect
 const path = require('path');
 const fs = require('fs');
 
-// 开发模式判断
-const isDev = !app.isPackaged;
+// 开发模式判断（通过检测 electron 是否从 node_modules 运行）
+const isDev = process.env.NODE_ENV !== 'production' && !app.isPackaged;
 
-// 媒体文件存储目录
-const MEDIA_DIR = path.join(app.getPath('userData'), 'media');
-const MEDIA_IMAGES_DIR = path.join(MEDIA_DIR, 'images');
-const MEDIA_VIDEOS_DIR = path.join(MEDIA_DIR, 'videos');
-const MEDIA_PDF_DIR = path.join(MEDIA_DIR, 'pdf');
-const MEDIA_PPT_DIR = path.join(MEDIA_DIR, 'ppt');
+// 媒体文件存储目录（延迟初始化，在 app ready 之后赋值）
+let MEDIA_DIR;
+let MEDIA_IMAGES_DIR;
+let MEDIA_VIDEOS_DIR;
+let MEDIA_PDF_DIR;
+let MEDIA_PPT_DIR;
 
 /**
  * 初始化媒体存储目录
@@ -438,6 +438,13 @@ function watchDisplayChanges() {
 // ================= 应用生命周期 =================
 
 app.whenReady().then(() => {
+  // 初始化媒体目录路径（app ready 之后才能调用 getPath）
+  MEDIA_DIR = path.join(app.getPath('userData'), 'media');
+  MEDIA_IMAGES_DIR = path.join(MEDIA_DIR, 'images');
+  MEDIA_VIDEOS_DIR = path.join(MEDIA_DIR, 'videos');
+  MEDIA_PDF_DIR = path.join(MEDIA_DIR, 'pdf');
+  MEDIA_PPT_DIR = path.join(MEDIA_DIR, 'ppt');
+
   initMediaDirs();
 
   // 注册本地文件协议，允许渲染进程安全加载本地媒体文件
