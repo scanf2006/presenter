@@ -78,4 +78,26 @@ contextBridge.exposeInMainWorld('churchDisplay', {
 
   /** PPT 转图片 */
   convertPpt: (pptPath) => ipcRenderer.invoke('convert-ppt', pptPath),
+
+  // ===== 圣经数据库 =====
+
+  /** 获取书卷列表 */
+  bibleGetBooks: (version) => ipcRenderer.invoke('bible-get-books', version),
+
+  /** 获取经文 */
+  bibleGetVerses: (version, bookSN, chapter) => ipcRenderer.invoke('bible-get-verses', version, bookSN, chapter),
+
+  /** 搜索经文 */
+  bibleSearch: (version, keyword) => ipcRenderer.invoke('bible-search', version, keyword),
+
+  // ===== 歌曲管理 =====
+
+  /** 获取歌曲列表 */
+  songsList: () => ipcRenderer.invoke('songs-list'),
+
+  /** 保存/更新歌曲 */
+  songsSave: (song) => ipcRenderer.invoke('songs-save', song),
+
+  /** 删除歌曲 */
+  songsDelete: (songId) => ipcRenderer.invoke('songs-delete', songId),
 });

@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import MediaManager from './MediaManager';
+import BibleBrowser from './BibleBrowser';
+import SongManager from './SongManager';
 
 /**
  * 控制台主面板
@@ -292,34 +294,12 @@ function ControlPanel() {
           </div>
         )}
 
-        {(activeSection === 'songs' || activeSection === 'bible') && (
-          <div className="animate-slide-in-up">
-            <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>
-              {activeSection === 'songs' ? '🎵 诗歌歌词' : '📖 圣经经文'}
-            </h2>
-            <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '24px' }}>
-              点击下方卡片即可将内容发送到投影画面。
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {sampleContent
-                .filter((item) => {
-                  if (activeSection === 'songs') return item.id <= 2 || item.id === 4;
-                  return item.id === 2 || item.id === 3;
-                })
-                .map((item) => (
-                  <div
-                    key={item.id}
-                    className="content-card"
-                    onClick={() => handleSendToProjector(item.text)}
-                  >
-                    <div className="content-card__title">{item.title}</div>
-                    <div className="content-card__text" style={{ whiteSpace: 'pre-line' }}>
-                      {item.text}
-                    </div>
-                  </div>
-                ))}
-            </div>
-          </div>
+        {activeSection === 'bible' && (
+          <BibleBrowser onProjectContent={handleProjectMedia} />
+        )}
+
+        {activeSection === 'songs' && (
+          <SongManager onProjectContent={handleProjectMedia} />
         )}
 
         {activeSection === 'media' && (
@@ -377,6 +357,32 @@ function ControlPanel() {
                     <span style={{ fontSize: '24px' }}>📄</span>
                     <span>{currentSlide.name}</span>
                     <span>(第 {currentSlide.page} 页)</span>
+                  </div>
+                )}
+                {currentSlide.type === 'bible' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                    <div style={{
+                      fontSize: currentSlide.fontSize === 'large' ? '14px' : currentSlide.fontSize === 'medium' ? '11px' : '9px',
+                      fontWeight: '600', color: '#fff', whiteSpace: 'pre-line', lineHeight: '1.6', textAlign: 'center',
+                    }}>
+                      {currentSlide.text}
+                    </div>
+                    <div style={{ fontSize: '10px', color: 'var(--color-primary)', fontStyle: 'italic', marginTop: '4px' }}>
+                      — {currentSlide.reference}
+                    </div>
+                  </div>
+                )}
+                {currentSlide.type === 'lyrics' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                    <div style={{ fontSize: '9px', color: 'var(--color-primary)', fontWeight: 'bold' }}>
+                      {currentSlide.songTitle} · {currentSlide.sectionTitle}
+                    </div>
+                    <div style={{
+                      fontSize: currentSlide.fontSize === 'large' ? '14px' : currentSlide.fontSize === 'medium' ? '11px' : '9px',
+                      fontWeight: '700', color: '#fff', whiteSpace: 'pre-line', lineHeight: '1.8', textAlign: 'center',
+                    }}>
+                      {currentSlide.text}
+                    </div>
                   </div>
                 )}
               </div>

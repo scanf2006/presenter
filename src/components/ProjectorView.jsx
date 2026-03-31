@@ -185,6 +185,49 @@ function ProjectorView() {
               <canvas ref={canvasRef} />
             </div>
           )}
+
+          {/* 圣经经文 */}
+          {content.type === 'bible' && (
+            <div className={`projector-view__content ${fadeClass}`}>
+              <div className={`projector-text ${getTextSizeClass()}`} style={{ 
+                whiteSpace: 'pre-line', textAlign: 'center', lineHeight: '1.8',
+                textShadow: '2px 2px 8px rgba(0,0,0,0.8)',
+              }}>
+                {content.text}
+              </div>
+              {content.reference && (
+                <div style={{
+                  marginTop: '40px', fontSize: '28px', fontStyle: 'italic',
+                  color: 'rgba(255,255,255,0.7)', textAlign: 'center',
+                  textShadow: '1px 1px 4px rgba(0,0,0,0.6)',
+                }}>
+                  — {content.reference}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 歌词 */}
+          {content.type === 'lyrics' && (
+            <div className={`projector-view__content ${fadeClass}`}>
+              {content.sectionTitle && (
+                <div style={{
+                  fontSize: '22px', fontWeight: 'bold', marginBottom: '24px',
+                  color: 'rgba(255,255,255,0.5)', textAlign: 'center',
+                  letterSpacing: '4px', textTransform: 'uppercase',
+                }}>
+                  {content.songTitle} · {content.sectionTitle}
+                </div>
+              )}
+              <div className={`projector-text ${getTextSizeClass()}`} style={{
+                whiteSpace: 'pre-line', textAlign: 'center', lineHeight: '2.0',
+                textShadow: '3px 3px 10px rgba(0,0,0,0.9)',
+                letterSpacing: '2px',
+              }}>
+                {content.text}
+              </div>
+            </div>
+          )}
         </>
       )}
 

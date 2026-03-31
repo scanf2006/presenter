@@ -5,6 +5,12 @@
 const { app, BrowserWindow, screen, ipcMain, dialog, protocol } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const initSqlJs = require('sql.js');
+
+// 数据库实例（延迟初始化）
+let bibleDbCuvs = null; // 中文和合本
+let bibleDbKjv = null;  // 英文 KJV
+let songsDb = null;     // 歌曲数据库
 
 // 开发模式判断（通过检测 electron 是否从 node_modules 运行）
 const isDev = process.env.NODE_ENV !== 'production' && !app.isPackaged;
@@ -417,6 +423,153 @@ function setupIPC() {
 }
 
 /**
+ * 初始化圣经和歌曲数据库
+ */
+async function initBibleDatabase() {
+  const SQL = await initSqlJs();
+
+  // 加载中文和合本
+  const cuvsPath = path.join(__dirname, '..', 'data', 'bible_cuvs.db');
+  if (fs.existsSync(cuvsPath)) {
+    const data = fs.readFileSync(cuvsPath);
+    bibleDbCuvs = new SQL.Database(data);
+    console.log('[BibleDB] 中文和合本已加载');
+  }
+
+  // 加载英文 KJV
+  const kjvPath = path.join(__dirname, '..', 'data', 'bible_kjv.db');
+  if (fs.existsSync(kjvPath)) {
+    const data = fs.readFileSync(kjvPath);
+    bibleDbKjv = new SQL.Database(data);
+    console.log('[BibleDB] 英文 KJV 已加载');
+  }
+
+  // 初始化歌曲数据库
+  const songsPath = path.join(app.getPath('userData'), 'songs.db');
+  if (fs.existsSync(songsPath)) {
+    const data = fs.readFileSync(songsPath);
+    songsDb = new SQL.Database(data);
+  } else {
+    songsDb = new SQL.Database();
+  }
+  // 创建歌曲表（如不存在）
+  songsDb.run(`CREATE TABLE IF NOT EXISTS songs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    author TEXT DEFAULT '',
+    lyrics TEXT NOT NULL,
+    created_at INTEGER DEFAULT (strftime('%s','now')),
+    updated_at INTEGER DEFAULT (strftime('%s','now'))
+  )`);
+  console.log('[SongsDB] 歌曲数据库已初始化');
+}
+
+/**
+ * 保存歌曲数据库到磁盘
+ */
+function saveSongsDb() {
+  if (!songsDb) return;
+  const data = songsDb.export();
+  const songsPath = path.join(app.getPath('userData'), 'songs.db');
+  fs.writeFileSync(songsPath, Buffer.from(data));
+}
+
+/**
+ * 获取指定版本的圣经数据库
+ */
+function getBibleDb(version) {
+  return version === 'kjv' ? bibleDbKjv : bibleDbCuvs;
+}
+
+/**
+ * 注册圣经和歌曲 IPC 处理器
+ */
+function setupBibleIPC() {
+  // 获取书卷列表
+  ipcMain.handle('bible-get-books', (event, version) => {
+    const db = getBibleDb(version);
+    if (!db) return [];
+    const result = db.exec('SELECT SN, ShortName, FullName, ChapterNumber, NewOrOld FROM BibleID ORDER BY SN');
+    if (!result.length) return [];
+    return result[0].values.map(row => ({
+      sn: row[0], shortName: row[1], fullName: row[2],
+      chapterCount: row[3], isNewTestament: row[4] === 1
+    }));
+  });
+
+  // 获取经文
+  ipcMain.handle('bible-get-verses', (event, version, bookSN, chapter) => {
+    const db = getBibleDb(version);
+    if (!db) return [];
+    const result = db.exec(
+      'SELECT VerseSN, Lection FROM Bible WHERE VolumeSN = ? AND ChapterSN = ? ORDER BY VerseSN',
+      [bookSN, chapter]
+    );
+    if (!result.length) return [];
+    return result[0].values.map(row => ({ verse: row[0], text: row[1] }));
+  });
+
+  // 搜索经文
+  ipcMain.handle('bible-search', (event, version, keyword) => {
+    const db = getBibleDb(version);
+    if (!db) return [];
+    const result = db.exec(
+      `SELECT b.VolumeSN, b.ChapterSN, b.VerseSN, b.Lection, bi.ShortName, bi.FullName
+       FROM Bible b JOIN BibleID bi ON b.VolumeSN = bi.SN
+       WHERE b.Lection LIKE '%' || ? || '%'
+       LIMIT 100`,
+      [keyword]
+    );
+    if (!result.length) return [];
+    return result[0].values.map(row => ({
+      bookSN: row[0], chapter: row[1], verse: row[2],
+      text: row[3], shortName: row[4], fullName: row[5]
+    }));
+  });
+
+  // 歌曲列表
+  ipcMain.handle('songs-list', () => {
+    if (!songsDb) return [];
+    const result = songsDb.exec('SELECT id, title, author, lyrics, created_at, updated_at FROM songs ORDER BY updated_at DESC');
+    if (!result.length) return [];
+    return result[0].values.map(row => ({
+      id: row[0], title: row[1], author: row[2],
+      lyrics: row[3], createdAt: row[4], updatedAt: row[5]
+    }));
+  });
+
+  // 保存歌曲
+  ipcMain.handle('songs-save', (event, song) => {
+    if (!songsDb) return { success: false };
+    try {
+      if (song.id) {
+        songsDb.run('UPDATE songs SET title=?, author=?, lyrics=?, updated_at=strftime(\'%s\',\'now\') WHERE id=?',
+          [song.title, song.author || '', song.lyrics, song.id]);
+      } else {
+        songsDb.run('INSERT INTO songs (title, author, lyrics) VALUES (?, ?, ?)',
+          [song.title, song.author || '', song.lyrics]);
+      }
+      saveSongsDb();
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  // 删除歌曲
+  ipcMain.handle('songs-delete', (event, songId) => {
+    if (!songsDb) return { success: false };
+    try {
+      songsDb.run('DELETE FROM songs WHERE id=?', [songId]);
+      saveSongsDb();
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
+}
+
+/**
  * 监控显示器变化事件
  */
 function watchDisplayChanges() {
@@ -437,7 +590,7 @@ function watchDisplayChanges() {
 
 // ================= 应用生命周期 =================
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // 初始化媒体目录路径（app ready 之后才能调用 getPath）
   MEDIA_DIR = path.join(app.getPath('userData'), 'media');
   MEDIA_IMAGES_DIR = path.join(MEDIA_DIR, 'images');
@@ -453,7 +606,11 @@ app.whenReady().then(() => {
     callback({ path: filePath });
   });
 
+  // 初始化圣经数据库
+  await initBibleDatabase();
+
   setupIPC();
+  setupBibleIPC();
   createControlWindow();
   watchDisplayChanges();
 });

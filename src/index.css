@@ -994,3 +994,47 @@ body {
   max-width: 100%;
   max-height: 100%;
 }
+
+/* ===========================================
+   圣经浏览器 (Bible Browser)
+   =========================================== */
+
+.bible-browser {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.bible-search-input:focus {
+  border-color: var(--color-accent) !important;
+  box-shadow: 0 0 0 3px var(--color-accent-glow);
+}
+
+/* 书卷/章节 按钮悬停效果已在组件中内联，这里补充全局一致性 */
+.bible-browser button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ===========================================
+   诗歌管理器 (Song Manager)
+   =========================================== */
+
+.song-manager {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.song-manager textarea:focus {
+  border-color: var(--color-accent) !important;
+  box-shadow: 0 0 0 3px var(--color-accent-glow);
+}
+
+/* 歌曲卡片在组件中已有精美内联样式，这里补充通用容器 */
+.song-manager__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
