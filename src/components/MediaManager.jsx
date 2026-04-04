@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+﻿import React, { useState, useEffect, useCallback, useRef } from 'react';
+import PdfThumbnail from './PdfThumbnail';
 
 /**
- * 媒体管理器组件
- * 支持拖拽上传、文件浏览、媒体投屏
+ * 媒体管理器组�?
+ * 支持拖拽上传、文件浏览��媒体投�?
  */
-function MediaManager({ onProjectMedia }) {
+function MediaManager({ onProjectMedia, onAddPlaylist, activePreloadItem, backgroundPickerTarget, onPickBackground, onCancelBackgroundPick }) {
   const [mediaFiles, setMediaFiles] = useState([]);
   const [activeFilter, setActiveFilter] = useState('all');
   const [isDragging, setIsDragging] = useState(false);
@@ -12,9 +13,12 @@ function MediaManager({ onProjectMedia }) {
   const [pptConverting, setPptConverting] = useState(false);
   const [pptSlides, setPptSlides] = useState(null);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
-  const [selectedPdf, setSelectedPdf] = useState(null);
-  const [pdfPageCount, setPdfPageCount] = useState(0);
+  
+  // PDF 网格预览状��?
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [activePdf, setActivePdf] = useState(null);
   const [currentPdfPage, setCurrentPdfPage] = useState(1);
+  const [youtubeUrl, setYoutubeUrl] = useState('');
   const dropRef = useRef(null);
 
   const isElectron = typeof window.churchDisplay !== 'undefined';
@@ -26,12 +30,12 @@ function MediaManager({ onProjectMedia }) {
       const files = await window.churchDisplay.getMediaList(type);
       setMediaFiles(files);
     } else {
-      // 浏览器模式模拟数据
+      // 浏览器模式模拟数�?
       setMediaFiles([
-        { id: 'demo1', name: '背景图1.jpg', type: 'image', size: 1024000, createdAt: Date.now() },
-        { id: 'demo2', name: '敬拜视频.mp4', type: 'video', size: 52428800, createdAt: Date.now() - 1000 },
-        { id: 'demo3', name: '周日程序.pdf', type: 'pdf', size: 2048000, createdAt: Date.now() - 2000 },
-        { id: 'demo4', name: '敬拜PPT.pptx', type: 'ppt', size: 8192000, createdAt: Date.now() - 3000 },
+        { id: 'demo1', name: 'background.jpg', type: 'image', size: 1024000, createdAt: Date.now() },
+        { id: 'demo2', name: 'worship-video.mp4', type: 'video', size: 52428800, createdAt: Date.now() - 1000 },
+        { id: 'demo3', name: 'service-program.pdf', type: 'pdf', size: 2048000, createdAt: Date.now() - 2000 },
+        { id: 'demo4', name: 'worship.pptx', type: 'ppt', size: 8192000, createdAt: Date.now() - 3000 },
       ]);
     }
   }, [isElectron, activeFilter]);
@@ -83,8 +87,58 @@ function MediaManager({ onProjectMedia }) {
     await loadMediaFiles();
   }, [isElectron, loadMediaFiles]);
 
+  // 加载 PDF 生成网格
+  const handleLoadPdfGrid = useCallback(async (file) => {
+    setPdfLoading(true);
+    setActivePdf(null);
+    setPptSlides(null); // 关闭 PPT 网格
+    setCurrentPdfPage(1);
+
+    try {
+      const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.min.mjs');
+      const workerUrl = new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).toString();
+      pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+
+      const fileUrl = `local-media://${encodeURIComponent(file.path)}`;
+      const response = await fetch(fileUrl);
+      if (!response.ok) throw new Error(`Network load failed: ${response.status}`);
+      const dataBuffer = await response.arrayBuffer();
+
+      const loadingTask = pdfjsLib.getDocument({ data: dataBuffer });
+      const pdfDocument = await loadingTask.promise;
+
+      setActivePdf({
+        path: file.path,
+        name: file.name,
+        pdfDocument,
+        numPages: pdfDocument.numPages
+      });
+
+      // 立即触发大屏幕第丢�页投�?
+      onProjectMedia({
+        type: 'pdf',
+        path: file.path,
+        name: file.name,
+        page: 1,
+      });
+    } catch (err) {
+      console.error('[MediaManager] PDF load failed:', err);
+      alert('Failed to load PDF thumbnails: ' + err.message);
+    } finally {
+      setPdfLoading(false);
+    }
+  }, [onProjectMedia]);
+
   // 投屏媒体
   const handleProjectMedia = useCallback((file) => {
+    if (backgroundPickerTarget) {
+      if (file.type === 'image' || file.type === 'video') {
+        onPickBackground?.({ type: file.type, path: file.path, name: file.name });
+      } else {
+        alert('Background only supports image or video');
+      }
+      return;
+    }
     if (file.type === 'image') {
       onProjectMedia({
         type: 'image',
@@ -98,18 +152,72 @@ function MediaManager({ onProjectMedia }) {
         name: file.name,
       });
     } else if (file.type === 'pdf') {
-      setSelectedPdf(file);
-      setCurrentPdfPage(1);
-      onProjectMedia({
-        type: 'pdf',
-        path: file.path,
-        name: file.name,
-        page: 1,
-      });
+      handleLoadPdfGrid(file);
     } else if (file.type === 'ppt') {
       handleConvertPpt(file);
     }
-  }, [onProjectMedia]);
+  }, [onProjectMedia, handleLoadPdfGrid, backgroundPickerTarget, onPickBackground]);
+
+  const parseYouTubeId = useCallback((url) => {
+    if (!url) return null;
+    const input = url.trim();
+    try {
+      const u = new URL(input);
+      if (u.hostname.includes('youtu.be')) {
+        const id = u.pathname.replace('/', '').trim();
+        return id || null;
+      }
+      if (u.hostname.includes('youtube.com')) {
+        if (u.pathname.startsWith('/watch')) {
+          return u.searchParams.get('v');
+        }
+        if (u.pathname.startsWith('/shorts/')) {
+          return u.pathname.split('/')[2] || null;
+        }
+        if (u.pathname.startsWith('/embed/')) {
+          return u.pathname.split('/')[2] || null;
+        }
+      }
+    } catch (_) {
+      const match = input.match(/(?:v=|youtu\.be\/|shorts\/|embed\/)([A-Za-z0-9_-]{11})/);
+      return match ? match[1] : null;
+    }
+    return null;
+  }, []);
+
+  const handleProjectYouTube = useCallback(() => {
+    const id = parseYouTubeId(youtubeUrl);
+    if (!id) {
+      alert('Please enter a valid YouTube URL');
+      return;
+    }
+    onProjectMedia({
+      type: 'youtube',
+      videoId: id,
+      url: youtubeUrl.trim(),
+      name: `YouTube - ${id}`,
+    });
+  }, [youtubeUrl, parseYouTubeId, onProjectMedia]);
+
+  const handleQueueYouTube = useCallback(() => {
+    const id = parseYouTubeId(youtubeUrl);
+    if (!id) {
+      alert('Please enter a valid YouTube URL');
+      return;
+    }
+    if (onAddPlaylist) {
+      onAddPlaylist({
+        type: 'youtube',
+        name: `YouTube - ${id}`,
+        payload: {
+          type: 'youtube',
+          videoId: id,
+          url: youtubeUrl.trim(),
+          name: `YouTube - ${id}`,
+        },
+      });
+    }
+  }, [youtubeUrl, parseYouTubeId, onAddPlaylist]);
 
   // PPT 转换
   const handleConvertPpt = useCallback(async (file) => {
@@ -121,16 +229,36 @@ function MediaManager({ onProjectMedia }) {
     if (result.success && result.slides.length > 0) {
       setPptSlides(result.slides);
       setCurrentSlideIndex(0);
-      // 投屏第一张
+      // 投屏第一�?
       onProjectMedia({
         type: 'image',
         path: result.slides[0].path,
-        name: `${file.name} - 第 1 页`,
+        name: `${file.name} - Page 1`,
       });
     } else {
-      alert(`PPT 转换失败:\n${result.error || '未知错误'}\n\n可能原因：不支持的 PPT 格式，或者 Office 需要手动登录/激活。请检查任务栏是否有 PowerPoint 提示窗口。`);
+      if (result.error === 'TIMEOUT') {
+        alert('PPT conversion timed out (over 2 minutes). Please close any PowerPoint popups and retry.');
+      } else {
+        alert(`PPT conversion failed:\n${result.error || 'Unknown error'}\n\nPlease verify PPT format and Office availability.`);
+      }
     }
   }, [isElectron, onProjectMedia]);
+
+  // === 新增：接管播放列表传来的濢�活载入任�?===
+  useEffect(() => {
+    if (activePreloadItem) {
+      const type = activePreloadItem.type;
+      if (type === 'ppt' || type === 'pdf') {
+        const file = { 
+          type: type, 
+          path: activePreloadItem.payload.path, 
+          name: activePreloadItem.payload.name 
+        };
+        if (type === 'ppt') handleConvertPpt(file);
+        if (type === 'pdf') handleLoadPdfGrid(file);
+      }
+    }
+  }, [activePreloadItem, handleConvertPpt, handleLoadPdfGrid]);
 
   // PPT 翻页
   const handleSlideNav = useCallback((direction) => {
@@ -141,25 +269,11 @@ function MediaManager({ onProjectMedia }) {
     onProjectMedia({
       type: 'image',
       path: pptSlides[newIndex].path,
-      name: `PPT - 第 ${newIndex + 1} 页`,
+      name: `PPT - Page ${newIndex + 1}`,
     });
   }, [pptSlides, currentSlideIndex, onProjectMedia]);
 
-  // PDF 翻页
-  const handlePdfNav = useCallback((direction) => {
-    if (!selectedPdf) return;
-    const newPage = currentPdfPage + direction;
-    if (newPage < 1) return;
-    setCurrentPdfPage(newPage);
-    onProjectMedia({
-      type: 'pdf',
-      path: selectedPdf.path,
-      name: `${selectedPdf.name} - 第 ${newPage} 页`,
-      page: newPage,
-    });
-  }, [selectedPdf, currentPdfPage, onProjectMedia]);
-
-  // 格式化文件大小
+  // 格式化文件大�?
   const formatSize = (bytes) => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -169,7 +283,7 @@ function MediaManager({ onProjectMedia }) {
   // 获取类型图标
   const getTypeIcon = (type) => {
     switch (type) {
-      case 'image': return '🖼️';
+      case 'image': return '🖼';
       case 'video': return '🎬';
       case 'pdf': return '📄';
       case 'ppt': return '📊';
@@ -180,97 +294,191 @@ function MediaManager({ onProjectMedia }) {
   // 获取类型标签
   const getTypeLabel = (type) => {
     switch (type) {
-      case 'image': return '图片';
-      case 'video': return '视频';
+      case 'image': return 'Image';
+      case 'video': return 'Video';
       case 'pdf': return 'PDF';
       case 'ppt': return 'PPT';
-      default: return '文件';
+      default: return 'File';
     }
   };
 
   const filterOptions = [
-    { key: 'all', label: '全部', icon: '📁' },
-    { key: 'image', label: '图片', icon: '🖼️' },
-    { key: 'video', label: '视频', icon: '🎬' },
+    { key: 'all', label: 'All', icon: '📁' },
+    { key: 'image', label: 'Image', icon: '🖼' },
+    { key: 'video', label: 'Video', icon: '🎬' },
     { key: 'pdf', label: 'PDF', icon: '📄' },
     { key: 'ppt', label: 'PPT', icon: '📊' },
   ];
 
+  const isViewingDetail = activePdf || pptSlides || pptConverting || pdfLoading;
+
   return (
     <div className="media-manager animate-slide-in-up">
-      <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px' }}>🎬 媒体管理</h2>
+      <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px' }}>🎬 Media</h2>
       <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '16px' }}>
-        导入图片、视频、PDF 和 PPT 文件，点击即可投屏播放。
+        Import image, video, PDF and PPT files. Click to project.
       </p>
 
-      {/* 过滤器栏 */}
-      <div className="media-filter-bar">
-        {filterOptions.map((opt) => (
-          <button
-            key={opt.key}
-            className={`media-filter-btn ${activeFilter === opt.key ? 'media-filter-btn--active' : ''}`}
-            onClick={() => setActiveFilter(opt.key)}
-          >
-            <span>{opt.icon}</span>
-            <span>{opt.label}</span>
-          </button>
-        ))}
-      </div>
+      {!isViewingDetail && (
+        <>
+          {backgroundPickerTarget && (
+            <div style={{
+              marginBottom: '12px',
+              padding: '10px 12px',
+              borderRadius: '8px',
+              border: '1px solid rgba(99,102,241,0.35)',
+              background: 'rgba(99,102,241,0.12)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '12px',
+              fontSize: '12px',
+            }}>
+              <span>Background picker mode: click an image/video to apply and return.</span>
+              <button className="btn btn--ghost" onClick={() => onCancelBackgroundPick?.()}>Cancel</button>
+            </div>
+          )}
 
-      {/* 导入按钮组 */}
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+            <input
+              type="text"
+              placeholder="Paste YouTube URL (e.g. https://youtu.be/...)"
+              value={youtubeUrl}
+              onChange={(e) => setYoutubeUrl(e.target.value)}
+              style={{
+                flex: 1,
+                padding: '8px 10px',
+                borderRadius: '6px',
+                border: '1px solid var(--color-border)',
+                background: 'var(--color-surface)',
+                color: 'var(--color-text-primary)',
+                fontSize: '12px',
+                outline: 'none',
+              }}
+            />
+            <button className="btn btn--primary" onClick={handleProjectYouTube}>Play</button>
+            <button className="btn btn--ghost" onClick={handleQueueYouTube}>Queue</button>
+          </div>
+
+          {/* Filter bar */}
+          <div className="media-filter-bar">
+            {filterOptions.map((opt) => (
+              <button
+                key={opt.key}
+                className={`media-filter-btn ${activeFilter === opt.key ? 'media-filter-btn--active' : ''}`}
+                onClick={() => setActiveFilter(opt.key)}
+              >
+                <span>{opt.icon}</span>
+                <span>{opt.label}</span>
+              </button>
+            ))}
+          </div>
+
+      {/* Import buttons */}
       <div className="media-import-actions">
         <button className="btn btn--primary" onClick={() => handleSelectFiles()}>
-          📥 导入文件
+          📥 Import Files
         </button>
-        <button className="btn btn--ghost" onClick={() => handleSelectFiles('image')}>🖼️ 图片</button>
-        <button className="btn btn--ghost" onClick={() => handleSelectFiles('video')}>🎬 视频</button>
+        <button className="btn btn--ghost" onClick={() => handleSelectFiles('image')}>🖼 Image</button>
+        <button className="btn btn--ghost" onClick={() => handleSelectFiles('video')}>🎬 Video</button>
         <button className="btn btn--ghost" onClick={() => handleSelectFiles('pdf')}>📄 PDF</button>
         <button className="btn btn--ghost" onClick={() => handleSelectFiles('ppt')}>📊 PPT</button>
       </div>
 
-      {/* 拖拽上传区 */}
-      <div
-        ref={dropRef}
-        className={`media-drop-zone ${isDragging ? 'media-drop-zone--active' : ''}`}
-        onDragEnter={handleDragEnter}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-      >
-        {importing ? (
-          <div className="media-drop-zone__importing">
-            <div className="spinner"></div>
-            <span>正在导入文件...</span>
+          {/* Drag and drop upload */}
+          <div
+            ref={dropRef}
+            className={`media-drop-zone ${isDragging ? 'media-drop-zone--active' : ''}`}
+            onDragEnter={handleDragEnter}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            {importing ? (
+              <div className="media-drop-zone__importing">
+                <div className="spinner"></div>
+                <span>Importing files...</span>
+              </div>
+            ) : (
+              <>
+                <span className="media-drop-zone__icon">📂</span>
+                <span className="media-drop-zone__text">
+                  Drag files here to import
+                </span>
+                <span className="media-drop-zone__hint">
+                  Supports image, video, PDF and PPT
+                </span>
+              </>
+            )}
           </div>
-        ) : (
-          <>
-            <span className="media-drop-zone__icon">📂</span>
-            <span className="media-drop-zone__text">
-              拖拽文件到此处导入
-            </span>
-            <span className="media-drop-zone__hint">
-              支持图片、视频、PDF、PPT 文件
-            </span>
-          </>
-        )}
-      </div>
+        </>
+      )}
 
-      {/* PPT 转换状态 */}
+      {/* PPT converting */}
       {pptConverting && (
         <div className="media-converting">
           <div className="spinner"></div>
-          <span>正在转换 PPT 文件为图片，请稍候...</span>
+          <span>Converting PPT to images, please wait...</span>
         </div>
       )}
 
-      {/* PPT 幻灯片网格选择区 */}
+      {/* PDF parsing */}
+      {pdfLoading && (
+        <div className="media-converting">
+          <div className="spinner"></div>
+          <span>Parsing PDF and building thumbnails...</span>
+        </div>
+      )}
+
+      {/* PDF page grid */}
+      {activePdf && (
+        <div className="media-slide-selector" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: 'bold' }}>
+              📄 {activePdf.name} - Thumbnails <span style={{ color: 'var(--color-text-secondary)', fontSize: '13px', fontWeight: 'normal' }}>({currentPdfPage} / {activePdf.numPages})</span>
+            </h3>
+            <button className="btn btn--ghost" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => setActivePdf(null)}>Close</button>
+          </div>
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', 
+            gap: '12px',
+            maxHeight: '400px',
+            overflowY: 'auto',
+            paddingRight: '6px'
+          }}>
+            {Array.from({ length: activePdf.numPages }).map((_, i) => {
+              const pageNumber = i + 1;
+              return (
+                <PdfThumbnail
+                  key={pageNumber}
+                  pdfDocument={activePdf.pdfDocument}
+                  pageNumber={pageNumber}
+                  isSelected={currentPdfPage === pageNumber}
+                  onClick={() => {
+                    setCurrentPdfPage(pageNumber);
+                    onProjectMedia({
+                      type: 'pdf',
+                      path: activePdf.path,
+                      name: activePdf.name,
+                      page: pageNumber,
+                    });
+                  }}
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* PPT slide grid */}
       {pptSlides && (
         <div className="media-slide-selector" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <h3 style={{ fontSize: '15px', fontWeight: 'bold' }}>
-              📊 PPT 幻灯片选集 <span style={{ color: 'var(--color-text-secondary)', fontSize: '13px', fontWeight: 'normal' }}>({currentSlideIndex + 1} / {pptSlides.length})</span>
+              📊 PPT Slides <span style={{ color: 'var(--color-text-secondary)', fontSize: '13px', fontWeight: 'normal' }}>({currentSlideIndex + 1} / {pptSlides.length})</span>
             </h3>
-            <button className="btn btn--ghost" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => setPptSlides(null)}>关闭</button>
+            <button className="btn btn--ghost" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => setPptSlides(null)}>Close</button>
           </div>
           <div style={{ 
             display: 'grid', 
@@ -288,7 +496,7 @@ function MediaManager({ onProjectMedia }) {
                   onProjectMedia({
                     type: 'image',
                     path: slide.path,
-                    name: `PPT - 第 ${index + 1} 页`,
+                    name: `PPT - Page ${index + 1}`,
                   });
                 }}
                 style={{
@@ -324,51 +532,23 @@ function MediaManager({ onProjectMedia }) {
         </div>
       )}
 
-      {/* PDF 翻页导航 */}
-      {selectedPdf && (
-        <div className="media-slide-nav">
-          <div className="media-slide-nav__title">
-            📄 {selectedPdf.name} - 第 {currentPdfPage} 页
-          </div>
-          <div className="media-slide-nav__controls">
-            <button
-              className="btn btn--ghost"
-              onClick={() => handlePdfNav(-1)}
-              disabled={currentPdfPage === 1}
-            >
-              ◀ 上一页
-            </button>
-            <span className="media-slide-nav__page">
-              第 {currentPdfPage} 页
-            </span>
-            <button
-              className="btn btn--ghost"
-              onClick={() => handlePdfNav(1)}
-            >
-              下一页 ▶
-            </button>
-          </div>
-          <button className="btn btn--ghost" onClick={() => setSelectedPdf(null)} style={{ marginTop: '8px', width: '100%' }}>
-            关闭 PDF 导航
-          </button>
-        </div>
-      )}
-
-      {/* 媒体文件网格选集 */}
-      <h3 style={{ fontSize: '15px', fontWeight: 'bold', marginTop: '24px', marginBottom: '16px' }}>
-        📁 媒体库文件库
-      </h3>
-      <div style={{ 
-        display: 'grid', 
-        gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', 
-        gap: '16px'
-      }}>
-        {mediaFiles.length === 0 ? (
+      {!isViewingDetail && (
+        <>
+          {/* Media library */}
+          <h3 style={{ fontSize: '15px', fontWeight: 'bold', marginTop: '24px', marginBottom: '16px' }}>
+            📁 Media Library
+          </h3>
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', 
+            gap: '16px'
+          }}>
+            {mediaFiles.length === 0 ? (
           <div className="empty-state" style={{ padding: '40px 0', gridColumn: '1 / -1' }}>
             <div className="empty-state__icon">📭</div>
-            <div className="empty-state__title">暂无媒体文件</div>
+            <div className="empty-state__title">No media files</div>
             <div className="empty-state__desc">
-              点击"导入文件"或拖拽文件到上方区域开始使用
+              Click "Import Files" or drag files into the drop zone above.
             </div>
           </div>
         ) : (
@@ -397,9 +577,9 @@ function MediaManager({ onProjectMedia }) {
                 e.currentTarget.style.boxShadow = 'none';
               }}
               onClick={() => handleProjectMedia(file)}
-              title={`点击投屏: ${file.name}`}
+              title={`Project now: ${file.name}`}
             >
-              {/* 缩略图区域 */}
+              {/* Thumbnail area */}
               <div style={{ 
                 height: '110px', 
                 backgroundColor: '#0a0a0a', 
@@ -416,11 +596,11 @@ function MediaManager({ onProjectMedia }) {
                   <div style={{ fontSize: '48px' }}>{getTypeIcon(file.type)}</div>
                 )}
                 
-                {/* 悬浮操作：删除 */}
+                {/* Hover action: delete */}
                 <button
                   onClick={(e) => { 
                     e.stopPropagation(); 
-                    if(window.confirm(`确定要删除 ${file.name} 吗？`)) handleDelete(file); 
+                    if(window.confirm(`Delete ${file.name}?`)) handleDelete(file); 
                   }}
                   style={{ 
                     position: 'absolute', top: '6px', right: '6px', 
@@ -428,14 +608,14 @@ function MediaManager({ onProjectMedia }) {
                     color: '#ff4d4f', padding: '4px', cursor: 'pointer', zIndex: 10,
                     fontSize: '12px'
                   }}
-                  title="删除此文件"
+                  title="Delete file"
                   onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.9)'}
                   onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.7)'}
                 >
-                  🗑️
+                  🗑
                 </button>
 
-                {/* 类型标签 */}
+                {/* Type badge */}
                 <div style={{ 
                   position: 'absolute', bottom: '6px', left: '6px', 
                   background: 'rgba(0,0,0,0.7)', borderRadius: '4px', 
@@ -445,7 +625,7 @@ function MediaManager({ onProjectMedia }) {
                 </div>
               </div>
 
-              {/* 文件信息区域 */}
+              {/* File info */}
               <div style={{ padding: '10px' }}>
                 <div style={{ 
                   fontSize: '13px', 
@@ -462,16 +642,39 @@ function MediaManager({ onProjectMedia }) {
                   color: 'var(--color-text-secondary)',
                   marginTop: '4px',
                   display: 'flex',
-                  justifyContent: 'space-between'
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
                 }}>
                   <span>{formatSize(file.size)}</span>
-                  <span style={{ color: 'var(--color-primary)' }}>点击播放 ▶</span>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <span 
+                      style={{ color: 'var(--color-primary)', cursor: 'pointer', padding: '2px 6px', background: 'rgba(99,102,241,0.1)', borderRadius: '4px' }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (onAddPlaylist) {
+                          onAddPlaylist({
+                            type: file.type,
+                            name: file.name,
+                            payload: {
+                              type: file.type,
+                              path: file.path,
+                              name: file.name
+                            }
+                          });
+                        }
+                      }}
+                      title="Add to queue"
+                    >+</span>
+                    <span style={{ color: 'var(--color-primary)' }} title="Project now" onClick={(e) => { e.stopPropagation(); handleProjectMedia(file); }}>▶</span>
+                  </div>
                 </div>
               </div>
             </div>
           ))
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }

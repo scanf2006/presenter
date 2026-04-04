@@ -1,30 +1,33 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+﻿import React, { useState, useEffect, useCallback, useRef } from 'react';
 
 /**
- * 圣经浏览器组件
- * 支持三级导航（书卷→章→节）、快速索引搜索、全文搜索、中英文切换
+ * Bible browser component
+ * Keeps Chinese Bible content and supports Chinese quick-index search.
  */
-function BibleBrowser({ onProjectContent }) {
+function BibleBrowser({ onProjectContent, onQueueContent, onOpenBackgroundPicker, externalBackground }) {
   // 圣经版本
   const [version, setVersion] = useState('cuvs');
   // 书卷列表
   const [books, setBooks] = useState([]);
-  // 当前选中的书卷
+  // selected book
   const [selectedBook, setSelectedBook] = useState(null);
   // 当前选中的章
   const [selectedChapter, setSelectedChapter] = useState(null);
   // 经文列表
   const [verses, setVerses] = useState([]);
-  // 选中的经文（多选）
+  // selected verses (multi-select)
   const [selectedVerses, setSelectedVerses] = useState([]);
-  // 搜索关键词
+  // search keyword
   const [searchQuery, setSearchQuery] = useState('');
   // 搜索结果
   const [searchResults, setSearchResults] = useState([]);
-  // 搜索中
+  // searching state
   const [searching, setSearching] = useState(false);
   // 投屏字号
   const [fontSize, setFontSize] = useState('large');
+  // 投屏正文是否显示每节节号
+  const [showVerseNumbers, setShowVerseNumbers] = useState(false);
+  const [bibleBackground, setBibleBackground] = useState(null);
 
   const isElectron = typeof window.churchDisplay !== 'undefined';
   const searchTimer = useRef(null);
@@ -47,7 +50,7 @@ function BibleBrowser({ onProjectContent }) {
     if (isElectron) {
       window.churchDisplay.bibleGetBooks(version).then(setBooks);
     } else {
-      // 浏览器模式模拟数据
+      // Browser fallback demo data
       setBooks([
         { sn: 1, shortName: '创', fullName: '创世记', chapterCount: 50, isNewTestament: false },
         { sn: 2, shortName: '出', fullName: '出埃及记', chapterCount: 40, isNewTestament: false },
@@ -64,17 +67,17 @@ function BibleBrowser({ onProjectContent }) {
       window.churchDisplay.bibleGetVerses(version, selectedBook.sn, selectedChapter).then(setVerses);
     } else {
       setVerses([
-        { verse: 1, text: '起初，　神创造天地。' },
-        { verse: 2, text: '地是空虚混沌，渊面黑暗；　神的灵运行在水面上。' },
-        { verse: 3, text: '　神说："要有光"，就有了光。' },
+        { verse: 1, text: '起初，神创造天地。' },
+        { verse: 2, text: '地是空虚混沌，渊面黑暗；神的灵运行在水面上。' },
+        { verse: 3, text: '神说：要有光，就有了光。' },
       ]);
     }
     setSelectedVerses([]);
   }, [selectedBook, selectedChapter, version, isElectron]);
 
-  // 解析快速索引（如"创1:1"、"约3:16"）
+  // Parse quick index such as 创1:1 or 约3:16
   const parseQuickIndex = useCallback((query) => {
-    // 匹配中文缩写 + 章:节
+    // match Chinese abbreviation + chapter:verse
     const match = query.match(/^([^\d]+)(\d+)(?::(\d+))?$/);
     if (!match) return null;
     const abbr = match[1].trim();
@@ -95,7 +98,7 @@ function BibleBrowser({ onProjectContent }) {
       return;
     }
 
-    // 先尝试快速索引
+    // 先尝试快速索�?
     const indexed = parseQuickIndex(query.trim());
     if (indexed) {
       const book = books.find(b => b.sn === indexed.bookSN);
@@ -126,29 +129,76 @@ function BibleBrowser({ onProjectContent }) {
     });
   }, []);
 
-  // 投屏选中经文
-  const handleProject = useCallback(() => {
+  const buildSelectedPayload = useCallback(() => {
     if (selectedVerses.length === 0 || !selectedBook) return;
-    const text = selectedVerses.map(v => `${v.verse} ${v.text}`).join('\n');
+    const text = showVerseNumbers
+      ? selectedVerses.map(v => `${v.verse} ${v.text}`).join('\n')
+      : selectedVerses.map(v => v.text).join('\n');
     const reference = `${selectedBook.fullName} ${selectedChapter}:${selectedVerses[0].verse}` +
       (selectedVerses.length > 1 ? `-${selectedVerses[selectedVerses.length - 1].verse}` : '');
-    onProjectContent({
+    return {
       type: 'bible',
       text,
       reference,
       fontSize,
-    });
-  }, [selectedVerses, selectedBook, selectedChapter, fontSize, onProjectContent]);
+      background: bibleBackground,
+    };
+  }, [selectedVerses, selectedBook, selectedChapter, fontSize, bibleBackground, showVerseNumbers]);
+
+  // 投屏选中经文
+  const handleProject = useCallback(() => {
+    const payload = buildSelectedPayload();
+    if (!payload) return;
+    onProjectContent(payload);
+    if (isElectron && typeof window.churchDisplay?.sendToProjectorBackground === 'function') {
+      window.churchDisplay.sendToProjectorBackground(bibleBackground || null);
+    }
+  }, [buildSelectedPayload, onProjectContent, bibleBackground, isElectron]);
+
+  const handleQueueSelected = useCallback(() => {
+    if (typeof onQueueContent !== 'function') return;
+    const payload = buildSelectedPayload();
+    if (!payload) return;
+    onQueueContent(payload, `📖 ${payload.reference}`);
+  }, [onQueueContent, buildSelectedPayload]);
 
   // 投屏搜索结果中的某节经文
   const handleProjectSearchResult = useCallback((result) => {
     onProjectContent({
       type: 'bible',
-      text: `${result.verse} ${result.text}`,
+      text: showVerseNumbers ? `${result.verse} ${result.text}` : `${result.text}`,
       reference: `${result.fullName} ${result.chapter}:${result.verse}`,
       fontSize,
+      background: bibleBackground,
     });
-  }, [fontSize, onProjectContent]);
+    if (isElectron && typeof window.churchDisplay?.sendToProjectorBackground === 'function') {
+      window.churchDisplay.sendToProjectorBackground(bibleBackground || null);
+    }
+  }, [fontSize, onProjectContent, bibleBackground, isElectron, showVerseNumbers]);
+
+  const handleQueueSearchResult = useCallback((result) => {
+    if (typeof onQueueContent !== 'function') return;
+    const payload = {
+      type: 'bible',
+      text: showVerseNumbers ? `${result.verse} ${result.text}` : `${result.text}`,
+      reference: `${result.fullName} ${result.chapter}:${result.verse}`,
+      fontSize,
+      background: bibleBackground,
+    };
+    onQueueContent(payload, `📖 ${payload.reference}`);
+  }, [onQueueContent, fontSize, bibleBackground, showVerseNumbers]);
+
+  useEffect(() => {
+    if (selectedVerses.length > 0) {
+      handleProject();
+    }
+  }, [bibleBackground]);
+
+  useEffect(() => {
+    if (externalBackground) {
+      setBibleBackground(externalBackground);
+    }
+  }, [externalBackground?.path, externalBackground?.type]);
 
   // 旧约/新约书卷分组
   const oldTestament = books.filter(b => !b.isNewTestament);
@@ -156,9 +206,9 @@ function BibleBrowser({ onProjectContent }) {
 
   return (
     <div className="bible-browser animate-slide-in-up">
-      <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px' }}>📖 圣经经文</h2>
+      <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px' }}>📖 Bible</h2>
 
-      {/* 版本切换 + 搜索框 */}
+      {/* Version switch + search */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
         <div style={{ display: 'flex', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--color-border)' }}>
           <button
@@ -166,7 +216,7 @@ function BibleBrowser({ onProjectContent }) {
             style={{ borderRadius: 0, padding: '6px 12px', fontSize: '12px' }}
             onClick={() => setVersion('cuvs')}
           >
-            中文和合本
+            Chinese CUV
           </button>
           <button
             className={`btn ${version === 'kjv' ? 'btn--primary' : 'btn--ghost'}`}
@@ -179,7 +229,7 @@ function BibleBrowser({ onProjectContent }) {
         <input
           type="text"
           className="bible-search-input"
-          placeholder="搜索经文（如：创1:1、约3:16、或输入关键词）"
+          placeholder="Search Bible (e.g. 创1:1, 约3:16, or keywords)"
           value={searchQuery}
           onChange={(e) => handleSearch(e.target.value)}
           style={{
@@ -190,28 +240,53 @@ function BibleBrowser({ onProjectContent }) {
         />
       </div>
 
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px' }}>
+        <button className="btn btn--ghost" onClick={() => onOpenBackgroundPicker?.()}>
+          🎬 Pick Background from Media
+        </button>
+        {bibleBackground && (
+          <button className="btn btn--ghost" onClick={() => setBibleBackground(null)}>Clear Background</button>
+        )}
+        <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+          {bibleBackground ? `Selected: ${bibleBackground.name || bibleBackground.path}` : 'No background selected'}
+        </span>
+      </div>
+
       {/* 搜索结果 */}
       {searchResults.length > 0 && (
         <div style={{ marginBottom: '16px', maxHeight: '300px', overflowY: 'auto' }}>
           <h3 style={{ fontSize: '14px', marginBottom: '8px', color: 'var(--color-text-secondary)' }}>
-            🔍 搜索结果（{searchResults.length}条）
+            🔍 Search Results ({searchResults.length})
           </h3>
           {searchResults.map((r, idx) => (
             <div
               key={idx}
               style={{
-                padding: '10px 12px', marginBottom: '6px', cursor: 'pointer',
+                padding: '10px 12px', marginBottom: '6px',
                 background: 'var(--color-surface)', border: '1px solid var(--color-border)',
                 borderRadius: '6px', fontSize: '13px', transition: 'border-color 0.2s',
               }}
-              onClick={() => handleProjectSearchResult(r)}
               onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--color-primary)'}
               onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--color-border)'}
             >
-              <span style={{ color: 'var(--color-primary)', fontWeight: 'bold', marginRight: '8px' }}>
-                {r.fullName} {r.chapter}:{r.verse}
-              </span>
-              <span>{r.text}</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                <div style={{ cursor: 'pointer', flex: 1 }} onClick={() => handleProjectSearchResult(r)}>
+                  <span style={{ color: 'var(--color-primary)', fontWeight: 'bold', marginRight: '8px' }}>
+                    {r.fullName} {r.chapter}:{r.verse}
+                  </span>
+                  <span>{r.text}</span>
+                </div>
+                <button
+                  className="btn btn--ghost"
+                  style={{ padding: '4px 8px', fontSize: '11px' }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleQueueSearchResult(r);
+                  }}
+                >
+                  + Queue
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -220,7 +295,7 @@ function BibleBrowser({ onProjectContent }) {
       {searching && (
         <div style={{ textAlign: 'center', padding: '20px', color: 'var(--color-text-secondary)' }}>
           <div className="spinner" style={{ margin: '0 auto 8px' }}></div>
-          搜索中...
+          Searching...
         </div>
       )}
 
@@ -230,7 +305,7 @@ function BibleBrowser({ onProjectContent }) {
           {/* 第一级：书卷选择 */}
           {!selectedBook && (
             <div>
-              <h3 style={{ fontSize: '14px', marginBottom: '12px', color: 'var(--color-text-secondary)' }}>旧约（{oldTestament.length}卷）</h3>
+              <h3 style={{ fontSize: '14px', marginBottom: '12px', color: 'var(--color-text-secondary)' }}>Old Testament ({oldTestament.length})</h3>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '6px', marginBottom: '20px' }}>
                 {oldTestament.map(book => (
                   <button
@@ -250,7 +325,7 @@ function BibleBrowser({ onProjectContent }) {
                 ))}
               </div>
 
-              <h3 style={{ fontSize: '14px', marginBottom: '12px', color: 'var(--color-text-secondary)' }}>新约（{newTestament.length}卷）</h3>
+              <h3 style={{ fontSize: '14px', marginBottom: '12px', color: 'var(--color-text-secondary)' }}>New Testament ({newTestament.length})</h3>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '6px' }}>
                 {newTestament.map(book => (
                   <button
@@ -272,15 +347,15 @@ function BibleBrowser({ onProjectContent }) {
             </div>
           )}
 
-          {/* 第二级：章选择 */}
+          {/* Level 2: chapter selection */}
           {selectedBook && !selectedChapter && (
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
                 <button className="btn btn--ghost" onClick={() => setSelectedBook(null)} style={{ padding: '4px 8px', fontSize: '12px' }}>
-                  ◀ 返回
+                  ← Back
                 </button>
                 <h3 style={{ fontSize: '15px', fontWeight: 'bold' }}>
-                  📗 {selectedBook.fullName}（{selectedBook.chapterCount}章）
+                    📗 {selectedBook.fullName} ({selectedBook.chapterCount} chapters)
                 </h3>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(48px, 1fr))', gap: '6px' }}>
@@ -309,22 +384,27 @@ function BibleBrowser({ onProjectContent }) {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <button className="btn btn--ghost" onClick={() => setSelectedChapter(null)} style={{ padding: '4px 8px', fontSize: '12px' }}>
-                    ◀ 返回
+                    ← Back
                   </button>
                   <h3 style={{ fontSize: '15px', fontWeight: 'bold' }}>
-                    📗 {selectedBook.fullName} 第{selectedChapter}章
+                    📗 {selectedBook.fullName} Chapter {selectedChapter}
                   </h3>
                 </div>
                 {selectedVerses.length > 0 && (
-                  <button className="btn btn--primary" onClick={handleProject}>
-                    📤 投屏选中（{selectedVerses.length}节）
-                  </button>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button className="btn btn--ghost" onClick={handleQueueSelected}>
+                      + Queue ({selectedVerses.length} verses)
+                    </button>
+                    <button className="btn btn--primary" onClick={handleProject}>
+                      📤 Project Selection ({selectedVerses.length} verses)
+                    </button>
+                  </div>
                 )}
               </div>
 
               {/* 字号选择 */}
-              <div style={{ display: 'flex', gap: '6px', marginBottom: '12px' }}>
-                {[{ key: 'small', label: '小' }, { key: 'medium', label: '中' }, { key: 'large', label: '大' }].map(s => (
+              <div style={{ display: 'flex', gap: '6px', marginBottom: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                {[{ key: 'small', label: 'Small' }, { key: 'medium', label: 'Medium' }, { key: 'large', label: 'Large' }].map(s => (
                   <button
                     key={s.key}
                     className={`btn ${fontSize === s.key ? 'btn--primary' : 'btn--ghost'}`}
@@ -334,6 +414,14 @@ function BibleBrowser({ onProjectContent }) {
                     {s.label}
                   </button>
                 ))}
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--color-text-secondary)', marginLeft: '4px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={showVerseNumbers}
+                    onChange={(e) => setShowVerseNumbers(e.target.checked)}
+                  />
+                  Show Verse Numbers
+                </label>
               </div>
 
               {/* 经文列表 */}

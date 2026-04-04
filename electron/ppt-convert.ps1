@@ -19,6 +19,13 @@ Write-Output "正在启动 PowerPoint..."
 $ppt = New-Object -ComObject PowerPoint.Application
 $ppt.Visible = [Microsoft.Office.Core.MsoTriState]::msoTrue
 
+# 禁用所有弹窗警告，防止卡死
+try {
+    $ppt.DisplayAlerts = 1 # ppAlertsNone
+} catch {
+    Write-Output "警告：未能配置 DisplayAlerts"
+}
+
 # 打开演示文稿
 Write-Output "正在打开文件: $PptPath"
 $presentation = $ppt.Presentations.Open($PptPath, [Microsoft.Office.Core.MsoTriState]::msoTrue, [Microsoft.Office.Core.MsoTriState]::msoFalse, [Microsoft.Office.Core.MsoTriState]::msoFalse)

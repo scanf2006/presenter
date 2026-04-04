@@ -8,7 +8,9 @@ import ProjectorView from './components/ProjectorView';
  * 投影: #/projector
  */
 function App() {
-  const isProjector = window.location.hash === '#/projector';
+  const hash = window.location.hash || '';
+  const pathname = window.location.pathname || '';
+  const isProjector = hash.includes('projector') || pathname.includes('/projector');
 
   if (isProjector) {
     return <ProjectorView />;

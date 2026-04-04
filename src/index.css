@@ -1038,3 +1038,136 @@ body {
   gap: var(--spacing-sm);
 }
 
+
+/* 视频同步控制条样式 */
+.video-controls-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 15px;
+  background: linear-gradient(transparent, rgba(0,0,0,0.8));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  opacity: 0;
+  transition: opacity 0.3s;
+  z-index: 10;
+  pointer-events: all;
+}
+
+.preview-screen__content:hover .video-controls-overlay {
+  opacity: 1;
+}
+
+.video-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.video-progress-container {
+  width: 100%;
+  height: 4px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 2px;
+  position: relative;
+  cursor: pointer;
+}
+
+.video-progress-bar {
+  height: 100%;
+  background: var(--color-primary);
+  border-radius: 2px;
+  width: 0%;
+}
+
+.video-progress-slider {
+  position: absolute;
+  top: -6px;
+  left: 0;
+  width: 100%;
+  height: 16px;
+  opacity: 0;
+  cursor: pointer;
+  margin: 0;
+}
+
+.video-time {
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  color: rgba(255,255,255,0.7);
+  min-width: 80px;
+}
+
+.video-control-btn {
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.1s;
+}
+
+.video-control-btn:hover {
+  transform: scale(1.1);
+  color: var(--color-primary);
+}
+
+.video-control-btn:active {
+  transform: scale(0.9);
+}
+
+/* PDF 翻页控制条样式 */
+.pdf-controls-overlay {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 16px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.3s;
+  z-index: 10;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+}
+
+.preview-screen__content:hover .pdf-controls-overlay {
+  opacity: 1;
+}
+
+.pdf-renderer canvas {
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  border-radius: 4px;
+}
+.sidebar { display: flex; flex-direction: column; overflow: hidden; padding: 0; }
+.sidebar-nav { padding: 8px 8px 6px; display: flex; flex-direction: column; gap: 3px; flex-shrink: 0; overflow: visible; }
+.sidebar-nav .sidebar__section-title { padding: 8px 6px 4px; font-size: 10px; letter-spacing: 0.8px; }
+.sidebar-nav .sidebar__item { padding: 6px 8px; font-size: 11px; }
+.sidebar-nav .sidebar__item-icon { font-size: 16px; width: 20px; }
+.sidebar-nav .quick-actions { gap: 6px; }
+.sidebar-nav .quick-action-btn { padding: 8px 4px; gap: 3px; border-radius: 8px; }
+.sidebar-nav .quick-action-btn__icon { font-size: 18px; }
+.sidebar-nav .quick-action-btn__label { font-size: 10px; }
+.sidebar-playlist { flex-grow: 1; display: flex; flex-direction: column; border-top: 1px solid var(--glass-border); overflow: hidden; padding: 8px; background: linear-gradient(180deg, rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0.36)); min-height: 0; }
+.playlist-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-md); }
+.playlist-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--color-text-muted); }
+.playlist-item { display: flex; flex-direction: column; padding: var(--spacing-sm) var(--spacing-md); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm); margin-bottom: 8px; cursor: pointer; transition: all 0.2s; position: relative; }
+.playlist-item:hover { border-color: var(--color-primary); transform: translateX(4px); }
+.playlist-item--active { border-color: var(--color-primary); box-shadow: 0 0 0 1px var(--color-primary); background: rgba(99, 102, 241, 0.1); transform: translateX(4px); }
+.playlist-item__type { font-size: 10px; color: var(--color-primary); font-weight: bold; text-transform: uppercase; margin-bottom: 2px; }
+.playlist-item__title { font-size: 13px; font-weight: 500; color: var(--color-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 24px; }
+.playlist-item__actions { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); display: none; }
+.playlist-item:hover .playlist-item__actions, .playlist-item--active .playlist-item__actions { display: flex; gap: 4px; }
+.playlist-empty { text-align: center; padding: 40px 0; color: var(--color-text-secondary); font-size: 12px; border: 1px dashed var(--color-border); border-radius: var(--radius-sm); }
+

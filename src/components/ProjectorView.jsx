@@ -1,244 +1,433 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
-/**
- * 投影窗口视图
- * 全屏显示在外部屏幕上，接收来自控制台的内容
- * 支持文字、图片、视频和 PDF 渲染
- */
 function ProjectorView() {
   const [content, setContent] = useState(null);
+  const [backgroundContent, setBackgroundContent] = useState(null);
   const [isBlackout, setIsBlackout] = useState(false);
   const [fadeClass, setFadeClass] = useState('');
+  const [transitionMaskVisible, setTransitionMaskVisible] = useState(false);
+  const [transitionConfig, setTransitionConfig] = useState({
+    enabled: true,
+    delayMs: 20,
+    durationMs: 60,
+  });
+  const transitionRef = useRef({
+    enabled: true,
+    delayMs: 20,
+    durationMs: 60,
+  });
   const videoRef = useRef(null);
-  const canvasRef = useRef(null);
+  const timeoutRef = useRef([]);
 
-  // 检查是否在 Electron 环境
   const isElectron = typeof window.churchDisplay !== 'undefined';
 
   useEffect(() => {
     if (!isElectron) return;
 
-    // 监听内容更新
-    window.churchDisplay.onProjectorContent((data) => {
-      // 先淡出
-      setFadeClass('projector-view__content--fade-out');
+    const clearTimers = () => {
+      timeoutRef.current.forEach((t) => clearTimeout(t));
+      timeoutRef.current = [];
+    };
 
-      setTimeout(() => {
-        setContent(data);
-        setIsBlackout(false);
-        setFadeClass('projector-view__content--fade-in');
-
-        // 如果是视频，自动播放
-        if (data.type === 'video' && videoRef.current) {
-          videoRef.current.play().catch(console.error);
-        }
-
-        // 如果是 PDF，渲染指定页面
-        if (data.type === 'pdf') {
-          renderPdfPage(data.path, data.page || 1);
-        }
-      }, 300);
+    const offProjectorTransition = window.churchDisplay.onProjectorTransition((data) => {
+      const next = {
+        enabled: data?.enabled !== false,
+        delayMs: Number.isFinite(data?.delayMs) ? Math.max(0, data.delayMs) : 20,
+        durationMs: Number.isFinite(data?.durationMs) ? Math.max(0, data.durationMs) : 60,
+      };
+      transitionRef.current = next;
+      setTransitionConfig(next);
     });
 
-    // 监听黑屏命令
-    window.churchDisplay.onProjectorBlackout(() => {
+    const offProjectorContent = window.churchDisplay.onProjectorContent((data) => {
+      clearTimers();
+      const cfg = transitionRef.current;
+      if (!cfg.enabled) {
+        setContent(data);
+        if (data?.background) {
+          setBackgroundContent(data.background);
+        }
+        setIsBlackout(false);
+        setFadeClass('');
+        return;
+      }
+
+      setTransitionMaskVisible(true);
       setFadeClass('projector-view__content--fade-out');
-      setTimeout(() => {
+      const switchTimer = setTimeout(() => {
+        // 可选延时：在旧内容淡出完成后再等待
+        const applyNewTimer = setTimeout(() => {
+        setContent(data);
+        if (data?.background) {
+          setBackgroundContent(data.background);
+        }
+        setIsBlackout(false);
+        setFadeClass('projector-view__content--fade-in');
+          // 淡入结束后再撤掉遮罩
+          const maskTimer = setTimeout(() => {
+            setTransitionMaskVisible(false);
+          }, cfg.durationMs);
+          timeoutRef.current.push(maskTimer);
+        }, cfg.delayMs);
+        timeoutRef.current.push(applyNewTimer);
+      }, cfg.durationMs);
+      timeoutRef.current.push(switchTimer);
+    });
+
+    const offProjectorBackground = window.churchDisplay.onProjectorBackground((data) => {
+      setBackgroundContent(data || null);
+      setIsBlackout(false);
+    });
+
+    const offProjectorBlackout = window.churchDisplay.onProjectorBlackout(() => {
+      clearTimers();
+      const cfg = transitionRef.current;
+      if (!cfg.enabled) {
         setContent(null);
         setIsBlackout(true);
         setFadeClass('');
-        // 暂停视频
+        setTransitionMaskVisible(false);
         if (videoRef.current) {
           videoRef.current.pause();
         }
-      }, 300);
+        return;
+      }
+
+      setTransitionMaskVisible(true);
+      setFadeClass('projector-view__content--fade-out');
+      const blackoutTimer = setTimeout(() => {
+        const applyBlackoutTimer = setTimeout(() => {
+        setContent(null);
+        setIsBlackout(true);
+        setFadeClass('');
+          const maskTimer = setTimeout(() => {
+            setTransitionMaskVisible(false);
+          }, cfg.durationMs);
+          timeoutRef.current.push(maskTimer);
+
+        if (videoRef.current) {
+          videoRef.current.pause();
+        }
+        }, cfg.delayMs);
+        timeoutRef.current.push(applyBlackoutTimer);
+      }, cfg.durationMs);
+      timeoutRef.current.push(blackoutTimer);
     });
+
+    const offMediaCommand = window.churchDisplay.onMediaCommand((command) => {
+      if (!videoRef.current) return;
+
+      const { type, value } = command;
+      if (type === 'play') videoRef.current.play().catch(console.error);
+      if (type === 'pause') videoRef.current.pause();
+      if (type === 'seek') videoRef.current.currentTime = value;
+    });
+
+    return () => {
+      if (typeof offProjectorContent === 'function') offProjectorContent();
+      if (typeof offProjectorBackground === 'function') offProjectorBackground();
+      if (typeof offProjectorBlackout === 'function') offProjectorBlackout();
+      if (typeof offMediaCommand === 'function') offMediaCommand();
+      if (typeof offProjectorTransition === 'function') offProjectorTransition();
+      clearTimers();
+    };
   }, [isElectron]);
 
-  // 当视频内容更新后自动播放
   useEffect(() => {
-    if (content?.type === 'video' && videoRef.current) {
-      videoRef.current.play().catch(console.error);
-    }
+    if (content?.type !== 'video') return;
+    const v = videoRef.current;
+    if (!v) return;
+    // 兼容自动播放策略：先静音启动，再强制开声
+    v.defaultMuted = true;
+    v.muted = true;
+    v.volume = 1;
+    v.play()
+      .then(() => {
+        setTimeout(() => {
+          v.muted = false;
+          v.defaultMuted = false;
+          v.volume = 1;
+        }, 120);
+      })
+      .catch((err) => {
+        console.error('[ProjectorView] video play failed:', err);
+      });
   }, [content]);
 
-  // 当 PDF 内容更新后渲染
-  useEffect(() => {
-    if (content?.type === 'pdf') {
-      renderPdfPage(content.path, content.page || 1);
-    }
-  }, [content]);
-
-  /**
-   * 使用 PDF.js 渲染 PDF 页面到 canvas
-   */
-  const renderPdfPage = async (pdfPath, pageNumber) => {
-    try {
-      const pdfjsLib = await import('pdfjs-dist');
-      // 设置 PDF.js worker
-      pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-        'pdfjs-dist/build/pdf.worker.mjs',
-        import.meta.url
-      ).toString();
-
-      const fileUrl = `local-media://${encodeURIComponent(pdfPath)}`;
-      const pdf = await pdfjsLib.getDocument(fileUrl).promise;
-      const page = await pdf.getPage(Math.min(pageNumber, pdf.numPages));
-
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-
-      const context = canvas.getContext('2d');
-      // 获取窗口大小来设置缩放
-      const viewport = page.getViewport({ scale: 1 });
-      const scaleX = window.innerWidth / viewport.width;
-      const scaleY = window.innerHeight / viewport.height;
-      const scale = Math.min(scaleX, scaleY);
-      const scaledViewport = page.getViewport({ scale });
-
-      canvas.width = scaledViewport.width;
-      canvas.height = scaledViewport.height;
-
-      await page.render({
-        canvasContext: context,
-        viewport: scaledViewport,
-      }).promise;
-    } catch (err) {
-      console.error('[投影窗口] PDF 渲染错误:', err);
-    }
-  };
-
-  // 获取字体大小的样式类
   const getTextSizeClass = () => {
     if (!content) return 'projector-text--large';
-    switch (content.fontSize) {
-      case 'small': return 'projector-text--small';
-      case 'medium': return 'projector-text--medium';
-      default: return 'projector-text--large';
-    }
+    if (content.fontSize === 'small') return 'projector-text--small';
+    if (content.fontSize === 'medium') return 'projector-text--medium';
+    return 'projector-text--large';
   };
 
-  /**
-   * 获取本地文件的可用 URL
-   * 在 Electron 中使用 local-media 协议
-   */
   const getMediaUrl = (filePath) => {
     if (!filePath) return '';
     return `local-media://${encodeURIComponent(filePath)}`;
   };
 
+  const getYouTubeEmbedUrl = (videoId) => {
+    if (!videoId) return '';
+    return `https://www.youtube.com/embed/${videoId}?autoplay=1&controls=0&modestbranding=1&rel=0&playsinline=1`;
+  };
+
+  const backgroundMedia =
+    content?.background ||
+    content?.payload?.background ||
+    content?.bg ||
+    backgroundContent ||
+    null;
+
+  const fadeAnimationStyle = transitionConfig.enabled
+    ? { animationDuration: `${transitionConfig.durationMs}ms` }
+    : { animationDuration: '0ms' };
+
   return (
-    <div className="projector-view">
-      {/* 背景层 */}
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        width: '100vw',
+        height: '100vh',
+        overflow: 'hidden',
+        background: '#000',
+      }}
+    >
+      {/* Background layer: always full-screen and independent from foreground text */}
       <div
-        className="projector-view__background"
         style={{
-          background: isBlackout
-            ? '#000'
+          position: 'fixed',
+          inset: 0,
+          width: '100vw',
+          height: '100vh',
+          zIndex: 1,
+          overflow: 'hidden',
+          background: backgroundMedia
+            ? 'transparent'
             : 'radial-gradient(ellipse at center, #0a0a2e 0%, #000 100%)',
+        }}
+      >
+        {!isBlackout && backgroundMedia?.type === 'video' && (
+          <video
+            key={backgroundMedia.path}
+            src={getMediaUrl(backgroundMedia.path)}
+            autoPlay
+            loop
+            muted
+            playsInline
+            style={{
+              width: '100vw',
+              height: '100vh',
+              objectFit: 'cover',
+              display: 'block',
+            }}
+          />
+        )}
+
+        {!isBlackout && backgroundMedia?.type === 'image' && (
+          <img
+            key={backgroundMedia.path}
+            src={getMediaUrl(backgroundMedia.path)}
+            alt="background"
+            style={{
+              width: '100vw',
+              height: '100vh',
+              objectFit: 'cover',
+              display: 'block',
+            }}
+          />
+        )}
+      </div>
+
+      {/* Optional dim overlay for readability */}
+      {!isBlackout && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.25)',
+            zIndex: 2,
+            pointerEvents: 'none',
+          }}
+        />
+      )}
+
+      {/* Full-screen transition mask for clearer fade effect */}
+      <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          background: '#000',
+          opacity: transitionMaskVisible ? 0.45 : 0,
+          transition: `opacity ${transitionConfig.durationMs}ms ease`,
+          zIndex: 8,
+          pointerEvents: 'none',
         }}
       />
 
-      {/* 半透明遮罩 - 仅文字模式使用 */}
-      {!isBlackout && content && content.type === 'text' && (
-        <div className="projector-view__overlay" />
+      {/* Foreground media layer (full-screen, independent of text) */}
+      {!isBlackout && content?.type === 'image' && (
+        <div
+          className={fadeClass}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 4,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            overflow: 'hidden',
+            ...fadeAnimationStyle,
+          }}
+        >
+          <img
+            src={getMediaUrl(content.path)}
+            alt={content.name || 'image'}
+            style={{
+              width: '100vw',
+              height: '100vh',
+              objectFit: 'contain',
+            }}
+          />
+        </div>
       )}
 
-      {/* 投影内容 */}
-      {content && !isBlackout && (
-        <>
-          {/* 文字内容 */}
-          {content.type === 'text' && (
-            <div className={`projector-view__content ${fadeClass}`}>
-              <div className={`projector-text ${getTextSizeClass()}`} style={{ whiteSpace: 'pre-line' }}>
-                {content.text}
-              </div>
-            </div>
-          )}
-
-          {/* 图片内容 */}
-          {content.type === 'image' && (
-            <div className={`projector-image ${fadeClass}`}>
-              <img
-                src={getMediaUrl(content.path)}
-                alt={content.name}
-                style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-              />
-            </div>
-          )}
-
-          {/* 视频内容 */}
-          {content.type === 'video' && (
-            <div className={`projector-video ${fadeClass}`}>
-              <video
-                ref={videoRef}
-                src={getMediaUrl(content.path)}
-                autoPlay
-                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-              />
-            </div>
-          )}
-
-          {/* PDF 内容 */}
-          {content.type === 'pdf' && (
-            <div className={`projector-pdf ${fadeClass}`}>
-              <canvas ref={canvasRef} />
-            </div>
-          )}
-
-          {/* 圣经经文 */}
-          {content.type === 'bible' && (
-            <div className={`projector-view__content ${fadeClass}`}>
-              <div className={`projector-text ${getTextSizeClass()}`} style={{ 
-                whiteSpace: 'pre-line', textAlign: 'center', lineHeight: '1.8',
-                textShadow: '2px 2px 8px rgba(0,0,0,0.8)',
-              }}>
-                {content.text}
-              </div>
-              {content.reference && (
-                <div style={{
-                  marginTop: '40px', fontSize: '28px', fontStyle: 'italic',
-                  color: 'rgba(255,255,255,0.7)', textAlign: 'center',
-                  textShadow: '1px 1px 4px rgba(0,0,0,0.6)',
-                }}>
-                  — {content.reference}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* 歌词 */}
-          {content.type === 'lyrics' && (
-            <div className={`projector-view__content ${fadeClass}`}>
-              {content.sectionTitle && (
-                <div style={{
-                  fontSize: '22px', fontWeight: 'bold', marginBottom: '24px',
-                  color: 'rgba(255,255,255,0.5)', textAlign: 'center',
-                  letterSpacing: '4px', textTransform: 'uppercase',
-                }}>
-                  {content.songTitle} · {content.sectionTitle}
-                </div>
-              )}
-              <div className={`projector-text ${getTextSizeClass()}`} style={{
-                whiteSpace: 'pre-line', textAlign: 'center', lineHeight: '2.0',
-                textShadow: '3px 3px 10px rgba(0,0,0,0.9)',
-                letterSpacing: '2px',
-              }}>
-                {content.text}
-              </div>
-            </div>
-          )}
-        </>
+      {!isBlackout && content?.type === 'video' && (
+        <div
+          className={fadeClass}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 4,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            overflow: 'hidden',
+            ...fadeAnimationStyle,
+          }}
+        >
+          <video
+            ref={videoRef}
+            src={getMediaUrl(content.path)}
+            autoPlay
+            playsInline
+            muted
+            controls={false}
+            onLoadedMetadata={(e) => {
+              e.currentTarget.muted = true;
+              e.currentTarget.volume = 1;
+              e.currentTarget.play()
+                .then(() => {
+                  setTimeout(() => {
+                    e.currentTarget.muted = false;
+                    e.currentTarget.defaultMuted = false;
+                    e.currentTarget.volume = 1;
+                  }, 120);
+                })
+                .catch((err) => {
+                  console.error('[ProjectorView] onLoadedMetadata play failed:', err);
+                });
+            }}
+            style={{
+              width: '100vw',
+              height: '100vh',
+              objectFit: 'contain',
+            }}
+          />
+        </div>
       )}
 
-      {/* 黑屏状态 */}
+      {!isBlackout && content?.type === 'youtube' && (
+        <div
+          className={fadeClass}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 4,
+            overflow: 'hidden',
+            ...fadeAnimationStyle,
+          }}
+        >
+          <iframe
+            src={getYouTubeEmbedUrl(content.videoId)}
+            title={content.name || 'YouTube'}
+            allow="autoplay; encrypted-media; picture-in-picture"
+            allowFullScreen
+            style={{
+              width: '100vw',
+              height: '100vh',
+              border: 'none',
+              display: 'block',
+            }}
+          />
+        </div>
+      )}
+
+      {/* Text/content layer */}
+      {!isBlackout && content && (content.type === 'text' || content.type === 'bible' || content.type === 'lyrics') && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 10,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '2%',
+            pointerEvents: 'none',
+          }}
+        >
+          <div
+            className={`projector-view__content ${fadeClass}`}
+            style={{
+              width: '95%',
+              textAlign: 'center',
+              ...fadeAnimationStyle,
+            }}
+          >
+            <div
+              className={`projector-text ${getTextSizeClass()}`}
+              style={{
+                whiteSpace: 'pre-line',
+                textAlign: 'center',
+                lineHeight: '1.6',
+                textShadow: '3px 3px 10px rgba(0, 0, 0, 0.9)',
+              }}
+            >
+              {content.text}
+            </div>
+
+          </div>
+
+          {content.reference && (
+            <div
+              style={{
+                position: 'absolute',
+                right: '2.5%',
+                bottom: '2.5%',
+                fontSize: '30px',
+                fontStyle: 'italic',
+                color: 'rgba(255, 255, 255, 0.96)',
+                textAlign: 'right',
+                textShadow: '2px 2px 8px rgba(0, 0, 0, 0.9)',
+                pointerEvents: 'none',
+              }}
+            >
+              {`— ${content.reference}`}
+            </div>
+          )}
+        </div>
+      )}
+
       {isBlackout && (
-        <div style={{
-          position: 'absolute',
-          inset: 0,
-          background: '#000',
-          zIndex: 100,
-        }} />
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: '#000',
+            zIndex: 100,
+          }}
+        />
       )}
     </div>
   );

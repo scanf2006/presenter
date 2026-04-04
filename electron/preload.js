@@ -4,6 +4,13 @@
  */
 const { contextBridge, ipcRenderer } = require('electron');
 
+function onWithCleanup(channel, handler) {
+  ipcRenderer.on(channel, handler);
+  return () => {
+    ipcRenderer.removeListener(channel, handler);
+  };
+}
+
 contextBridge.exposeInMainWorld('churchDisplay', {
   // ===== 显示器管理 =====
   
@@ -12,7 +19,7 @@ contextBridge.exposeInMainWorld('churchDisplay', {
 
   /** 监听显示器变化事件 */
   onDisplaysChanged: (callback) => {
-    ipcRenderer.on('displays-changed', (event, displays) => callback(displays));
+    return onWithCleanup('displays-changed', (event, displays) => callback(displays));
   },
 
   // ===== 投影控制 =====
@@ -23,12 +30,15 @@ contextBridge.exposeInMainWorld('churchDisplay', {
   /** 停止投影 */
   stopProjector: () => ipcRenderer.invoke('stop-projector'),
 
+  /** 关闭主窗口 */
+  closeControlWindow: () => ipcRenderer.invoke('close-control-window'),
+
   /** 获取投影状态 */
   getProjectorStatus: () => ipcRenderer.invoke('get-projector-status'),
 
   /** 监听投影状态变化 */
   onProjectorStatus: (callback) => {
-    ipcRenderer.on('projector-status', (event, status) => callback(status));
+    return onWithCleanup('projector-status', (event, status) => callback(status));
   },
 
   // ===== 内容推送 =====
@@ -39,24 +49,40 @@ contextBridge.exposeInMainWorld('churchDisplay', {
   /** 发送过渡效果 */
   sendTransition: (transitionData) => ipcRenderer.send('projector-transition', transitionData),
 
+  /** 发送背景内容（专门信道） */
+  sendToProjectorBackground: (data) => ipcRenderer.send('send-to-projector-background', data),
+
   /** 投影黑屏 */
   blackout: () => ipcRenderer.send('projector-blackout'),
+
+  /** 发送媒体控制指令 (play/pause/seek) */
+  sendMediaCommand: (command) => ipcRenderer.send('projector-command', command),
 
   // ===== 投影窗口接收 =====
   
   /** 监听投影内容更新（投影窗口使用） */
   onProjectorContent: (callback) => {
-    ipcRenderer.on('projector-content', (event, data) => callback(data));
+    return onWithCleanup('projector-content', (event, data) => callback(data));
+  },
+
+  /** 监听投影背景更新（投影窗口使用） */
+  onProjectorBackground: (callback) => {
+    return onWithCleanup('projector-background', (event, data) => callback(data));
   },
 
   /** 监听过渡效果（投影窗口使用） */
   onProjectorTransition: (callback) => {
-    ipcRenderer.on('projector-transition', (event, data) => callback(data));
+    return onWithCleanup('projector-transition', (event, data) => callback(data));
   },
 
   /** 监听黑屏命令（投影窗口使用） */
   onProjectorBlackout: (callback) => {
-    ipcRenderer.on('projector-blackout', () => callback());
+    return onWithCleanup('projector-blackout', () => callback());
+  },
+
+  /** 监听媒体控制指令（投影窗口使用） */
+  onMediaCommand: (callback) => {
+    return onWithCleanup('projector-command', (event, command) => callback(command));
   },
 
   // ===== 文件管理 =====
@@ -75,6 +101,17 @@ contextBridge.exposeInMainWorld('churchDisplay', {
 
   /** 获取媒体目录路径 */
   getMediaDir: () => ipcRenderer.invoke('get-media-dir'),
+
+  /** 投屏队列持久化 */
+  queueSave: (queue) => ipcRenderer.invoke('queue-save', queue),
+  queueLoad: () => ipcRenderer.invoke('queue-load'),
+
+  /** 版权与授权 */
+  licenseGetStatus: () => ipcRenderer.invoke('license-get-status'),
+  licenseActivate: (licenseKey) => ipcRenderer.invoke('license-activate', licenseKey),
+  licenseClear: () => ipcRenderer.invoke('license-clear'),
+  legalGetDocument: (docType) => ipcRenderer.invoke('legal-get-document', docType),
+  legalAcceptEula: () => ipcRenderer.invoke('legal-accept-eula'),
 
   /** PPT 转图片 */
   convertPpt: (pptPath) => ipcRenderer.invoke('convert-ppt', pptPath),
