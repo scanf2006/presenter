@@ -109,12 +109,29 @@ body {
    =========================================== */
 
 .app-container {
+  --ui-scale: 1;
   display: grid;
   grid-template-columns: 280px 1fr 360px;
   grid-template-rows: 60px 1fr;
-  height: 100vh;
+  width: calc(100% / var(--ui-scale));
+  height: calc(100vh / var(--ui-scale));
+  transform: scale(var(--ui-scale));
+  transform-origin: top left;
   gap: 1px;
   background: rgba(100, 100, 180, 0.08);
+}
+
+/* Fullscreen / large-window readability boost */
+@media (min-width: 1700px) and (min-height: 900px) {
+  .app-container {
+    --ui-scale: 1.1;
+  }
+}
+
+@media (min-width: 2200px) and (min-height: 1200px) {
+  .app-container {
+    --ui-scale: 1.18;
+  }
 }
 
 /* --- 顶部导航栏 --- */
@@ -251,7 +268,7 @@ body {
 .preview-screen {
   aspect-ratio: 16 / 9;
   background: #000;
-  border-radius: var(--radius-md);
+  border-radius: 0;
   overflow: hidden;
   position: relative;
   border: 1px solid var(--glass-border);

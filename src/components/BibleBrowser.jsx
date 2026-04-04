@@ -24,8 +24,7 @@ function BibleBrowser({ onProjectContent, onQueueContent, onOpenBackgroundPicker
   // searching state
   const [searching, setSearching] = useState(false);
   // 投屏字号
-  const [fontSize, setFontSize] = useState('large');
-  // 投屏正文是否显示每节节号
+  const [fontSize, setFontSize] = useState('large');  // 投屏正文是否显示每节节号
   const [showVerseNumbers, setShowVerseNumbers] = useState(false);
   const [bibleBackground, setBibleBackground] = useState(null);
 
@@ -251,7 +250,6 @@ function BibleBrowser({ onProjectContent, onQueueContent, onOpenBackgroundPicker
           {bibleBackground ? `Selected: ${bibleBackground.name || bibleBackground.path}` : 'No background selected'}
         </span>
       </div>
-
       {/* 搜索结果 */}
       {searchResults.length > 0 && (
         <div style={{ marginBottom: '16px', maxHeight: '300px', overflowY: 'auto' }}>
@@ -457,3 +455,6 @@ function BibleBrowser({ onProjectContent, onQueueContent, onOpenBackgroundPicker
 }
 
 export default BibleBrowser;
+
+
+

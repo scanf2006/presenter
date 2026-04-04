@@ -32,6 +32,8 @@ contextBridge.exposeInMainWorld('churchDisplay', {
 
   /** 关闭主窗口 */
   closeControlWindow: () => ipcRenderer.invoke('close-control-window'),
+  minimizeControlWindow: () => ipcRenderer.invoke('minimize-control-window'),
+  toggleMaximizeControlWindow: () => ipcRenderer.invoke('toggle-maximize-control-window'),
 
   /** 获取投影状态 */
   getProjectorStatus: () => ipcRenderer.invoke('get-projector-status'),
@@ -105,6 +107,8 @@ contextBridge.exposeInMainWorld('churchDisplay', {
   /** 投屏队列持久化 */
   queueSave: (queue) => ipcRenderer.invoke('queue-save', queue),
   queueLoad: () => ipcRenderer.invoke('queue-load'),
+  youtubeResolve: (url) => ipcRenderer.invoke('youtube-resolve', url),
+  youtubeCacheDownload: (url) => ipcRenderer.invoke('youtube-cache-download', url),
 
   /** 版权与授权 */
   licenseGetStatus: () => ipcRenderer.invoke('license-get-status'),

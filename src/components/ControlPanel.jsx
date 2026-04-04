@@ -6,6 +6,7 @@ import PdfRenderer from './PdfRenderer';
 
 const QUEUE_STORAGE_KEY = 'churchdisplay.projectorQueue.v1';
 const TRANSITION_STORAGE_KEY = 'churchdisplay.transition.v1';
+const TEXT_FONT_OPTIONS = ['Noto Sans SC', 'Microsoft YaHei', 'Arial', 'Times New Roman', 'SimHei'];
 
 /**
  * 控制台主面板
@@ -50,6 +51,9 @@ function ControlPanel() {
   // 文字Content编辑
   const [textContent, setTextContent] = useState('');
   const [fontSize, setFontSize] = useState('large');
+  const [textFontFamily, setTextFontFamily] = useState('Noto Sans SC');
+  const [textColor, setTextColor] = useState('#ffffff');
+  const [textSizePx, setTextSizePx] = useState(72);
   const [textBackground, setTextBackground] = useState(null);
   // Current projected content
   const [currentSlide, setCurrentSlide] = useState(null);
@@ -67,6 +71,9 @@ function ControlPanel() {
   const [queueHydrated, setQueueHydrated] = useState(false);
   const [activeQueueIndex, setActiveQueueIndex] = useState(-1);
   const [draggingQueueId, setDraggingQueueId] = useState(null);
+  const [editingQueueId, setEditingQueueId] = useState(null);
+  const [editingQueueTitle, setEditingQueueTitle] = useState('');
+  const [songsListOpenToken, setSongsListOpenToken] = useState(0);
   const [activePreloadItem, setActivePreloadItem] = useState(null);
   const [backgroundPickerTarget, setBackgroundPickerTarget] = useState(null); // 'songs' | 'bible' | 'text' | null
   const [songPickedBackground, setSongPickedBackground] = useState(null);
@@ -223,10 +230,114 @@ function ControlPanel() {
     return `${m}:${s}`;
   }, []);
 
-  const getYouTubeEmbedUrl = useCallback((videoId) => {
-    if (!videoId) return '';
-    return `https://www.youtube.com/embed/${videoId}?autoplay=1&controls=1&modestbranding=1&rel=0&playsinline=1`;
+  const getPreviewTextSize = useCallback((slide, fallbackPx) => {
+    const raw = Number(slide?.fontSizePx);
+    if (Number.isFinite(raw) && raw > 0) {
+      const scaled = Math.round(raw / 5);
+      return `${Math.max(9, Math.min(28, scaled))}px`;
+    }
+    return `${fallbackPx}px`;
   }, []);
+
+  const getPreviewMediaUrl = useCallback((filePath) => {
+    if (!filePath) return '';
+    if (/^https?:\/\//i.test(filePath)) return filePath;
+    return `local-media://${encodeURIComponent(filePath)}`;
+  }, []);
+
+  const normalizeYouTubeUrl = useCallback((payload) => {
+    const direct = payload?.url?.trim();
+    if (direct) {
+      try {
+        const u = new URL(direct);
+        const host = u.hostname.toLowerCase();
+        const toWatch = (id) => `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
+        if (host === 'youtu.be') {
+          const id = u.pathname.replace('/', '').trim();
+          if (id) return toWatch(id);
+        }
+        if (host.includes('youtube.com') || host === 'm.youtube.com' || host === 'music.youtube.com') {
+          if (u.pathname.startsWith('/watch')) {
+            const id = (u.searchParams.get('v') || '').trim();
+            if (id) return toWatch(id);
+          }
+          if (u.pathname.startsWith('/shorts/')) {
+            const id = (u.pathname.split('/')[2] || '').trim();
+            if (id) return toWatch(id);
+          }
+          if (u.pathname.startsWith('/embed/')) {
+            const id = (u.pathname.split('/')[2] || '').trim();
+            if (id) return toWatch(id);
+          }
+        }
+      } catch (_) {}
+      return direct;
+    }
+    const vid = payload?.videoId?.trim();
+    if (!vid) return '';
+    return `https://www.youtube.com/watch?v=${encodeURIComponent(vid)}`;
+  }, []);
+
+  const getYouTubeVideoId = useCallback((payload) => {
+    const directId = (payload?.videoId || '').trim();
+    if (directId) return directId;
+    const raw = normalizeYouTubeUrl(payload);
+    if (!raw) return '';
+    try {
+      const u = new URL(raw);
+      if (u.hostname.includes('youtu.be')) {
+        return u.pathname.replace('/', '').trim();
+      }
+      if (u.hostname.includes('youtube.com')) {
+        if (u.pathname.startsWith('/watch')) return (u.searchParams.get('v') || '').trim();
+        if (u.pathname.startsWith('/shorts/')) return (u.pathname.split('/')[2] || '').trim();
+        if (u.pathname.startsWith('/embed/')) return (u.pathname.split('/')[2] || '').trim();
+      }
+    } catch (_) {}
+    return '';
+  }, [normalizeYouTubeUrl]);
+
+  const getYouTubeEmbedUrl = useCallback((payload) => {
+    const videoId = getYouTubeVideoId(payload);
+    if (!videoId) return '';
+    const origin = encodeURIComponent('https://www.youtube.com');
+    return `https://www.youtube.com/embed/${videoId}?autoplay=1&controls=1&modestbranding=1&rel=0&playsinline=1&origin=${origin}&enablejsapi=1`;
+  }, [getYouTubeVideoId]);
+
+  const resolveYouTubePayload = useCallback(async (payload) => {
+    if (!payload || payload.type !== 'youtube') return payload;
+
+    const inputUrl = normalizeYouTubeUrl(payload);
+    if (!inputUrl) return payload;
+
+    if (!isElectron) {
+      return {
+        type: 'youtube',
+        videoId: payload.videoId || '',
+        url: inputUrl,
+        name: payload.name || 'YouTube',
+        youtubeMode: 'watch-page',
+      };
+    }
+
+    if (typeof window.churchDisplay?.youtubeCacheDownload !== 'function') {
+      throw new Error('This build does not include YouTube cache downloader.');
+    }
+
+    const resolved = await window.churchDisplay.youtubeCacheDownload(inputUrl);
+    if (!resolved?.success || !resolved?.localPath) {
+      throw new Error(resolved?.error || 'YouTube cache download failed.');
+    }
+
+    return {
+      type: 'video',
+      path: resolved.localPath,
+      name: resolved.title || payload.name || 'YouTube Video',
+      source: 'youtube-cache',
+      videoId: resolved.videoId || payload.videoId || '',
+      originalUrl: resolved.originalUrl || inputUrl,
+    };
+  }, [isElectron, normalizeYouTubeUrl]);
 
   const applyPreviewTransition = useCallback((nextSlide) => {
     clearPreviewTimers();
@@ -275,6 +386,24 @@ function ControlPanel() {
     }
   }, [isElectron]);
 
+  const handleMinimizeWindow = useCallback(() => {
+    if (isElectron && typeof window.churchDisplay?.minimizeControlWindow === 'function') {
+      window.churchDisplay.minimizeControlWindow();
+    }
+  }, [isElectron]);
+
+  const handleToggleMaximizeWindow = useCallback(() => {
+    if (isElectron && typeof window.churchDisplay?.toggleMaximizeControlWindow === 'function') {
+      window.churchDisplay.toggleMaximizeControlWindow();
+    }
+  }, [isElectron]);
+
+  const handleCloseWindow = useCallback(() => {
+    if (isElectron && typeof window.churchDisplay?.closeControlWindow === 'function') {
+      window.churchDisplay.closeControlWindow();
+    }
+  }, [isElectron]);
+
   const pushToProjector = useCallback((data) => {
     setCurrentSlide(data);
     applyPreviewTransition(data);
@@ -292,11 +421,14 @@ function ControlPanel() {
       type: 'text',
       text: content || textContent,
       fontSize: fontSize,
+      fontSizePx: textSizePx,
+      fontFamily: textFontFamily,
+      textColor: textColor,
       background: textBackground,
       timestamp: Date.now(),
     };
     pushToProjector(data);
-  }, [textContent, fontSize, textBackground, pushToProjector]);
+  }, [textContent, fontSize, textSizePx, textFontFamily, textColor, textBackground, pushToProjector]);
 
   const handleAddTextToQueue = useCallback(() => {
     if (!textContent.trim()) return;
@@ -304,11 +436,14 @@ function ControlPanel() {
       type: 'text',
       text: textContent,
       fontSize,
+      fontSizePx: textSizePx,
+      fontFamily: textFontFamily,
+      textColor: textColor,
       background: textBackground,
       timestamp: Date.now(),
     };
     setProjectorQueue((prev) => [...prev, buildQueueItem(payload, getQueueItemTitle(payload), 'text')]);
-  }, [textContent, fontSize, textBackground, buildQueueItem, getQueueItemTitle]);
+  }, [textContent, fontSize, textSizePx, textFontFamily, textColor, textBackground, buildQueueItem, getQueueItemTitle]);
 
   useEffect(() => {
     if (activeSection === 'text' && textContent.trim() && currentSlide?.type === 'text') {
@@ -326,9 +461,21 @@ function ControlPanel() {
   }, [isElectron, applyPreviewTransition]);
 
   // 媒体投屏回调
-  const handleProjectMedia = useCallback((mediaData) => {
-    pushToProjector(mediaData);
-  }, [pushToProjector]);
+  const handleProjectMedia = useCallback(async (mediaData) => {
+    try {
+      const playableData = mediaData?.type === 'youtube'
+        ? await resolveYouTubePayload({
+            ...mediaData,
+            videoId: mediaData.videoId || getYouTubeVideoId(mediaData),
+            url: normalizeYouTubeUrl(mediaData),
+            name: mediaData.name || 'YouTube',
+          })
+        : mediaData;
+      pushToProjector(playableData);
+    } catch (err) {
+      alert(`YouTube play failed: ${err.message || 'Unknown error'}`);
+    }
+  }, [pushToProjector, normalizeYouTubeUrl, getYouTubeVideoId, resolveYouTubePayload]);
 
   const handleAddPlaylistItem = useCallback((item) => {
     const payload = item?.payload || null;
@@ -347,7 +494,7 @@ function ControlPanel() {
     setProjectorQueue((prev) => [...prev, buildQueueItem(payload, title || getQueueItemTitle(payload), 'bible')]);
   }, [buildQueueItem, getQueueItemTitle]);
 
-  const handlePlayQueueItem = useCallback((index) => {
+  const handlePlayQueueItem = useCallback(async (index) => {
     if (index < 0 || index >= projectorQueue.length) return;
     const item = projectorQueue[index];
     setActiveQueueIndex(index);
@@ -361,14 +508,12 @@ function ControlPanel() {
           type: item.payload.type,
           path: item.payload.path,
           name: item.payload.name || item.title,
+          deferProject: item.payload.type === 'ppt' || item.payload.type === 'pdf',
         },
         token: Date.now(),
       });
       return;
     } else if (item.section === 'songs' && item.payload?.type === 'song') {
-      if (isElectron && typeof window.churchDisplay?.sendToProjectorBackground === 'function') {
-        window.churchDisplay.sendToProjectorBackground(item.payload?.background || null);
-      }
       setActivePreloadItem({
         type: 'song',
         payload: {
@@ -381,8 +526,20 @@ function ControlPanel() {
     } else {
       setActivePreloadItem(null);
     }
-    pushToProjector(item.payload);
-  }, [projectorQueue, pushToProjector]);
+    try {
+      const playableData = item.payload?.type === 'youtube'
+        ? await resolveYouTubePayload({
+            ...item.payload,
+            videoId: item.payload.videoId || getYouTubeVideoId(item.payload),
+            url: normalizeYouTubeUrl(item.payload),
+            name: item.payload.name || item.title || 'YouTube',
+          })
+        : item.payload;
+      pushToProjector(playableData);
+    } catch (err) {
+      alert(`YouTube play failed: ${err.message || 'Unknown error'}`);
+    }
+  }, [projectorQueue, pushToProjector, normalizeYouTubeUrl, getYouTubeVideoId, resolveYouTubePayload]);
 
   const handleQueuePrev = useCallback(() => {
     if (projectorQueue.length === 0) return;
@@ -423,6 +580,34 @@ function ControlPanel() {
     });
   }, []);
 
+  const handleRemoveActiveQueueItem = useCallback(() => {
+    if (activeQueueIndex < 0 || activeQueueIndex >= projectorQueue.length) return;
+    handleRemoveQueueItem(activeQueueIndex);
+  }, [activeQueueIndex, projectorQueue.length, handleRemoveQueueItem]);
+
+  const handleStartRenameQueueItem = useCallback((item) => {
+    if (!item?.id) return;
+    setEditingQueueId(item.id);
+    setEditingQueueTitle(item.title || '');
+  }, []);
+
+  const handleCommitRenameQueueItem = useCallback(() => {
+    if (!editingQueueId) return;
+    const nextTitle = editingQueueTitle.trim();
+    if (nextTitle) {
+      setProjectorQueue((prev) => prev.map((item) => (
+        item.id === editingQueueId ? { ...item, title: nextTitle } : item
+      )));
+    }
+    setEditingQueueId(null);
+    setEditingQueueTitle('');
+  }, [editingQueueId, editingQueueTitle]);
+
+  const handleCancelRenameQueueItem = useCallback(() => {
+    setEditingQueueId(null);
+    setEditingQueueTitle('');
+  }, []);
+
   const handleClearQueue = useCallback(() => {
     setProjectorQueue([]);
     setActiveQueueIndex(-1);
@@ -436,7 +621,10 @@ function ControlPanel() {
   const handlePickBackgroundFromMedia = useCallback((bg) => {
     if (!bg || !backgroundPickerTarget) return;
     if (backgroundPickerTarget === 'songs') {
-      setSongPickedBackground(bg);
+      setSongPickedBackground({
+        ...bg,
+        pickToken: Date.now(),
+      });
       setActiveSection('songs');
     } else if (backgroundPickerTarget === 'bible') {
       setBiblePickedBackground(bg);
@@ -577,7 +765,9 @@ function ControlPanel() {
       <div className="top-bar">
         <div className="top-bar__brand">
           <div className="top-bar__logo">✦</div>
-          <span className="top-bar__title">ChurchDisplay Pro (多伦多神召会活石堂赠与版, 版权归Aiden所有)</span>
+          <span className="top-bar__title">
+            ChurchDisplay Pro (此版本为多伦多神召会活石堂特供--版权属于Aiden所有scanf2006@gmail.com)
+          </span>
         </div>
         <div className="top-bar__controls">
           {/* Projector Status */}
@@ -597,11 +787,21 @@ function ControlPanel() {
           </button>
           <button
             className="btn btn--ghost btn--icon"
-            onClick={() => {
-              if (isElectron && typeof window.churchDisplay?.closeControlWindow === 'function') {
-                window.churchDisplay.closeControlWindow();
-              }
-            }}
+            onClick={handleMinimizeWindow}
+            title="Minimize"
+          >
+            ─
+          </button>
+          <button
+            className="btn btn--ghost btn--icon"
+            onClick={handleToggleMaximizeWindow}
+            title="Maximize / Restore"
+          >
+            □
+          </button>
+          <button
+            className="btn btn--ghost btn--icon"
+            onClick={handleCloseWindow}
             title="Close"
             style={{ color: '#ff6b6b' }}
           >
@@ -632,7 +832,10 @@ function ControlPanel() {
           </div>
           <div
             className={`sidebar__item ${activeSection === 'songs' ? 'sidebar__item--active' : ''}`}
-            onClick={() => setActiveSection('songs')}
+            onClick={() => {
+              setSongsListOpenToken(Date.now());
+              setActiveSection('songs');
+            }}
           >
             <span className="sidebar__item-icon">S</span>
             Songs
@@ -675,28 +878,83 @@ function ControlPanel() {
                   setDraggingQueueId(null);
                 }}
                 style={{
-                  border: index === activeQueueIndex ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
-                  borderRadius: '6px',
-                  padding: '5px 6px',
-                  background: index === activeQueueIndex ? 'rgba(99,102,241,0.12)' : 'var(--color-surface)',
+                  border: index === activeQueueIndex ? '2px solid #ff4d4f' : '1px solid var(--color-border)',
+                  borderRadius: '8px',
+                  padding: '8px 8px',
+                  background: index === activeQueueIndex ? 'rgba(255, 77, 79, 0.14)' : 'var(--color-surface)',
+                  boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.03)',
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', minWidth: '16px' }}>{index + 1}.</span>
                   <span
-                    onClick={() => handlePlayQueueItem(index)}
-                    style={{ flex: 1, fontSize: '11px', cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                    title="Click to project and open source module"
+                    title="Drag to reorder"
+                    style={{ fontSize: '10px', color: 'var(--color-text-muted)', cursor: 'grab', userSelect: 'none' }}
                   >
-                    {item.title}
+                    ⋮⋮
                   </span>
-                  <button className="btn btn--ghost" style={{ padding: '1px 5px', fontSize: '10px' }} onClick={() => handleMoveQueueItem(index, Math.max(index - 1, 0))}>↑</button>
-                  <button className="btn btn--ghost" style={{ padding: '1px 5px', fontSize: '10px' }} onClick={() => handleMoveQueueItem(index, Math.min(index + 1, projectorQueue.length - 1))}>↓</button>
-                  <button className="btn btn--ghost" style={{ padding: '1px 5px', fontSize: '10px', color: '#ff4d4f' }} onClick={() => handleRemoveQueueItem(index)}>✕</button>
+                  <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', minWidth: '16px' }}>{index + 1}.</span>
+                  {editingQueueId === item.id ? (
+                    <input
+                      autoFocus
+                      type="text"
+                      value={editingQueueTitle}
+                      onChange={(e) => setEditingQueueTitle(e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleCommitRenameQueueItem();
+                        if (e.key === 'Escape') handleCancelRenameQueueItem();
+                      }}
+                      onBlur={handleCommitRenameQueueItem}
+                      style={{
+                        flex: 1,
+                        fontSize: '11px',
+                        padding: '4px 6px',
+                        borderRadius: '4px',
+                        border: '1px solid var(--color-primary)',
+                        background: 'var(--color-surface)',
+                        color: 'var(--color-text-primary)',
+                        outline: 'none',
+                      }}
+                    />
+                  ) : (
+                    <span
+                      onClick={() => handlePlayQueueItem(index)}
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        handleStartRenameQueueItem(item);
+                      }}
+                      style={{ flex: 1, fontSize: '11px', cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                      title="Click to project; double-click to rename"
+                    >
+                      {item.title}
+                    </span>
+                  )}
+                  {editingQueueId !== item.id && (
+                    <button
+                      className="btn btn--ghost"
+                      style={{ padding: '1px 5px', fontSize: '10px' }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleStartRenameQueueItem(item);
+                      }}
+                      title="Rename card"
+                    >
+                      ✎
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
           </div>
+          <button
+            className="btn btn--ghost"
+            style={{ width: '100%', marginTop: '8px', color: '#ff6b6b' }}
+            onClick={handleRemoveActiveQueueItem}
+            disabled={activeQueueIndex < 0 || activeQueueIndex >= projectorQueue.length}
+            title="Delete selected queue card"
+          >
+            🗑 Delete Selected
+          </button>
           <button className="btn btn--ghost" style={{ width: '100%', marginTop: '8px' }} onClick={handleClearQueue} disabled={projectorQueue.length === 0}>
             Clear Queue
           </button>
@@ -773,6 +1031,12 @@ function ControlPanel() {
               placeholder="Type text to project..."
               value={textContent}
               onChange={(e) => setTextContent(e.target.value)}
+              style={{
+                fontFamily: textFontFamily,
+                color: textColor,
+                fontSize: `${Math.max(16, Math.min(96, textSizePx))}px`,
+                lineHeight: 1.5,
+              }}
             />
 
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -798,6 +1062,31 @@ function ControlPanel() {
                   {size === 'small' ? 'Small' : size === 'medium' ? 'Medium' : 'Large'}
                 </button>
               ))}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', alignItems: 'center' }}>
+              <input
+                type="number"
+                min={24}
+                max={180}
+                value={textSizePx}
+                onChange={(e) => setTextSizePx(Math.max(24, Math.min(180, Number(e.target.value || 72))))}
+                style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}
+                title="Text Size (px)"
+              />
+              <select
+                value={textFontFamily}
+                onChange={(e) => setTextFontFamily(e.target.value)}
+                style={{ padding: '8px', borderRadius: '6px', border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}
+              >
+                {TEXT_FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
+              </select>
+              <input
+                type="color"
+                value={textColor}
+                onChange={(e) => setTextColor(e.target.value)}
+                style={{ width: '100%', height: '36px', border: '1px solid var(--color-border)', borderRadius: '6px', background: 'transparent' }}
+                title="Text Color"
+              />
             </div>
 
             <button
@@ -833,6 +1122,7 @@ function ControlPanel() {
             activePreloadItem={activePreloadItem}
             onOpenBackgroundPicker={() => handleOpenBackgroundPicker('songs')}
             externalBackground={songPickedBackground}
+            forceShowSongListToken={songsListOpenToken}
           />
         </div>
 
@@ -871,17 +1161,17 @@ function ControlPanel() {
                   <div style={{ position: 'absolute', inset: 0, zIndex: 1 }}>
                     {previewSlide.background.type === 'video' ? (
                       <video
-                        src={`local-media://${encodeURIComponent(previewSlide.background.path)}`}
+                        src={getPreviewMediaUrl(previewSlide.background.path)}
                         autoPlay
                         loop
                         muted
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center center', borderRadius: 0 }}
                       />
                     ) : (
                       <img
-                        src={`local-media://${encodeURIComponent(previewSlide.background.path)}`}
+                        src={getPreviewMediaUrl(previewSlide.background.path)}
                         alt="bg"
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center center', borderRadius: 0 }}
                       />
                     )}
                     <div style={{ position: 'absolute', inset: 0, background: 'rgba(0, 0, 0, 0.25)' }} />
@@ -896,14 +1186,15 @@ function ControlPanel() {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    padding: '12px',
+                    padding: (previewSlide.type === 'text' || previewSlide.type === 'bible' || previewSlide.type === 'lyrics') ? '12px' : '0px',
                   }}
                 >
                   {previewSlide.type === 'text' && (
                     <div style={{
-                      fontSize: previewSlide.fontSize === 'large' ? '16px' : previewSlide.fontSize === 'medium' ? '12px' : '10px',
+                      fontSize: getPreviewTextSize(previewSlide, previewSlide.fontSize === 'large' ? 16 : previewSlide.fontSize === 'medium' ? 12 : 10),
                       fontWeight: '700',
-                      color: '#fff',
+                      color: previewSlide.textColor || '#fff',
+                      fontFamily: previewSlide.fontFamily || 'inherit',
                       whiteSpace: 'pre-line',
                       lineHeight: '1.6',
                     }}>
@@ -912,17 +1203,17 @@ function ControlPanel() {
                   )}
                   {previewSlide.type === 'image' && (
                     <img
-                      src={`local-media://${encodeURIComponent(previewSlide.path)}`}
+                      src={getPreviewMediaUrl(previewSlide.path)}
                       alt={previewSlide.name}
-                      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center center', borderRadius: 0 }}
                     />
                   )}
                   {previewSlide.type === 'video' && (
                     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
                       <video
                         ref={previewVideoRef}
-                        src={`local-media://${encodeURIComponent(previewSlide.path)}`}
-                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                        src={getPreviewMediaUrl(previewSlide.path)}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center center', borderRadius: 0 }}
                         autoPlay
                         loop
                         onLoadedMetadata={(e) => {
@@ -1000,13 +1291,26 @@ function ControlPanel() {
                     </div>
                   )}
                   {previewSlide.type === 'youtube' && (
-                    <iframe
-                      src={getYouTubeEmbedUrl(previewSlide.videoId)}
-                      title={previewSlide.name || 'YouTube Preview'}
-                      allow="autoplay; encrypted-media; picture-in-picture"
-                      allowFullScreen
-                      style={{ width: '100%', height: '100%', border: 'none' }}
-                    />
+                    (() => {
+                      const embedUrl = getYouTubeEmbedUrl(previewSlide);
+                      if (!embedUrl) {
+                        return (
+                          <div style={{ color: '#fff', fontSize: '12px', opacity: 0.85 }}>
+                            YouTube preview unavailable
+                          </div>
+                        );
+                      }
+                      return (
+                        <iframe
+                          src={embedUrl}
+                          title={previewSlide.name || 'YouTube Preview'}
+                          referrerPolicy="origin"
+                          allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+                          allowFullScreen
+                          style={{ width: '100%', height: '100%', border: 'none', borderRadius: 0 }}
+                        />
+                      );
+                    })()
                   )}
                   {previewSlide.type === 'pdf' && (
                     <div style={{ width: '100%', height: '100%', position: 'relative', background: '#111' }}>
@@ -1038,9 +1342,10 @@ function ControlPanel() {
                         alignItems: 'center',
                         justifyContent: 'center',
                         padding: '8px',
-                        fontSize: previewSlide.fontSize === 'large' ? '14px' : previewSlide.fontSize === 'medium' ? '11px' : '9px',
+                        fontSize: getPreviewTextSize(previewSlide, previewSlide.fontSize === 'large' ? 14 : previewSlide.fontSize === 'medium' ? 11 : 9),
                         fontWeight: '600',
-                        color: '#fff',
+                        color: previewSlide.textColor || '#fff',
+                        fontFamily: previewSlide.fontFamily || 'inherit',
                         whiteSpace: 'pre-line',
                         lineHeight: '1.6',
                         textAlign: 'center',
@@ -1070,8 +1375,13 @@ function ControlPanel() {
                       </div>
                     )}
                     <div style={{
-                      fontSize: previewSlide.fontSize === 'large' ? '14px' : previewSlide.fontSize === 'medium' ? '11px' : '9px',
-                      fontWeight: '700', color: '#fff', whiteSpace: 'pre-line', lineHeight: '1.8', textAlign: 'center',
+                      fontSize: getPreviewTextSize(previewSlide, previewSlide.fontSize === 'large' ? 14 : previewSlide.fontSize === 'medium' ? 11 : 9),
+                      fontWeight: '700',
+                      color: previewSlide.textColor || '#fff',
+                      fontFamily: previewSlide.fontFamily || 'inherit',
+                      whiteSpace: 'pre-line',
+                      lineHeight: '1.8',
+                      textAlign: 'center',
                     }}>
                         {previewSlide.text}
                       </div>

@@ -2,10 +2,30 @@
  * ChurchDisplay Pro - Electron 主进程
  * 负责多窗口管理、多屏检测和 IPC 通信
  */
-const { app, BrowserWindow, screen, ipcMain, dialog, protocol } = require('electron');
+const { app, BrowserWindow, screen, ipcMain, dialog, protocol, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const http = require('http');
+const https = require('https');
 const initSqlJs = require('sql.js');
+let ytdl = null;
+try {
+  ytdl = require('@distube/ytdl-core');
+} catch (_) {
+  ytdl = null;
+}
+let playDl = null;
+try {
+  playDl = require('play-dl');
+} catch (_) {
+  playDl = null;
+}
+let YTDlpWrap = null;
+try {
+  YTDlpWrap = require('yt-dlp-wrap').default || require('yt-dlp-wrap');
+} catch (_) {
+  YTDlpWrap = null;
+}
 const {
   verifyLicenseToken,
   createReadableLicenseSummary,
@@ -42,9 +62,13 @@ let MEDIA_IMAGES_DIR;
 let MEDIA_VIDEOS_DIR;
 let MEDIA_PDF_DIR;
 let MEDIA_PPT_DIR;
+let MEDIA_YOUTUBE_CACHE_DIR;
+let YTDLP_BIN_PATH;
+let ytdlpInstance = null;
 let BG_DEBUG_LOG = null;
-const BG_DEBUG_ENABLED = isDev;
+const BG_DEBUG_ENABLED = true;
 let APP_SETTINGS_PATH;
+let youtubeHeaderHookInstalled = false;
 
 function readAppSettings() {
   if (!APP_SETTINGS_PATH) return { licenseKey: '', acceptedEulaAt: null };
@@ -134,10 +158,63 @@ function appendBgDebug(tag, payload = {}) {
 }
 
 /**
+ * 修复安装版(file://)下 YouTube embed 可能出现的 Error 153
+ * 为 YouTube 相关请求补齐必要头信息（Referer/Origin/User-Agent）。
+ */
+function setupYouTubeRequestHeaders() {
+  if (youtubeHeaderHookInstalled) return;
+
+  const ses = session.defaultSession;
+  if (!ses || !ses.webRequest) return;
+
+  const youtubeFilter = {
+    urls: [
+      'https://www.youtube.com/*',
+      'https://*.youtube.com/*',
+      'https://*.googlevideo.com/*',
+      'https://i.ytimg.com/*',
+      'https://yt3.ggpht.com/*',
+      'https://*.ytimg.com/*',
+    ],
+  };
+
+  ses.webRequest.onBeforeSendHeaders(youtubeFilter, (details, callback) => {
+    const headers = { ...(details.requestHeaders || {}) };
+    const resourceType = details.resourceType || '';
+    let hostname = '';
+    let pathname = '';
+    try {
+      const u = new URL(details.url);
+      hostname = (u.hostname || '').toLowerCase();
+      pathname = u.pathname || '';
+    } catch (_) {}
+
+    const isMediaOrXhr = resourceType === 'media' || resourceType === 'xhr' || resourceType === 'fetch';
+    const isGoogleVideo = hostname.endsWith('.googlevideo.com');
+    const isYtStatic = hostname.endsWith('.ytimg.com') || hostname === 'i.ytimg.com' || hostname === 'yt3.ggpht.com';
+    const isEmbedPath = pathname.startsWith('/embed/');
+
+    // 仅对媒体资源和 embed 流程补头，避免污染 watch 主页面请求。
+    if ((isMediaOrXhr && (isGoogleVideo || isYtStatic)) || isEmbedPath) {
+      if (!headers.Referer) headers.Referer = 'https://www.youtube.com/';
+      if (!headers.Origin) headers.Origin = 'https://www.youtube.com';
+      if (!headers['User-Agent']) {
+        headers['User-Agent'] =
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
+      }
+    }
+
+    callback({ requestHeaders: headers });
+  });
+
+  youtubeHeaderHookInstalled = true;
+}
+
+/**
  * 初始化媒体存储目录
  */
 function initMediaDirs() {
-  [MEDIA_DIR, MEDIA_IMAGES_DIR, MEDIA_VIDEOS_DIR, MEDIA_PDF_DIR, MEDIA_PPT_DIR].forEach(dir => {
+  [MEDIA_DIR, MEDIA_IMAGES_DIR, MEDIA_VIDEOS_DIR, MEDIA_PDF_DIR, MEDIA_PPT_DIR, MEDIA_YOUTUBE_CACHE_DIR].forEach(dir => {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
@@ -145,9 +222,240 @@ function initMediaDirs() {
   console.log(`[MediaManager] 媒体目录已初始化: ${MEDIA_DIR}`);
 }
 
+function sanitizeFileName(input) {
+  return String(input || '')
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 120);
+}
+
+function downloadUrlToFile(fileUrl, outputPath, headers = {}, maxRedirects = 6) {
+  return new Promise((resolve, reject) => {
+    const visit = (url, redirectsLeft) => {
+      const client = url.startsWith('https://') ? https : http;
+      const req = client.get(url, { headers }, (res) => {
+        const code = res.statusCode || 0;
+        if ([301, 302, 303, 307, 308].includes(code) && res.headers.location && redirectsLeft > 0) {
+          const nextUrl = new URL(res.headers.location, url).toString();
+          res.resume();
+          visit(nextUrl, redirectsLeft - 1);
+          return;
+        }
+        if (code < 200 || code >= 300) {
+          res.resume();
+          reject(new Error(`Download failed with status ${code}`));
+          return;
+        }
+        const tmpPath = `${outputPath}.download`;
+        const ws = fs.createWriteStream(tmpPath);
+        res.pipe(ws);
+        ws.on('finish', () => {
+          ws.close(() => {
+            fs.rename(tmpPath, outputPath, (err) => {
+              if (err) reject(err);
+              else resolve();
+            });
+          });
+        });
+        ws.on('error', (err) => reject(err));
+      });
+      req.on('error', (err) => reject(err));
+      req.setTimeout(120000, () => {
+        req.destroy(new Error('Download timeout'));
+      });
+    };
+    visit(fileUrl, maxRedirects);
+  });
+}
+
+async function downloadUrlToFileWithRetry(fileUrl, outputPath) {
+  const attempts = [
+    {},
+    { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36' },
+    {
+      Referer: 'https://www.youtube.com/',
+      Origin: 'https://www.youtube.com',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+    },
+  ];
+
+  let lastErr = null;
+  for (let i = 0; i < attempts.length; i += 1) {
+    const hdr = attempts[i];
+    try {
+      appendBgDebug('youtube-download-attempt', { index: i + 1, headers: Object.keys(hdr) });
+      await downloadUrlToFile(fileUrl, outputPath, hdr);
+      return;
+    } catch (err) {
+      lastErr = err;
+      appendBgDebug('youtube-download-attempt-failed', { index: i + 1, error: err?.message || String(err) });
+    }
+  }
+  throw lastErr || new Error('Download failed.');
+}
+
+async function getYtDlpInstance() {
+  if (!YTDlpWrap) return null;
+  if (ytdlpInstance) return ytdlpInstance;
+  if (!YTDLP_BIN_PATH) return null;
+
+  try {
+    if (!fs.existsSync(YTDLP_BIN_PATH)) {
+      appendBgDebug('ytdlp-download-start', { binPath: YTDLP_BIN_PATH });
+      fs.mkdirSync(path.dirname(YTDLP_BIN_PATH), { recursive: true });
+      await YTDlpWrap.downloadFromGithub(YTDLP_BIN_PATH);
+      appendBgDebug('ytdlp-download-done', { binPath: YTDLP_BIN_PATH });
+    }
+    ytdlpInstance = new YTDlpWrap(YTDLP_BIN_PATH);
+    return ytdlpInstance;
+  } catch (err) {
+    appendBgDebug('ytdlp-init-failed', { error: err?.message || String(err) });
+    return null;
+  }
+}
+
+async function downloadWithYtDlp(url, outputPath) {
+  const yt = await getYtDlpInstance();
+  if (!yt) throw new Error('yt-dlp unavailable');
+  const outDir = path.dirname(outputPath);
+  const outName = path.basename(outputPath);
+  fs.mkdirSync(outDir, { recursive: true });
+
+  // Prefer progressive mp4 to avoid ffmpeg dependency.
+  await yt.execPromise([
+    '--no-playlist',
+    '--no-warnings',
+    '-f',
+    'b[ext=mp4]/b',
+    '--output',
+    outName,
+    url,
+  ], { cwd: outDir });
+
+  if (!fs.existsSync(outputPath) || fs.statSync(outputPath).size < 1024 * 100) {
+    throw new Error('yt-dlp output file missing or too small');
+  }
+}
+
 // 窗口引用
 let controlWindow = null;   // 控制台窗口
 let projectorWindow = null;  // 投影窗口
+let projectorExternalMode = false;
+let projectorPendingPayload = null;
+let allowControlWindowClose = false;
+
+function confirmCloseControlWindow() {
+  if (!controlWindow || controlWindow.isDestroyed()) return { confirmed: false };
+  const choice = dialog.showMessageBoxSync(controlWindow, {
+    type: 'question',
+    buttons: ['Exit', 'Cancel'],
+    defaultId: 1,
+    cancelId: 1,
+    noLink: true,
+    title: 'Confirm Exit',
+    message: 'Are you sure you want to exit ChurchDisplay Pro?',
+    detail: 'Unsaved temporary changes may be lost.',
+  });
+  return { confirmed: choice === 0 };
+}
+
+function requestCloseControlWindow() {
+  if (!controlWindow || controlWindow.isDestroyed()) {
+    return { success: false, cancelled: true };
+  }
+  const result = confirmCloseControlWindow();
+  if (!result.confirmed) {
+    return { success: false, cancelled: true };
+  }
+  allowControlWindowClose = true;
+  controlWindow.close();
+  return { success: true };
+}
+
+function loadProjectorShell() {
+  if (!projectorWindow || projectorWindow.isDestroyed()) return;
+  const timestamp = Date.now();
+  if (isDev) {
+    const projectorUrl = `http://localhost:5199/#/projector?v=${timestamp}`;
+    projectorWindow.loadURL(projectorUrl, {
+      extraHeaders: 'pragma: no-cache\n'
+    });
+  } else {
+    projectorWindow.loadFile(path.join(__dirname, '../dist/index.html'), {
+      hash: '/projector',
+      query: { v: timestamp.toString() }
+    });
+  }
+}
+
+function normalizeYouTubeWatchUrl(rawUrl) {
+  try {
+    const u = new URL(rawUrl);
+    const host = u.hostname.toLowerCase();
+    const toWatch = (id) => `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
+
+    if (host === 'youtu.be') {
+      const id = u.pathname.replace('/', '').trim();
+      if (!id) return null;
+      return toWatch(id);
+    }
+    if (host.includes('youtube.com') || host === 'm.youtube.com' || host === 'music.youtube.com') {
+      if (u.pathname.startsWith('/watch')) {
+        const id = (u.searchParams.get('v') || '').trim();
+        return id ? toWatch(id) : null;
+      }
+      if (u.pathname.startsWith('/shorts/')) {
+        const id = (u.pathname.split('/')[2] || '').trim();
+        return id ? toWatch(id) : null;
+      }
+      if (u.pathname.startsWith('/embed/')) {
+        const id = (u.pathname.split('/')[2] || '').trim();
+        return id ? toWatch(id) : null;
+      }
+    }
+  } catch (_) {
+    return null;
+  }
+  return null;
+}
+
+function openYouTubeWatchInProjector(rawUrl) {
+  if (!projectorWindow || projectorWindow.isDestroyed()) return false;
+  const watchUrl = normalizeYouTubeWatchUrl(rawUrl);
+  if (!watchUrl) return false;
+  projectorExternalMode = true;
+  try {
+    projectorWindow.webContents.setUserAgent(
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
+    );
+  } catch (_) {}
+  projectorWindow.loadURL(watchUrl);
+  return true;
+}
+
+function sendToProjectorShell(data) {
+  if (!projectorWindow || projectorWindow.isDestroyed()) return;
+
+  if (projectorExternalMode) {
+    projectorPendingPayload = data;
+    projectorWindow.webContents.once('did-finish-load', () => {
+      projectorExternalMode = false;
+      try { projectorWindow.webContents.setUserAgent(''); } catch (_) {}
+      const payload = projectorPendingPayload;
+      projectorPendingPayload = null;
+      if (payload && projectorWindow && !projectorWindow.isDestroyed()) {
+        try { projectorWindow.webContents.setAudioMuted(false); } catch (_) {}
+        projectorWindow.webContents.send('projector-content', payload);
+      }
+    });
+    loadProjectorShell();
+    return;
+  }
+
+  try { projectorWindow.webContents.setAudioMuted(false); } catch (_) {}
+  projectorWindow.webContents.send('projector-content', data);
+}
 
 /**
  * ScreenManager - 多屏管理器
@@ -216,7 +524,7 @@ function createControlWindow() {
     height: 900,
     x: primaryDisplay.workArea.x + 50,
     y: primaryDisplay.workArea.y + 50,
-    title: 'ChurchDisplay Pro (多伦多神召会活石堂赠与版, 版权归Aiden所有)',
+    title: 'ChurchDisplay Pro (此版本为多伦多神召会活石堂特供--版权属于Aiden所有scanf2006@gmail.com)',
     frame: false,
     backgroundColor: '#0a0a0f',
     webPreferences: {
@@ -228,6 +536,7 @@ function createControlWindow() {
     },
     icon: path.join(__dirname, '../public/icon.png'),
   });
+  allowControlWindowClose = false;
 
   // 开发模式加载 Vite 开发服务器 (使用 5199 端口)，生产模式加载构建产物
   if (isDev) {
@@ -237,7 +546,18 @@ function createControlWindow() {
     controlWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
 
+  controlWindow.on('close', (event) => {
+    if (allowControlWindowClose) return;
+    event.preventDefault();
+    const result = confirmCloseControlWindow();
+    if (result.confirmed) {
+      allowControlWindowClose = true;
+      controlWindow.close();
+    }
+  });
+
   controlWindow.on('closed', () => {
+    allowControlWindowClose = false;
     controlWindow = null;
     // 关闭控制台时同时关闭投影窗口
     if (projectorWindow && !projectorWindow.isDestroyed()) {
@@ -288,21 +608,11 @@ function createProjectorWindow(targetDisplay) {
       backgroundThrottling: false,
     },
   });
+  projectorExternalMode = false;
+  projectorPendingPayload = null;
 
   // 加载投影页面 (强制禁用缓存并注入时间戳，使用 5199 端口)
-  const timestamp = Date.now();
-  if (isDev) {
-    const projectorUrl = `http://localhost:5199/#/projector?v=${timestamp}`;
-    console.log(`[Projector] loadURL => ${projectorUrl}`);
-    projectorWindow.loadURL(projectorUrl, {
-      extraHeaders: 'pragma: no-cache\n'
-    });
-  } else {
-    projectorWindow.loadFile(path.join(__dirname, '../dist/index.html'), {
-      hash: '/projector',
-      query: { v: timestamp.toString() }
-    });
-  }
+  loadProjectorShell();
 
   projectorWindow.on('closed', () => {
     projectorWindow = null;
@@ -363,10 +673,29 @@ function setupIPC() {
 
   // 关闭主窗口
   ipcMain.handle('close-control-window', () => {
+    return requestCloseControlWindow();
+  });
+
+  // 最小化主窗口
+  ipcMain.handle('minimize-control-window', () => {
     if (controlWindow && !controlWindow.isDestroyed()) {
-      controlWindow.close();
+      controlWindow.minimize();
+      return { success: true };
     }
-    return { success: true };
+    return { success: false };
+  });
+
+  // 最大化/还原主窗口
+  ipcMain.handle('toggle-maximize-control-window', () => {
+    if (controlWindow && !controlWindow.isDestroyed()) {
+      if (controlWindow.isMaximized()) {
+        controlWindow.unmaximize();
+      } else {
+        controlWindow.maximize();
+      }
+      return { success: true, isMaximized: controlWindow.isMaximized() };
+    }
+    return { success: false, isMaximized: false };
   });
 
   // 发送内容到投影窗口
@@ -377,10 +706,23 @@ function setupIPC() {
       backgroundType: data?.background?.type,
       backgroundPath: data?.background?.path,
     });
-    if (projectorWindow && !projectorWindow.isDestroyed()) {
-      try { projectorWindow.webContents.setAudioMuted(false); } catch (_) {}
-      projectorWindow.webContents.send('projector-content', data);
+    if (!projectorWindow || projectorWindow.isDestroyed()) return;
+
+    if (data?.type === 'youtube') {
+      const youtubeUrl = data?.url || (data?.videoId ? `https://www.youtube.com/watch?v=${encodeURIComponent(data.videoId)}` : '');
+      const opened = openYouTubeWatchInProjector(youtubeUrl);
+      if (!opened) {
+        sendToProjectorShell({
+          type: 'text',
+          text: 'Failed to open YouTube URL',
+          fontSize: 'medium',
+          timestamp: Date.now(),
+        });
+      }
+      return;
     }
+
+    sendToProjectorShell(data);
   });
 
   // 发送动态专门背景到底层面板
@@ -421,6 +763,185 @@ function setupIPC() {
     return {
       active: projectorWindow !== null && !projectorWindow.isDestroyed(),
     };
+  });
+
+  // 解析 YouTube 为可播放直链（规避 embed 限制 152/153）
+  ipcMain.handle('youtube-resolve', async (event, inputUrl) => {
+    const raw = typeof inputUrl === 'string' ? inputUrl.trim() : '';
+    if (!raw) {
+      return { success: false, error: 'YouTube URL is required.' };
+    }
+
+    let lastError = '';
+
+    // Resolver #1: play-dl (primary, currently more tolerant to YouTube changes)
+    if (playDl) {
+      try {
+        const info2 = await playDl.video_info(raw);
+        const formats = Array.isArray(info2?.format) ? info2.format : [];
+        const progressive = formats.filter((fmt) => {
+          const mime = String(fmt?.mimeType || '').toLowerCase();
+          return !!fmt?.url && mime.includes('video/mp4') && mime.includes('mp4a');
+        });
+        const ranked2 = progressive.sort((a, b) => Number(b.height || 0) - Number(a.height || 0));
+        const selected2 = ranked2[0] || formats.find((fmt) => !!fmt?.url);
+
+        if (selected2?.url) {
+          return {
+            success: true,
+            streamUrl: selected2.url,
+            title: info2?.video_details?.title || '',
+            videoId: info2?.video_details?.id || '',
+            originalUrl: raw,
+          };
+        }
+      } catch (err) {
+        lastError = err?.message || 'play-dl resolver failed';
+      }
+    }
+
+    // Resolver #2: @distube/ytdl-core (fallback)
+    if (ytdl && ytdl.validateURL(raw)) {
+      try {
+        const info = await ytdl.getInfo(raw, {
+          requestOptions: {
+            headers: {
+              referer: 'https://www.youtube.com/',
+              origin: 'https://www.youtube.com',
+              'user-agent':
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+            },
+          },
+        });
+
+        const candidates = info.formats.filter((fmt) => !!fmt.url && fmt.hasVideo && fmt.hasAudio && !fmt.isHLS);
+        const mp4Candidates = candidates.filter((fmt) => (fmt.container || '').toLowerCase() === 'mp4');
+        const ranked = (mp4Candidates.length > 0 ? mp4Candidates : candidates).sort((a, b) => {
+          const ah = Number(a.height || 0);
+          const bh = Number(b.height || 0);
+          if (ah !== bh) return bh - ah;
+          return Number(b.bitrate || 0) - Number(a.bitrate || 0);
+        });
+        const selected = ranked[0];
+
+        if (selected?.url) {
+          return {
+            success: true,
+            streamUrl: selected.url,
+            title: info.videoDetails?.title || '',
+            videoId: info.videoDetails?.videoId || '',
+            originalUrl: raw,
+          };
+        }
+      } catch (err) {
+        lastError = lastError
+          ? `${lastError}; ${err?.message || 'ytdl resolver failed'}`
+          : (err?.message || 'ytdl resolver failed');
+      }
+    }
+
+    return {
+      success: false,
+      error: lastError || 'No playable stream found for this video.',
+    };
+  });
+
+  ipcMain.handle('youtube-cache-download', async (event, inputUrl) => {
+    const raw = typeof inputUrl === 'string' ? inputUrl.trim() : '';
+    if (!raw) return { success: false, error: 'YouTube URL is required.' };
+    appendBgDebug('youtube-cache-download-start', { url: raw });
+
+    const resolved = await (async () => {
+      let lastError = '';
+      if (playDl) {
+        try {
+          const info2 = await playDl.video_info(raw);
+          const formats = Array.isArray(info2?.format) ? info2.format : [];
+          const progressive = formats.filter((fmt) => {
+            const mime = String(fmt?.mimeType || '').toLowerCase();
+            return !!fmt?.url && mime.includes('video/mp4') && mime.includes('mp4a');
+          });
+          const ranked2 = progressive.sort((a, b) => Number(b.height || 0) - Number(a.height || 0));
+          const selected2 = ranked2[0] || formats.find((fmt) => !!fmt?.url);
+          if (selected2?.url) {
+            return {
+              success: true,
+              streamUrl: selected2.url,
+              title: info2?.video_details?.title || '',
+              videoId: info2?.video_details?.id || '',
+              originalUrl: raw,
+            };
+          }
+        } catch (err) {
+          lastError = err?.message || 'play-dl resolver failed';
+        }
+      }
+      if (ytdl && ytdl.validateURL(raw)) {
+        try {
+          const info = await ytdl.getInfo(raw, {
+            requestOptions: {
+              headers: {
+                referer: 'https://www.youtube.com/',
+                origin: 'https://www.youtube.com',
+                'user-agent':
+                  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+              },
+            },
+          });
+          const candidates = info.formats.filter((fmt) => !!fmt.url && fmt.hasVideo && fmt.hasAudio && !fmt.isHLS);
+          const mp4Candidates = candidates.filter((fmt) => (fmt.container || '').toLowerCase() === 'mp4');
+          const ranked = (mp4Candidates.length > 0 ? mp4Candidates : candidates).sort((a, b) => Number(b.height || 0) - Number(a.height || 0));
+          const selected = ranked[0];
+          if (selected?.url) {
+            return {
+              success: true,
+              streamUrl: selected.url,
+              title: info.videoDetails?.title || '',
+              videoId: info.videoDetails?.videoId || '',
+              originalUrl: raw,
+            };
+          }
+        } catch (err) {
+          lastError = lastError ? `${lastError}; ${err?.message || 'ytdl resolver failed'}` : (err?.message || 'ytdl resolver failed');
+        }
+      }
+      return { success: false, error: lastError || 'No playable stream found for this video.' };
+    })();
+
+    if (!resolved?.success || !resolved?.streamUrl) {
+      appendBgDebug('youtube-cache-download-resolve-failed', { url: raw, error: resolved?.error });
+      return { success: false, error: resolved?.error || 'No playable stream found.' };
+    }
+
+    try {
+      const fileBase = sanitizeFileName(`${resolved.videoId || 'youtube'}_${resolved.title || 'video'}`) || 'youtube_video';
+      const outputPath = path.join(MEDIA_YOUTUBE_CACHE_DIR, `${fileBase}.mp4`);
+      if (!fs.existsSync(outputPath) || fs.statSync(outputPath).size < 1024 * 100) {
+        try {
+          await downloadUrlToFileWithRetry(resolved.streamUrl, outputPath);
+        } catch (primaryErr) {
+          appendBgDebug('youtube-download-primary-failed', { error: primaryErr?.message || String(primaryErr) });
+          appendBgDebug('youtube-download-fallback-ytdlp-start', { url: raw });
+          await downloadWithYtDlp(raw, outputPath);
+          appendBgDebug('youtube-download-fallback-ytdlp-success', { outputPath });
+        }
+      }
+      appendBgDebug('youtube-cache-download-success', {
+        url: raw,
+        outputPath,
+        size: fs.existsSync(outputPath) ? fs.statSync(outputPath).size : 0,
+      });
+      return {
+        success: true,
+        localPath: outputPath,
+        title: resolved.title || 'YouTube Video',
+        videoId: resolved.videoId || '',
+        originalUrl: resolved.originalUrl || raw,
+      };
+    } catch (err) {
+      appendBgDebug('youtube-cache-download-failed', { url: raw, error: err?.message || 'Download failed.' });
+      return { success: false, error: err?.message || 'Download failed.' };
+    }
   });
 
   // ===== Copyright / License =====
@@ -889,6 +1410,8 @@ function watchDisplayChanges() {
 // ================= 应用生命周期 =================
 
 app.whenReady().then(async () => {
+  setupYouTubeRequestHeaders();
+
   BG_DEBUG_LOG = path.join(app.getPath('userData'), 'bg-debug.log');
   APP_SETTINGS_PATH = path.join(app.getPath('userData'), 'app-settings.json');
   appendBgDebug('app-ready', { userData: app.getPath('userData') });
@@ -899,6 +1422,8 @@ app.whenReady().then(async () => {
   MEDIA_VIDEOS_DIR = path.join(MEDIA_DIR, 'videos');
   MEDIA_PDF_DIR = path.join(MEDIA_DIR, 'pdf');
   MEDIA_PPT_DIR = path.join(MEDIA_DIR, 'ppt');
+  MEDIA_YOUTUBE_CACHE_DIR = path.join(MEDIA_DIR, 'youtube-cache');
+  YTDLP_BIN_PATH = path.join(app.getPath('userData'), 'tools', 'yt-dlp.exe');
 
   initMediaDirs();
 

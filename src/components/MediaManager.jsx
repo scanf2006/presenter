@@ -114,13 +114,15 @@ function MediaManager({ onProjectMedia, onAddPlaylist, activePreloadItem, backgr
         numPages: pdfDocument.numPages
       });
 
-      // 立即触发大屏幕第丢�页投�?
-      onProjectMedia({
-        type: 'pdf',
-        path: file.path,
-        name: file.name,
-        page: 1,
-      });
+      // Queue preload mode: open thumbnails only; project after user picks a page.
+      if (!file.deferProject) {
+        onProjectMedia({
+          type: 'pdf',
+          path: file.path,
+          name: file.name,
+          page: 1,
+        });
+      }
     } catch (err) {
       console.error('[MediaManager] PDF load failed:', err);
       alert('Failed to load PDF thumbnails: ' + err.message);
@@ -229,12 +231,14 @@ function MediaManager({ onProjectMedia, onAddPlaylist, activePreloadItem, backgr
     if (result.success && result.slides.length > 0) {
       setPptSlides(result.slides);
       setCurrentSlideIndex(0);
-      // 投屏第一�?
-      onProjectMedia({
-        type: 'image',
-        path: result.slides[0].path,
-        name: `${file.name} - Page 1`,
-      });
+      // Queue preload mode: open thumbnail browser only, project after user chooses a slide.
+      if (!file.deferProject) {
+        onProjectMedia({
+          type: 'image',
+          path: result.slides[0].path,
+          name: `${file.name} - Page 1`,
+        });
+      }
     } else {
       if (result.error === 'TIMEOUT') {
         alert('PPT conversion timed out (over 2 minutes). Please close any PowerPoint popups and retry.');
@@ -252,7 +256,8 @@ function MediaManager({ onProjectMedia, onAddPlaylist, activePreloadItem, backgr
         const file = { 
           type: type, 
           path: activePreloadItem.payload.path, 
-          name: activePreloadItem.payload.name 
+          name: activePreloadItem.payload.name,
+          deferProject: !!activePreloadItem.payload.deferProject,
         };
         if (type === 'ppt') handleConvertPpt(file);
         if (type === 'pdf') handleLoadPdfGrid(file);

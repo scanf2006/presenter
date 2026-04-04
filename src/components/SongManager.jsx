@@ -1,9 +1,11 @@
 ﻿import React, { useState, useEffect, useCallback, useRef } from 'react';
 
+const TEXT_FONT_OPTIONS = ['Noto Sans SC', 'Microsoft YaHei', 'Arial', 'Times New Roman', 'SimHei'];
+
 /**
  * 诗歌歌词管理组件
- * 支持歌曲管理、分段编辑��段落��择投屏和歌词文件导�? */
-function SongManager({ onProjectContent, onQueueContent, activePreloadItem, onOpenBackgroundPicker, externalBackground }) {
+ * 支持歌曲管理、分段编辑??段落??择投屏和歌词文件导?? */
+function SongManager({ onProjectContent, onQueueContent, activePreloadItem, onOpenBackgroundPicker, externalBackground, forceShowSongListToken }) {
   // 歌曲列表
   const [songs, setSongs] = useState([]);
   // current editing song
@@ -16,10 +18,14 @@ function SongManager({ onProjectContent, onQueueContent, activePreloadItem, onOp
   const [formLyrics, setFormLyrics] = useState('');
   // 投屏字号
   const [fontSize, setFontSize] = useState('large');
+  const [fontSizePx, setFontSizePx] = useState(72);
+  const [fontFamily, setFontFamily] = useState('Noto Sans SC');
+  const [textColor, setTextColor] = useState('#ffffff');
   const [songBackground, setSongBackground] = useState(null);
   // 搜索
   const [searchQuery, setSearchQuery] = useState('');
   const lastProjectedSectionRef = useRef(null);
+  const lastAppliedExternalPickRef = useRef(null);
 
   const isElectron = typeof window.churchDisplay !== 'undefined';
   const fileInputRef = useRef(null);
@@ -51,14 +57,14 @@ function SongManager({ onProjectContent, onQueueContent, activePreloadItem, onOp
     const lines = normalized.split('\n');
     const hasMarkers = lines.some((line) => /^\s*\[(V\d*|C|B|P|E)\]/i.test(line.trim()));
 
-    // 无标记模式：按空行自动分�?
+    // 无标记模式：按空行自动分??
     if (!hasMarkers) {
       const blocks = normalized
         .split(/\n\s*\n+/)
         .map((block) => block.split('\n').map((line) => line.trim()).filter(Boolean))
         .filter((block) => block.length > 0);
 
-      // 若没有空行导致只有一个大段，则按�?4 行自动分段，便于点击投屏
+      // 若没有空行导致只有一个大段，则按??4 行自动分段，便于点击投屏
       if (blocks.length === 1 && blocks[0].length > 4) {
         const single = blocks[0];
         const autoBlocks = [];
@@ -79,7 +85,7 @@ function SongManager({ onProjectContent, onQueueContent, activePreloadItem, onOp
       }));
     }
 
-    // 标记模式：兼�?[V1]/[C]/[B]/[P]/[E]
+    // 标记模式：兼??[V1]/[C]/[B]/[P]/[E]
     const sections = [];
     let currentSection = { tag: '', title: 'Section 1', lines: [] };
 
@@ -181,6 +187,9 @@ function SongManager({ onProjectContent, onQueueContent, activePreloadItem, onOp
       type: 'lyrics',
       text: section.lines.join('\n'),
       fontSize,
+      fontSizePx,
+      fontFamily,
+      textColor,
       background: songBackground,
     };
     if (isElectron && typeof window.churchDisplay?.sendToProjectorBackground === 'function') {
@@ -188,7 +197,7 @@ function SongManager({ onProjectContent, onQueueContent, activePreloadItem, onOp
     }
     lastProjectedSectionRef.current = { section };
     onProjectContent(payload);
-  }, [fontSize, onProjectContent, songBackground, isElectron]);
+  }, [fontSize, fontSizePx, fontFamily, textColor, onProjectContent, songBackground, isElectron]);
 
   const handleQueueSong = useCallback((song) => {
     if (typeof onQueueContent !== 'function' || !song) return;
@@ -201,27 +210,37 @@ function SongManager({ onProjectContent, onQueueContent, activePreloadItem, onOp
         path: song.backgroundPath,
       } : null,
     };
-    onQueueContent(payload, `🎵 ${song.title}`);
+    onQueueContent(payload, `Song: ${song.title}`);
   }, [onQueueContent]);
 
+  const openSongWithoutAutoProject = useCallback((song) => {
+    if (!song) return;
+    lastProjectedSectionRef.current = null;
+    setEditingSong(null);
+    setSelectedSong(song);
+    setSongBackground(song.backgroundType && song.backgroundPath ? {
+      type: song.backgroundType,
+      path: song.backgroundPath,
+      name: song.backgroundPath.split(/[\\/]/).pop() || 'Background',
+    } : null);
+  }, []);
+
   useEffect(() => {
+    // Do not interrupt editor mode while user is creating/editing a song.
+    if (editingSong) return;
     if (!activePreloadItem || activePreloadItem.type !== 'song') return;
     const targetSongId = activePreloadItem.payload?.songId;
     if (!targetSongId) return;
     const target = songs.find((s) => s.id === targetSongId);
     if (target) {
-      setEditingSong(null);
-      setSelectedSong(target);
-      setSongBackground(target.backgroundType && target.backgroundPath ? {
-        type: target.backgroundType,
-        path: target.backgroundPath,
-        name: target.backgroundPath.split(/[\\/]/).pop() || 'Background',
-      } : null);
+      openSongWithoutAutoProject(target);
     }
-  }, [activePreloadItem, songs]);
+  }, [activePreloadItem, songs, editingSong, openSongWithoutAutoProject]);
 
   useEffect(() => {
     if (!selectedSong) return;
+    // Switch song should not auto-project last section from previous song.
+    lastProjectedSectionRef.current = null;
     setSongBackground(selectedSong.backgroundType && selectedSong.backgroundPath ? {
       type: selectedSong.backgroundType,
       path: selectedSong.backgroundPath,
@@ -230,18 +249,70 @@ function SongManager({ onProjectContent, onQueueContent, activePreloadItem, onOp
   }, [selectedSong?.id]);
 
   useEffect(() => {
+    if (!forceShowSongListToken) return;
+    // User explicitly clicked Songs menu: always return to songs list view.
+    setSelectedSong(null);
+    setEditingSong(null);
+    lastProjectedSectionRef.current = null;
+  }, [forceShowSongListToken]);
+
+  useEffect(() => {
     if (selectedSong && lastProjectedSectionRef.current) {
       handleProjectSection(lastProjectedSectionRef.current.section);
     }
   }, [songBackground]);
 
-  useEffect(() => {
-    if (externalBackground) {
-      setSongBackground(externalBackground);
+  const persistSelectedSongBackground = useCallback(async (bg) => {
+    if (!selectedSong) return;
+    const nextSong = {
+      ...selectedSong,
+      backgroundType: bg?.type || '',
+      backgroundPath: bg?.path || '',
+    };
+    setSelectedSong(nextSong);
+    setSongs((prev) => prev.map((s) => (s.id === nextSong.id ? nextSong : s)));
+    if (isElectron) {
+      await window.churchDisplay.songsSave({
+        id: nextSong.id,
+        title: nextSong.title || '',
+        author: nextSong.author || '',
+        lyrics: nextSong.lyrics || '',
+        backgroundType: nextSong.backgroundType,
+        backgroundPath: nextSong.backgroundPath,
+      });
     }
-  }, [externalBackground?.path, externalBackground?.type]);
+  }, [selectedSong, isElectron]);
 
-  // 导入歌词文件（优�?UTF-8，异常时回��� GB18030，避免乱码）
+  useEffect(() => {
+    if (!externalBackground) return;
+    const externalPickKey = String(
+      externalBackground.pickToken ||
+      `${externalBackground.type || ''}|${externalBackground.path || ''}`
+    );
+    if (lastAppliedExternalPickRef.current === externalPickKey) return;
+    lastAppliedExternalPickRef.current = externalPickKey;
+
+    setSongBackground(externalBackground);
+
+    // In selected-song view, picking a new background should replace and persist immediately.
+    if (!editingSong && selectedSong) {
+      const unchanged =
+        (selectedSong.backgroundType || '') === (externalBackground.type || '') &&
+        (selectedSong.backgroundPath || '') === (externalBackground.path || '');
+      if (!unchanged) {
+        persistSelectedSongBackground(externalBackground);
+      }
+    }
+  }, [
+    externalBackground?.pickToken,
+    externalBackground?.path,
+    externalBackground?.type,
+    editingSong,
+    selectedSong?.id,
+    persistSelectedSongBackground,
+  ]);
+
+  // 导入歌词文件（优??UTF-8，异常时回??? GB18030，避免乱码）
   const handleImportFile = useCallback((event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -286,7 +357,7 @@ function SongManager({ onProjectContent, onQueueContent, activePreloadItem, onOp
       <div className="song-manager animate-slide-in-up">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <h2 style={{ fontSize: '18px', fontWeight: '600' }}>
-            🎵 {editingSong.id ? 'Edit Song' : 'New Song'}
+            {editingSong.id ? 'Edit Song' : 'New Song'}
           </h2>
           <button className="btn btn--ghost" onClick={() => setEditingSong(null)}>Cancel</button>
         </div>
@@ -318,19 +389,19 @@ function SongManager({ onProjectContent, onQueueContent, activePreloadItem, onOp
             style={{
               padding: '12px', borderRadius: '6px', border: '1px solid var(--color-border)',
               background: 'var(--color-surface)', color: 'var(--color-text-primary)', fontSize: '14px',
-              fontFamily: 'monospace', resize: 'vertical', outline: 'none', lineHeight: '1.6',
+              fontFamily: 'inherit', resize: 'vertical', outline: 'none', lineHeight: '1.6',
             }}
           />
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <button className="btn btn--ghost" onClick={() => onOpenBackgroundPicker?.()}>
-              🎬 Pick Background from Media
+              Pick Background from Media
             </button>
             {songBackground && (
               <button className="btn btn--ghost" onClick={() => setSongBackground(null)}>Clear Background</button>
             )}
           </div>
           <button className="btn btn--primary" onClick={handleSave} style={{ padding: '12px' }}>
-            💾 Save Song
+            Save Song
           </button>
         </div>
       </div>
@@ -347,10 +418,10 @@ function SongManager({ onProjectContent, onQueueContent, activePreloadItem, onOp
             <button className="btn btn--ghost" onClick={() => setSelectedSong(null)} style={{ padding: '4px 8px', fontSize: '12px' }}>
               ← Back
             </button>
-            <h2 style={{ fontSize: '18px', fontWeight: '600' }}>🎵 {selectedSong.title}</h2>
+            <h2 style={{ fontSize: '18px', fontWeight: '600' }}>{selectedSong.title}</h2>
           </div>
           <button className="btn btn--ghost" onClick={() => handleEdit(selectedSong)} style={{ fontSize: '12px' }}>
-            ✏️ Edit
+            Edit
           </button>
         </div>
 
@@ -362,7 +433,7 @@ function SongManager({ onProjectContent, onQueueContent, activePreloadItem, onOp
 
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px' }}>
           <button className="btn btn--ghost" onClick={() => onOpenBackgroundPicker?.()}>
-            🎬 Pick Background from Media
+            Pick Background from Media
           </button>
           {songBackground && (
             <button className="btn btn--ghost" onClick={() => setSongBackground(null)}>Clear Background</button>
@@ -385,54 +456,93 @@ function SongManager({ onProjectContent, onQueueContent, activePreloadItem, onOp
             </button>
           ))}
         </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '16px' }}>
+          <input
+            type="number"
+            min={24}
+            max={180}
+            value={fontSizePx}
+            onChange={(e) => setFontSizePx(Math.max(24, Math.min(180, Number(e.target.value || 72))))}
+            style={{
+              padding: '8px', borderRadius: '6px', border: '1px solid var(--color-border)',
+              background: 'var(--color-surface)', color: 'var(--color-text-primary)'
+            }}
+            title="Text Size (px)"
+          />
+          <select
+            value={fontFamily}
+            onChange={(e) => setFontFamily(e.target.value)}
+            style={{
+              padding: '8px', borderRadius: '6px', border: '1px solid var(--color-border)',
+              background: 'var(--color-surface)', color: 'var(--color-text-primary)'
+            }}
+          >
+            {TEXT_FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
+          </select>
+          <input
+            type="color"
+            value={textColor}
+            onChange={(e) => setTextColor(e.target.value)}
+            style={{ width: '100%', height: '36px', border: '1px solid var(--color-border)', borderRadius: '6px', background: 'transparent' }}
+            title="Text Color"
+          />
+        </div>
 
         <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: '12px' }}>
-          Click any section to project it
+          Slide-style section cards (in order). Click a card to project.
         </p>
 
-        {/* 段落列表 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        {/* 段落卡片（PPT 风格） */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '10px' }}>
           {sections.map((section, idx) => (
-            <React.Fragment key={idx}>
-              <div
-                onClick={() => handleProjectSection(section)}
-                style={{
-                  padding: '16px', cursor: 'pointer', borderRadius: '8px',
-                  background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-                  transition: 'all 0.2s',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)'; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.boxShadow = 'none'; }}
-              >
-                <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--color-primary)', marginBottom: '8px' }}>
-                  🎼 {section.title}
-                </div>
-                <div style={{ fontSize: '14px', lineHeight: '1.8', whiteSpace: 'pre-line' }}>
-                  {section.lines.join('\n')}
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px', marginTop: '10px' }}>
-                  <button
-                    className="btn btn--primary"
-                    style={{ padding: '3px 8px', fontSize: '11px' }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleProjectSection(section);
-                    }}
-                  >
-                    ▶ Project Now
-                  </button>
-                </div>
+            <div
+              key={idx}
+              onClick={() => handleProjectSection(section)}
+              style={{
+                cursor: 'pointer',
+                borderRadius: '10px',
+                border: '1px solid var(--color-border)',
+                background: 'var(--color-surface)',
+                overflow: 'hidden',
+                transition: 'all 0.2s',
+                minHeight: '180px',
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.boxShadow = '0 6px 14px rgba(0,0,0,0.28)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none'; }}
+            >
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '8px 10px',
+                borderBottom: '1px solid var(--color-border)',
+                background: 'rgba(99,102,241,0.12)',
+              }}>
+                <span style={{ fontSize: '11px', fontWeight: '700', color: 'var(--color-primary)' }}>
+                  Slide {idx + 1}
+                </span>
+                <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>
+                  {section.title}
+                </span>
               </div>
-              {idx < sections.length - 1 && (
-                <div
-                  style={{
-                    height: '1px',
-                    background: 'linear-gradient(to right, transparent, rgba(255,255,255,0.22), transparent)',
-                    margin: '2px 6px 6px',
-                  }}
-                />
-              )}
-            </React.Fragment>
+
+              <div
+                style={{
+                  flex: 1,
+                  padding: '10px',
+                  fontSize: `${Math.max(11, Math.min(22, Math.round(fontSizePx / 4)))}px`,
+                  lineHeight: '1.6',
+                  whiteSpace: 'pre-line',
+                  color: textColor,
+                  fontFamily: fontFamily,
+                  overflow: 'hidden',
+                }}
+              >
+                {section.lines.join('\n')}
+              </div>
+            </div>
           ))}
         </div>
       </div>
@@ -442,7 +552,7 @@ function SongManager({ onProjectContent, onQueueContent, activePreloadItem, onOp
   // 歌曲列表视图
   return (
     <div className="song-manager animate-slide-in-up">
-      <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px' }}>🎵 Songs</h2>
+      <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px' }}>Songs</h2>
       <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '16px' }}>
         Manage worship songs with section-based projection.</p>
 
@@ -452,7 +562,7 @@ function SongManager({ onProjectContent, onQueueContent, activePreloadItem, onOp
           + New Song
         </button>
         <button className="btn btn--ghost" onClick={() => fileInputRef.current?.click()}>
-          📥 Import Lyrics
+          Import Lyrics
         </button>
         <input
           ref={fileInputRef}
@@ -475,7 +585,7 @@ function SongManager({ onProjectContent, onQueueContent, activePreloadItem, onOp
       {/* 歌曲列表 */}
       {filteredSongs.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--color-text-secondary)' }}>
-          <div style={{ fontSize: '40px', marginBottom: '12px' }}>🎵</div>
+          <div style={{ fontSize: '40px', marginBottom: '12px' }}>Songs</div>
           <div style={{ fontSize: '14px', marginBottom: '8px' }}>No songs yet</div>
           <div style={{ fontSize: '12px' }}>Click "New Song" or "Import Lyrics" to start</div>
         </div>
@@ -490,12 +600,12 @@ function SongManager({ onProjectContent, onQueueContent, activePreloadItem, onOp
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                 transition: 'all 0.2s',
               }}
-              onClick={() => setSelectedSong(song)}
+              onClick={() => openSongWithoutAutoProject(song)}
               onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.transform = 'translateX(4px)'; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.transform = 'none'; }}
             >
               <div>
-                <div style={{ fontSize: '14px', fontWeight: '600' }}>🎵 {song.title}</div>
+                <div style={{ fontSize: '14px', fontWeight: '600' }}>{song.title}</div>
                 {song.author && (
                   <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginTop: '4px' }}>
                     {song.author}
@@ -515,7 +625,7 @@ function SongManager({ onProjectContent, onQueueContent, activePreloadItem, onOp
                   onClick={(e) => { e.stopPropagation(); handleEdit(song); }}
                   style={{ padding: '4px 8px', fontSize: '12px' }}
                 >
-                  ✏️
+                  Edit
                 </button>
                 <button
                   className="btn btn--ghost"
@@ -534,3 +644,6 @@ function SongManager({ onProjectContent, onQueueContent, activePreloadItem, onOp
 }
 
 export default SongManager;
+
+
+
