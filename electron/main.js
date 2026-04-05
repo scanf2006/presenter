@@ -496,6 +496,100 @@ function copyIfExists(src, dest) {
   }
   return true;
 }
+
+function isLikelyMediaFilePath(filePath) {
+  if (typeof filePath !== 'string') return false;
+  const ext = path.extname(filePath).toLowerCase();
+  return ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg', '.mp4', '.webm', '.mkv', '.avi', '.mov', '.pdf', '.ppt', '.pptx'].includes(ext);
+}
+
+function normalizeWithin(baseDir, filePath) {
+  const resolvedBase = path.resolve(baseDir);
+  const resolvedPath = path.resolve(filePath);
+  return resolvedPath.startsWith(resolvedBase + path.sep) ? resolvedPath : null;
+}
+
+function collectReferencedMediaPathsFromQueue(queue, mediaRootDir) {
+  const refs = new Set();
+  const missingRefs = [];
+  const visited = new Set();
+
+  const walk = (node) => {
+    if (!node) return;
+    if (typeof node === 'string') {
+      if (isLikelyMediaFilePath(node)) {
+        const safe = normalizeWithin(mediaRootDir, node);
+        if (safe) refs.add(safe);
+      }
+      return;
+    }
+    if (typeof node !== 'object') return;
+    if (visited.has(node)) return;
+    visited.add(node);
+
+    if (Array.isArray(node)) {
+      node.forEach(walk);
+      return;
+    }
+
+    for (const [key, value] of Object.entries(node)) {
+      if (typeof value === 'string') {
+        if ((key === 'path' || key === 'backgroundPath' || key === 'filePath' || key === 'cachedPath' || key === 'localPath') && isLikelyMediaFilePath(value)) {
+          const safe = normalizeWithin(mediaRootDir, value);
+          if (safe) refs.add(safe);
+        }
+        continue;
+      }
+      walk(value);
+    }
+  };
+
+  if (Array.isArray(queue)) {
+    queue.forEach((item) => walk(item?.payload || item));
+  }
+
+  const existing = [];
+  for (const p of refs) {
+    try {
+      if (fs.existsSync(p) && fs.statSync(p).isFile()) {
+        existing.push(p);
+      } else {
+        missingRefs.push(p);
+      }
+    } catch (_) {
+      missingRefs.push(p);
+    }
+  }
+  return { existing, missingRefs };
+}
+
+function copyDirectoryMerge(srcDir, destDir, stats) {
+  if (!fs.existsSync(srcDir)) return;
+  fs.mkdirSync(destDir, { recursive: true });
+  const entries = fs.readdirSync(srcDir, { withFileTypes: true });
+  for (const entry of entries) {
+    const src = path.join(srcDir, entry.name);
+    const dst = path.join(destDir, entry.name);
+    if (entry.isDirectory()) {
+      copyDirectoryMerge(src, dst, stats);
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    if (fs.existsSync(dst)) {
+      stats.skippedCount += 1;
+      continue;
+    }
+    try {
+      fs.mkdirSync(path.dirname(dst), { recursive: true });
+      fs.copyFileSync(src, dst);
+      const sz = fs.statSync(src).size || 0;
+      stats.copiedCount += 1;
+      stats.totalBytes += sz;
+    } catch (err) {
+      stats.warnings.push(`Failed to copy ${src}: ${err.message}`);
+    }
+  }
+}
 let allowControlWindowClose = false;
 
 function confirmCloseControlWindow() {
@@ -1297,27 +1391,79 @@ function setupIPC() {
 
     try {
       const userDataDir = app.getPath('userData');
+      const queuePath = path.join(userDataDir, 'projector-queue.json');
+      const settingsPath = path.join(userDataDir, 'app-settings.json');
+      const songsPath = path.join(userDataDir, 'songs.db');
+
+      let queue = [];
+      try {
+        if (fs.existsSync(queuePath)) {
+          const raw = fs.readFileSync(queuePath, 'utf8');
+          const parsed = JSON.parse(raw);
+          queue = Array.isArray(parsed) ? parsed : [];
+        }
+      } catch (_) {
+        queue = [];
+      }
+
       const targetRoot = choose.filePaths[0];
       const backupName = `churchdisplay-pro-export-${formatBackupStamp()}`;
       const backupDir = path.join(targetRoot, backupName);
-      fs.mkdirSync(backupDir, { recursive: true });
+      const selectedMediaDir = path.join(backupDir, 'media-selected');
+      fs.mkdirSync(selectedMediaDir, { recursive: true });
 
-      const copied = [];
-      const items = ['app-settings.json', 'projector-queue.json', 'songs.db', 'media'];
-      for (const item of items) {
-        const src = path.join(userDataDir, item);
-        const dest = path.join(backupDir, item);
-        if (copyIfExists(src, dest)) copied.push(item);
+      const warnings = [];
+      let copiedCount = 0;
+      let skippedCount = 0;
+      let totalBytes = 0;
+
+      for (const [src, dst] of [
+        [settingsPath, path.join(backupDir, 'app-settings.json')],
+        [queuePath, path.join(backupDir, 'projector-queue.json')],
+        [songsPath, path.join(backupDir, 'songs.db')],
+      ]) {
+        if (!fs.existsSync(src)) continue;
+        fs.mkdirSync(path.dirname(dst), { recursive: true });
+        fs.copyFileSync(src, dst);
+        copiedCount += 1;
+        totalBytes += fs.statSync(src).size || 0;
       }
 
+      const refs = collectReferencedMediaPathsFromQueue(queue, MEDIA_DIR);
+      refs.missingRefs.forEach((m) => warnings.push(`Missing referenced media: ${m}`));
+
+      refs.existing.forEach((absPath) => {
+        const relative = path.relative(MEDIA_DIR, absPath);
+        const dest = path.join(selectedMediaDir, relative);
+        fs.mkdirSync(path.dirname(dest), { recursive: true });
+        fs.copyFileSync(absPath, dest);
+        copiedCount += 1;
+        totalBytes += fs.statSync(absPath).size || 0;
+      });
+
       const manifest = {
+        bundleMode: 'minimal',
         exportedAt: new Date().toISOString(),
         appVersion: app.getVersion(),
         sourceUserData: userDataDir,
-        included: copied,
+        included: ['app-settings.json', 'projector-queue.json', 'songs.db', 'media-selected'],
+        mediaSelectedCount: refs.existing.length,
+        missingRefs: refs.missingRefs,
       };
       fs.writeFileSync(path.join(backupDir, 'export-manifest.json'), JSON.stringify(manifest, null, 2), 'utf8');
-      return { success: true, backupDir, included: copied };
+      copiedCount += 1;
+      totalBytes += fs.statSync(path.join(backupDir, 'export-manifest.json')).size || 0;
+
+      return {
+        success: true,
+        mode: 'minimal',
+        backupDir,
+        copiedCount,
+        skippedCount,
+        missingRefs: refs.missingRefs,
+        totalBytes,
+        warnings,
+      };
     } catch (err) {
       return { success: false, error: err.message };
     }
@@ -1336,27 +1482,47 @@ function setupIPC() {
     const importDir = choose.filePaths[0];
     try {
       const userDataDir = app.getPath('userData');
-      const items = ['app-settings.json', 'projector-queue.json', 'songs.db', 'media'];
-      const imported = [];
+      const warnings = [];
+      const missingRefs = [];
+      const stats = { copiedCount: 0, skippedCount: 0, totalBytes: 0, warnings };
 
-      for (const item of items) {
-        const src = path.join(importDir, item);
+      // Overwrite config + queue + songs (V1 behavior).
+      for (const [name, src, dst] of [
+        ['app-settings.json', path.join(importDir, 'app-settings.json'), path.join(userDataDir, 'app-settings.json')],
+        ['projector-queue.json', path.join(importDir, 'projector-queue.json'), path.join(userDataDir, 'projector-queue.json')],
+        ['songs.db', path.join(importDir, 'songs.db'), path.join(userDataDir, 'songs.db')],
+      ]) {
         if (!fs.existsSync(src)) continue;
-
-        const dest = path.join(userDataDir, item);
-        if (fs.existsSync(dest)) {
-          const st = fs.statSync(dest);
-          if (st.isDirectory()) fs.rmSync(dest, { recursive: true, force: true });
-          else fs.unlinkSync(dest);
+        try {
+          fs.mkdirSync(path.dirname(dst), { recursive: true });
+          fs.copyFileSync(src, dst);
+          stats.copiedCount += 1;
+          stats.totalBytes += fs.statSync(src).size || 0;
+        } catch (err) {
+          warnings.push(`Failed to import ${name}: ${err.message}`);
         }
+      }
 
-        copyIfExists(src, dest);
-        imported.push(item);
+      const minimalMediaDir = path.join(importDir, 'media-selected');
+      const legacyMediaDir = path.join(importDir, 'media');
+      let mode = 'minimal';
+      if (fs.existsSync(minimalMediaDir)) {
+        copyDirectoryMerge(minimalMediaDir, MEDIA_DIR, stats);
+      } else if (fs.existsSync(legacyMediaDir)) {
+        mode = 'legacy-full';
+        copyDirectoryMerge(legacyMediaDir, MEDIA_DIR, stats);
+      } else {
+        warnings.push('No media folder found in import bundle.');
       }
 
       return {
         success: true,
-        imported,
+        mode,
+        copiedCount: stats.copiedCount,
+        skippedCount: stats.skippedCount,
+        missingRefs,
+        totalBytes: stats.totalBytes,
+        warnings,
         restartRecommended: true,
         message: 'Import finished. Please restart app to reload queue and media cache.',
       };

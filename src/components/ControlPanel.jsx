@@ -7,6 +7,7 @@ import PdfRenderer from './PdfRenderer';
 const QUEUE_STORAGE_KEY = 'churchdisplay.projectorQueue.v1';
 const TRANSITION_STORAGE_KEY = 'churchdisplay.transition.v1';
 const SCENE_STORAGE_KEY = 'churchdisplay.scene.v1';
+const APP_VERSION = '0.3.1';
 const TEXT_FONT_OPTIONS = ['Noto Sans SC', 'Microsoft YaHei', 'Arial', 'Times New Roman', 'SimHei'];
 const DEFAULT_SCENE_CONFIG = {
   mode: 'normal',
@@ -661,7 +662,15 @@ function ControlPanel() {
       const res = await window.churchDisplay.exportSetupBundle();
       if (res?.cancelled) return;
       if (res?.success) {
-        alert(`Export completed.\n\nFolder:\n${res.backupDir}`);
+        const mb = Number((Number(res.totalBytes || 0) / (1024 * 1024)).toFixed(2));
+        const missingCount = Array.isArray(res.missingRefs) ? res.missingRefs.length : 0;
+        alert(
+          `Export completed (${res.mode || 'minimal'}).\n` +
+          `Copied files: ${res.copiedCount || 0}\n` +
+          `Bundle size: ${mb} MB\n` +
+          `Missing refs: ${missingCount}\n\n` +
+          `Folder:\n${res.backupDir}`
+        );
       } else {
         alert(`Export failed: ${res?.error || 'Unknown error'}`);
       }
@@ -677,15 +686,24 @@ function ControlPanel() {
       alert('Import is available in the desktop app only.');
       return;
     }
-    const ok = window.confirm('Import will overwrite local queue/config/media cache. Continue?');
+    const ok = window.confirm('Import will overwrite queue/config/songs, and merge media files without deleting existing local media. Continue?');
     if (!ok) return;
     try {
       setSetupTransferBusy(true);
       const res = await window.churchDisplay.importSetupBundle();
       if (res?.cancelled) return;
       if (res?.success) {
-        const detail = Array.isArray(res.imported) ? res.imported.join(', ') : '';
-        alert(`Import completed: ${detail || 'no items copied'}\n\nPlease restart the app now.`);
+        const mb = Number((Number(res.totalBytes || 0) / (1024 * 1024)).toFixed(2));
+        const warningText = Array.isArray(res.warnings) && res.warnings.length > 0
+          ? `\nWarnings: ${res.warnings.length}`
+          : '';
+        alert(
+          `Import completed (${res.mode || 'minimal'}).\n` +
+          `Copied: ${res.copiedCount || 0}\n` +
+          `Skipped existing: ${res.skippedCount || 0}\n` +
+          `Data size: ${mb} MB${warningText}\n\n` +
+          `Please restart the app now.`
+        );
       } else {
         alert(`Import failed: ${res?.error || 'Unknown error'}`);
       }
@@ -1001,9 +1019,9 @@ function ControlPanel() {
       <div className="top-bar">
         <div className="top-bar__brand">
           <div className="top-bar__logo">✦</div>
-          <span className="top-bar__title">
-            ChurchDisplay Pro (此版本为多伦多神召会活石堂特供--版权属于Aiden所有scanf2006@gmail.com)
-          </span>
+                <span className="top-bar__title">
+                  ChurchDisplay Pro (此版本为多伦多神召会活石堂特供--版权属于Aiden所有scanf2006@gmail.com) v{APP_VERSION}
+                </span>
         </div>
         <div className="top-bar__controls">
           {/* Projector Status */}
@@ -1908,6 +1926,10 @@ function ControlPanel() {
               <span style={{ color: 'var(--color-text-secondary)' }}>
                 {isElectron ? 'Electron' : 'Browser'}
               </span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Export Mode</span>
+              <span style={{ color: 'var(--color-text-secondary)' }}>Smart Minimal Bundle</span>
             </div>
             <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
               <button
