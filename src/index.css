@@ -111,7 +111,7 @@ body {
 .app-container {
   --ui-scale: 1;
   display: grid;
-  grid-template-columns: 280px 1fr 360px;
+  grid-template-columns: 280px 1fr 460px;
   grid-template-rows: 60px 1fr;
   width: calc(100% / var(--ui-scale));
   height: calc(100vh / var(--ui-scale));

@@ -14,6 +14,18 @@
       "LICENSE",
       "EULA.md"
     ],
+    "asarUnpack": [
+      "electron/ppt-convert.ps1"
+    ],
+    "extraResources": [
+      {
+        "from": "data/seed",
+        "to": "data-seed",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
     "win": {
       "target": [
         "nsis"

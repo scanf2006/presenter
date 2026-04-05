@@ -69,6 +69,69 @@ let BG_DEBUG_LOG = null;
 const BG_DEBUG_ENABLED = true;
 let APP_SETTINGS_PATH;
 let youtubeHeaderHookInstalled = false;
+const USERDATA_SEED_MARKER = '.seed-applied-v1';
+
+function resolveBundledSeedDir() {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'data-seed');
+  }
+  return path.resolve(__dirname, '..', 'data', 'seed');
+}
+
+function safeCopyIfMissing(src, dest) {
+  if (!fs.existsSync(src)) return false;
+  if (fs.existsSync(dest)) return false;
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.copyFileSync(src, dest);
+  return true;
+}
+
+function safeCopyDirIfTargetEmpty(srcDir, destDir) {
+  if (!fs.existsSync(srcDir)) return false;
+  const srcStat = fs.statSync(srcDir);
+  if (!srcStat.isDirectory()) return false;
+
+  if (!fs.existsSync(destDir)) {
+    fs.mkdirSync(path.dirname(destDir), { recursive: true });
+    fs.cpSync(srcDir, destDir, { recursive: true });
+    return true;
+  }
+
+  const existing = fs.readdirSync(destDir);
+  if (existing.length > 0) return false;
+  fs.cpSync(srcDir, destDir, { recursive: true });
+  return true;
+}
+
+function hydrateUserDataFromBundledSeed() {
+  try {
+    const userDataDir = app.getPath('userData');
+    const seedDir = resolveBundledSeedDir();
+    const markerPath = path.join(userDataDir, USERDATA_SEED_MARKER);
+
+    if (!fs.existsSync(seedDir)) return;
+    if (fs.existsSync(markerPath)) return;
+
+    fs.mkdirSync(userDataDir, { recursive: true });
+
+    let copiedAny = false;
+    copiedAny = safeCopyIfMissing(path.join(seedDir, 'app-settings.json'), path.join(userDataDir, 'app-settings.json')) || copiedAny;
+    copiedAny = safeCopyIfMissing(path.join(seedDir, 'projector-queue.json'), path.join(userDataDir, 'projector-queue.json')) || copiedAny;
+    copiedAny = safeCopyIfMissing(path.join(seedDir, 'songs.db'), path.join(userDataDir, 'songs.db')) || copiedAny;
+    copiedAny = safeCopyDirIfTargetEmpty(path.join(seedDir, 'media'), path.join(userDataDir, 'media')) || copiedAny;
+
+    // Mark as applied to avoid repeatedly copying seed data.
+    fs.writeFileSync(markerPath, JSON.stringify({
+      appliedAt: new Date().toISOString(),
+      copiedAny,
+      seedDir,
+    }, null, 2), 'utf8');
+
+    console.log(`[SeedHydrate] completed. copiedAny=${copiedAny}`);
+  } catch (err) {
+    console.warn('[SeedHydrate] failed:', err.message);
+  }
+}
 
 function readAppSettings() {
   if (!APP_SETTINGS_PATH) return { licenseKey: '', acceptedEulaAt: null };
@@ -210,6 +273,22 @@ function setupYouTubeRequestHeaders() {
   youtubeHeaderHookInstalled = true;
 }
 
+function setupMediaPermissionHandlers() {
+  try {
+    const ses = session.defaultSession;
+    if (!ses) return;
+    ses.setPermissionRequestHandler((webContents, permission, callback) => {
+      if (permission === 'media' || permission === 'camera' || permission === 'microphone') {
+        callback(true);
+        return;
+      }
+      callback(false);
+    });
+  } catch (err) {
+    console.warn('[MediaPermission] setup failed:', err.message);
+  }
+}
+
 /**
  * 初始化媒体存储目录
  */
@@ -343,6 +422,80 @@ let controlWindow = null;   // 控制台窗口
 let projectorWindow = null;  // 投影窗口
 let projectorExternalMode = false;
 let projectorPendingPayload = null;
+let latestProjectorScene = {
+  mode: 'normal',
+  splitDirection: 'content_left_camera_right',
+  cameraDeviceId: '',
+  cameraPanePercent: 30,
+  cameraMuted: true,
+  cameraCenterCropPercent: 100,
+  enableCameraTestMode: false,
+};
+
+function forceWindowZoom100(win) {
+  if (!win || win.isDestroyed()) return;
+  try {
+    win.webContents.setZoomFactor(1);
+  } catch (_) {}
+  try {
+    win.webContents.setVisualZoomLevelLimits(1, 1);
+  } catch (_) {}
+}
+
+function getRuntimePptConvertScriptPath() {
+  // Dev: script exists directly in electron/.
+  const direct = path.join(__dirname, 'ppt-convert.ps1');
+  if (fs.existsSync(direct)) return direct;
+
+  // Packaged: extract script from asar to userData so PowerShell -File can access it.
+  try {
+    const bundled = path.join(process.resourcesPath, 'app.asar', 'electron', 'ppt-convert.ps1');
+    if (fs.existsSync(bundled)) {
+      const runtimeDir = path.join(app.getPath('userData'), 'runtime');
+      fs.mkdirSync(runtimeDir, { recursive: true });
+      const runtimeScript = path.join(runtimeDir, 'ppt-convert.ps1');
+      fs.writeFileSync(runtimeScript, fs.readFileSync(bundled, 'utf8'), 'utf8');
+      return runtimeScript;
+    }
+  } catch (_) {}
+
+  // Fallback if unpacked.
+  const unpacked = path.join(process.resourcesPath, 'app.asar.unpacked', 'electron', 'ppt-convert.ps1');
+  if (fs.existsSync(unpacked)) return unpacked;
+
+  return direct;
+}
+
+function forceCloseProjectorWindow(reason = 'cleanup') {
+  if (!projectorWindow || projectorWindow.isDestroyed()) return;
+  try { projectorWindow.setAlwaysOnTop(false); } catch (_) {}
+  try { projectorWindow.setFullScreen(false); } catch (_) {}
+  try { projectorWindow.hide(); } catch (_) {}
+  try { projectorWindow.close(); } catch (_) {}
+  try {
+    if (projectorWindow && !projectorWindow.isDestroyed()) {
+      projectorWindow.destroy();
+    }
+  } catch (_) {}
+  appendBgDebug('projector-force-close', { reason });
+}
+
+function formatBackupStamp(date = new Date()) {
+  const pad = (n) => `${n}`.padStart(2, '0');
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
+}
+
+function copyIfExists(src, dest) {
+  if (!fs.existsSync(src)) return false;
+  const stat = fs.statSync(src);
+  if (stat.isDirectory()) {
+    fs.cpSync(src, dest, { recursive: true });
+  } else {
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.copyFileSync(src, dest);
+  }
+  return true;
+}
 let allowControlWindowClose = false;
 
 function confirmCloseControlWindow() {
@@ -545,6 +698,9 @@ function createControlWindow() {
   } else {
     controlWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
+  controlWindow.webContents.on('did-finish-load', () => {
+    forceWindowZoom100(controlWindow);
+  });
 
   controlWindow.on('close', (event) => {
     if (allowControlWindowClose) return;
@@ -560,9 +716,7 @@ function createControlWindow() {
     allowControlWindowClose = false;
     controlWindow = null;
     // 关闭控制台时同时关闭投影窗口
-    if (projectorWindow && !projectorWindow.isDestroyed()) {
-      projectorWindow.close();
-    }
+    forceCloseProjectorWindow('control-window-closed');
   });
 }
 
@@ -636,7 +790,9 @@ function createProjectorWindow(targetDisplay) {
     projectorWindow.webContents.setAudioMuted(false);
     projectorWindow.webContents.on('did-finish-load', () => {
       try {
+        forceWindowZoom100(projectorWindow);
         projectorWindow?.webContents?.setAudioMuted(false);
+        projectorWindow?.webContents?.send('projector-scene', latestProjectorScene);
       } catch (_) {}
     });
   } catch (_) {}
@@ -665,9 +821,7 @@ function setupIPC() {
 
   // 停止投影
   ipcMain.handle('stop-projector', () => {
-    if (projectorWindow && !projectorWindow.isDestroyed()) {
-      projectorWindow.close();
-    }
+    forceCloseProjectorWindow('ipc-stop-projector');
     return { success: true };
   });
 
@@ -741,6 +895,23 @@ function setupIPC() {
   ipcMain.on('projector-transition', (event, transitionData) => {
     if (projectorWindow && !projectorWindow.isDestroyed()) {
       projectorWindow.webContents.send('projector-transition', transitionData);
+    }
+  });
+
+  ipcMain.on('projector-scene', (event, sceneData) => {
+    latestProjectorScene = {
+      ...latestProjectorScene,
+      ...(sceneData || {}),
+      mode: sceneData?.mode === 'split_camera' ? 'split_camera' : 'normal',
+    };
+    appendBgDebug('projector-scene', {
+      mode: latestProjectorScene.mode,
+      cameraPanePercent: latestProjectorScene.cameraPanePercent,
+      enableCameraTestMode: latestProjectorScene.enableCameraTestMode === true,
+      projectorActive: !!(projectorWindow && !projectorWindow.isDestroyed()),
+    });
+    if (projectorWindow && !projectorWindow.isDestroyed()) {
+      projectorWindow.webContents.send('projector-scene', latestProjectorScene);
     }
   });
 
@@ -1114,6 +1285,86 @@ function setupIPC() {
     return MEDIA_DIR;
   });
 
+  ipcMain.handle('export-setup-bundle', async () => {
+    const parentWindow = controlWindow && !controlWindow.isDestroyed() ? controlWindow : null;
+    const choose = await dialog.showOpenDialog(parentWindow, {
+      title: 'Select export folder',
+      properties: ['openDirectory', 'createDirectory', 'promptToCreate'],
+    });
+    if (choose.canceled || !choose.filePaths?.[0]) {
+      return { success: false, cancelled: true };
+    }
+
+    try {
+      const userDataDir = app.getPath('userData');
+      const targetRoot = choose.filePaths[0];
+      const backupName = `churchdisplay-pro-export-${formatBackupStamp()}`;
+      const backupDir = path.join(targetRoot, backupName);
+      fs.mkdirSync(backupDir, { recursive: true });
+
+      const copied = [];
+      const items = ['app-settings.json', 'projector-queue.json', 'songs.db', 'media'];
+      for (const item of items) {
+        const src = path.join(userDataDir, item);
+        const dest = path.join(backupDir, item);
+        if (copyIfExists(src, dest)) copied.push(item);
+      }
+
+      const manifest = {
+        exportedAt: new Date().toISOString(),
+        appVersion: app.getVersion(),
+        sourceUserData: userDataDir,
+        included: copied,
+      };
+      fs.writeFileSync(path.join(backupDir, 'export-manifest.json'), JSON.stringify(manifest, null, 2), 'utf8');
+      return { success: true, backupDir, included: copied };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('import-setup-bundle', async () => {
+    const parentWindow = controlWindow && !controlWindow.isDestroyed() ? controlWindow : null;
+    const choose = await dialog.showOpenDialog(parentWindow, {
+      title: 'Select setup export folder',
+      properties: ['openDirectory'],
+    });
+    if (choose.canceled || !choose.filePaths?.[0]) {
+      return { success: false, cancelled: true };
+    }
+
+    const importDir = choose.filePaths[0];
+    try {
+      const userDataDir = app.getPath('userData');
+      const items = ['app-settings.json', 'projector-queue.json', 'songs.db', 'media'];
+      const imported = [];
+
+      for (const item of items) {
+        const src = path.join(importDir, item);
+        if (!fs.existsSync(src)) continue;
+
+        const dest = path.join(userDataDir, item);
+        if (fs.existsSync(dest)) {
+          const st = fs.statSync(dest);
+          if (st.isDirectory()) fs.rmSync(dest, { recursive: true, force: true });
+          else fs.unlinkSync(dest);
+        }
+
+        copyIfExists(src, dest);
+        imported.push(item);
+      }
+
+      return {
+        success: true,
+        imported,
+        restartRecommended: true,
+        message: 'Import finished. Please restart app to reload queue and media cache.',
+      };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  });
+
   // 持久化投屏队列（存储到 userData）
   ipcMain.handle('queue-save', async (event, queue) => {
     try {
@@ -1183,11 +1434,14 @@ function setupIPC() {
     // 缓存未命中，创建新目录并转换
     fs.mkdirSync(outputDir, { recursive: true });
 
-    const scriptPath = path.join(__dirname, 'ppt-convert.ps1');
+    const scriptPath = getRuntimePptConvertScriptPath();
+    if (!fs.existsSync(scriptPath)) {
+      return { success: false, error: `ppt-convert.ps1 not found at runtime: ${scriptPath}` };
+    }
 
     return new Promise((resolve, reject) => {
       const { exec } = require('child_process');
-      const cmd = `powershell -ExecutionPolicy Bypass -File "${scriptPath}" -PptPath "${pptPath}" -OutputDir "${outputDir}"`;
+      const cmd = `powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${scriptPath}" -PptPath "${pptPath}" -OutputDir "${outputDir}"`;
 
       exec(cmd, { timeout: 120000 }, (error, stdout, stderr) => {
         if (error) {
@@ -1411,6 +1665,8 @@ function watchDisplayChanges() {
 
 app.whenReady().then(async () => {
   setupYouTubeRequestHeaders();
+  setupMediaPermissionHandlers();
+  hydrateUserDataFromBundledSeed();
 
   BG_DEBUG_LOG = path.join(app.getPath('userData'), 'bg-debug.log');
   APP_SETTINGS_PATH = path.join(app.getPath('userData'), 'app-settings.json');
@@ -1459,7 +1715,18 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
+  forceCloseProjectorWindow('window-all-closed');
   app.quit();
+});
+
+app.on('before-quit', () => {
+  allowControlWindowClose = true;
+  forceCloseProjectorWindow('before-quit');
+  try {
+    if (controlWindow && !controlWindow.isDestroyed()) {
+      controlWindow.destroy();
+    }
+  } catch (_) {}
 });
 
 app.on('activate', () => {

@@ -6,7 +6,17 @@ import PdfRenderer from './PdfRenderer';
 
 const QUEUE_STORAGE_KEY = 'churchdisplay.projectorQueue.v1';
 const TRANSITION_STORAGE_KEY = 'churchdisplay.transition.v1';
+const SCENE_STORAGE_KEY = 'churchdisplay.scene.v1';
 const TEXT_FONT_OPTIONS = ['Noto Sans SC', 'Microsoft YaHei', 'Arial', 'Times New Roman', 'SimHei'];
+const DEFAULT_SCENE_CONFIG = {
+  mode: 'normal',
+  splitDirection: 'content_left_camera_right',
+  cameraDeviceId: '',
+  cameraPanePercent: 30,
+  cameraMuted: true,
+  cameraCenterCropPercent: 100,
+  enableCameraTestMode: false,
+};
 
 /**
  * 控制台主面板
@@ -81,7 +91,14 @@ function ControlPanel() {
   const [transitionEnabled, setTransitionEnabled] = useState(true);
   const [transitionDelayMs, setTransitionDelayMs] = useState(20);
   const [transitionDurationMs, setTransitionDurationMs] = useState(60);
+  const [sceneConfig, setSceneConfig] = useState(DEFAULT_SCENE_CONFIG);
+  const [cameraDevices, setCameraDevices] = useState([]);
+  const [cameraStatus, setCameraStatus] = useState('idle');
+  const [previewTestNow, setPreviewTestNow] = useState(Date.now());
+  const cameraPreviewRef = useRef(null);
+  const cameraStreamRef = useRef(null);
   const [showLegalModal, setShowLegalModal] = useState(false);
+  const [setupTransferBusy, setSetupTransferBusy] = useState(false);
   const [licenseStatus, setLicenseStatus] = useState({
     isLicensed: false,
     summary: 'Unlicensed',
@@ -95,6 +112,23 @@ function ControlPanel() {
 
   // 检查是否在 Electron 环境
   const isElectron = typeof window.churchDisplay !== 'undefined';
+  const previewSplitEnabled = false;
+  const previewRightPanePercent = Math.max(20, Math.min(40, sceneConfig.cameraPanePercent || 30));
+  const previewContentPanePercent = 100 - previewRightPanePercent;
+  const previewCameraScale = Math.max(1, Number(sceneConfig.cameraCenterCropPercent || 100) / 100);
+  const activeProjectorDisplay = displays.find((d) => d.id === projectorDisplayId) || null;
+  const previewAspectRatio = (() => {
+    const w = activeProjectorDisplay?.bounds?.width || activeProjectorDisplay?.size?.width;
+    const h = activeProjectorDisplay?.bounds?.height || activeProjectorDisplay?.size?.height;
+    if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) {
+      const ratio = w / h;
+      // Keep preview panel visually usable; avoid over-wide "thin strip" preview.
+      if (ratio >= 1.45 && ratio <= 1.9) {
+        return `${w} / ${h}`;
+      }
+    }
+    return '16 / 9';
+  })();
 
   // Get display list
   useEffect(() => {
@@ -217,6 +251,163 @@ function ControlPanel() {
       });
     }
   }, [transitionEnabled, transitionDelayMs, transitionDurationMs, isElectron]);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(SCENE_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      setSceneConfig((prev) => ({
+        ...prev,
+        // Always boot in normal mode to avoid stale split layout persisting across restarts.
+        mode: 'normal',
+        splitDirection: parsed?.splitDirection || prev.splitDirection,
+        cameraDeviceId: typeof parsed?.cameraDeviceId === 'string' ? parsed.cameraDeviceId : prev.cameraDeviceId,
+        cameraPanePercent: Number.isFinite(parsed?.cameraPanePercent)
+          ? Math.max(20, Math.min(40, Number(parsed.cameraPanePercent)))
+          : prev.cameraPanePercent,
+        cameraMuted: parsed?.cameraMuted !== false,
+        cameraCenterCropPercent: Number.isFinite(parsed?.cameraCenterCropPercent)
+          ? Math.max(100, Math.min(220, Number(parsed.cameraCenterCropPercent)))
+          : prev.cameraCenterCropPercent,
+        enableCameraTestMode: parsed?.enableCameraTestMode === true,
+      }));
+    } catch (err) {
+      console.warn('[Scene] restore failed:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Startup hard reset: always begin in normal mode to avoid stale split deformation.
+    setSceneConfig((prev) => (prev.mode === 'normal' ? prev : { ...prev, mode: 'normal' }));
+  }, []);
+
+  useEffect(() => {
+    try {
+      const persistScene = {
+        ...sceneConfig,
+        // Do not persist split-mode ON state across app restarts.
+        mode: 'normal',
+      };
+      window.localStorage.setItem(SCENE_STORAGE_KEY, JSON.stringify(persistScene));
+    } catch (err) {
+      console.warn('[Scene] persist failed:', err);
+    }
+
+    if (isElectron && typeof window.churchDisplay?.sendProjectorScene === 'function') {
+      window.churchDisplay.sendProjectorScene(sceneConfig);
+    }
+  }, [sceneConfig, isElectron, projectorActive]);
+
+  useEffect(() => {
+    if (!isElectron) return;
+    if (sceneConfig.mode !== 'normal') return;
+    if (!currentSlide) return;
+    // Force a full-width re-render immediately after disabling split mode.
+    if (typeof window.churchDisplay?.sendProjectorScene === 'function') {
+      window.churchDisplay.sendProjectorScene(sceneConfig);
+    }
+    window.churchDisplay.sendToProjector(currentSlide);
+    if (typeof window.churchDisplay?.sendToProjectorBackground === 'function') {
+      window.churchDisplay.sendToProjectorBackground(currentSlide?.background || null);
+    }
+  }, [sceneConfig.mode, sceneConfig, currentSlide, isElectron]);
+
+  const stopCameraPreview = useCallback(() => {
+    const stream = cameraStreamRef.current;
+    if (stream) {
+      stream.getTracks().forEach((t) => t.stop());
+      cameraStreamRef.current = null;
+    }
+    if (cameraPreviewRef.current) {
+      cameraPreviewRef.current.srcObject = null;
+    }
+  }, []);
+
+  const loadCameraDevices = useCallback(async () => {
+    if (!navigator?.mediaDevices?.enumerateDevices) return;
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videos = devices.filter((d) => d.kind === 'videoinput');
+      setCameraDevices(videos);
+      if (!sceneConfig.cameraDeviceId && videos.length > 0) {
+        setSceneConfig((prev) => ({ ...prev, cameraDeviceId: videos[0].deviceId || '' }));
+      }
+    } catch (err) {
+      console.warn('[Camera] enumerate failed:', err);
+    }
+  }, [sceneConfig.cameraDeviceId]);
+
+  const startCameraPreview = useCallback(async () => {
+    if (sceneConfig.enableCameraTestMode) {
+      stopCameraPreview();
+      setCameraStatus('idle');
+      return;
+    }
+    if (!navigator?.mediaDevices?.getUserMedia) {
+      setCameraStatus('unsupported');
+      return;
+    }
+
+    try {
+      setCameraStatus('loading');
+      stopCameraPreview();
+
+      const constraints = sceneConfig.cameraDeviceId
+        ? { video: { deviceId: { exact: sceneConfig.cameraDeviceId } }, audio: false }
+        : { video: true, audio: false };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      cameraStreamRef.current = stream;
+      if (cameraPreviewRef.current) {
+        cameraPreviewRef.current.srcObject = stream;
+        cameraPreviewRef.current.muted = true;
+        cameraPreviewRef.current.defaultMuted = true;
+        cameraPreviewRef.current.play().catch(() => {});
+      }
+      setCameraStatus('ok');
+      await loadCameraDevices();
+    } catch (err) {
+      setCameraStatus('error');
+      console.warn('[Camera] preview failed:', err);
+    }
+  }, [sceneConfig.cameraDeviceId, sceneConfig.enableCameraTestMode, stopCameraPreview, loadCameraDevices]);
+
+  useEffect(() => {
+    if (sceneConfig.mode !== 'split_camera') {
+      stopCameraPreview();
+      setCameraStatus('idle');
+      return;
+    }
+    startCameraPreview();
+  }, [sceneConfig.mode, sceneConfig.cameraDeviceId, startCameraPreview, stopCameraPreview]);
+
+  useEffect(() => {
+    if (!(sceneConfig.mode === 'split_camera' && sceneConfig.enableCameraTestMode)) return;
+    const t = setInterval(() => setPreviewTestNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [sceneConfig.mode, sceneConfig.enableCameraTestMode]);
+
+  useEffect(() => {
+    loadCameraDevices();
+    const handler = () => loadCameraDevices();
+    navigator?.mediaDevices?.addEventListener?.('devicechange', handler);
+    return () => {
+      navigator?.mediaDevices?.removeEventListener?.('devicechange', handler);
+      stopCameraPreview();
+    };
+  }, [loadCameraDevices, stopCameraPreview]);
+
+  useEffect(() => {
+    const el = cameraPreviewRef.current;
+    const stream = cameraStreamRef.current;
+    if (!el || !stream) return;
+    if (el.srcObject !== stream) {
+      el.srcObject = stream;
+      el.muted = true;
+      el.defaultMuted = true;
+      el.play().catch(() => {});
+    }
+  }, [cameraStatus, sceneConfig.mode, sceneConfig.cameraDeviceId]);
 
   const clearPreviewTimers = useCallback(() => {
     previewTimersRef.current.forEach((t) => clearTimeout(t));
@@ -413,7 +604,7 @@ function ControlPanel() {
         window.churchDisplay.sendToProjectorBackground(data?.background || null);
       }
     }
-  }, [isElectron, applyPreviewTransition]);
+  }, [isElectron, applyPreviewTransition, sceneConfig]);
 
   // 发送Content到投影
   const handleSendToProjector = useCallback((content) => {
@@ -459,6 +650,51 @@ function ControlPanel() {
       window.churchDisplay.blackout();
     }
   }, [isElectron, applyPreviewTransition]);
+
+  const handleExportSetupBundle = useCallback(async () => {
+    if (!isElectron || typeof window.churchDisplay?.exportSetupBundle !== 'function') {
+      alert('Export is available in the desktop app only.');
+      return;
+    }
+    try {
+      setSetupTransferBusy(true);
+      const res = await window.churchDisplay.exportSetupBundle();
+      if (res?.cancelled) return;
+      if (res?.success) {
+        alert(`Export completed.\n\nFolder:\n${res.backupDir}`);
+      } else {
+        alert(`Export failed: ${res?.error || 'Unknown error'}`);
+      }
+    } catch (err) {
+      alert(`Export failed: ${err?.message || 'Unknown error'}`);
+    } finally {
+      setSetupTransferBusy(false);
+    }
+  }, [isElectron]);
+
+  const handleImportSetupBundle = useCallback(async () => {
+    if (!isElectron || typeof window.churchDisplay?.importSetupBundle !== 'function') {
+      alert('Import is available in the desktop app only.');
+      return;
+    }
+    const ok = window.confirm('Import will overwrite local queue/config/media cache. Continue?');
+    if (!ok) return;
+    try {
+      setSetupTransferBusy(true);
+      const res = await window.churchDisplay.importSetupBundle();
+      if (res?.cancelled) return;
+      if (res?.success) {
+        const detail = Array.isArray(res.imported) ? res.imported.join(', ') : '';
+        alert(`Import completed: ${detail || 'no items copied'}\n\nPlease restart the app now.`);
+      } else {
+        alert(`Import failed: ${res?.error || 'Unknown error'}`);
+      }
+    } catch (err) {
+      alert(`Import failed: ${err?.message || 'Unknown error'}`);
+    } finally {
+      setSetupTransferBusy(false);
+    }
+  }, [isElectron]);
 
   // 媒体投屏回调
   const handleProjectMedia = useCallback(async (mediaData) => {
@@ -1143,7 +1379,7 @@ function ControlPanel() {
         <div className="preview-panel__title">Live Preview</div>
 
         {/* Projector Preview */}
-        <div className="preview-screen">
+        <div className="preview-screen" style={{ aspectRatio: '16 / 9' }}>
           <span className="preview-screen__label">Projector Output</span>
           <div className="preview-screen__content">
             {previewSlide ? (
@@ -1174,14 +1410,17 @@ function ControlPanel() {
                         style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center center', borderRadius: 0 }}
                       />
                     )}
-                    <div style={{ position: 'absolute', inset: 0, background: 'rgba(0, 0, 0, 0.25)' }} />
+                    <div style={{ position: 'absolute', inset: 0, background: 'rgba(0, 0, 0, 0.08)' }} />
                   </div>
                 )}
 
                 <div
                   style={{
                     position: 'absolute',
-                    inset: 0,
+                    top: 0,
+                    left: 0,
+                    bottom: 0,
+                    width: previewSplitEnabled ? `${previewContentPanePercent}%` : '100%',
                     zIndex: 2,
                     display: 'flex',
                     alignItems: 'center',
@@ -1388,6 +1627,129 @@ function ControlPanel() {
                     </div>
                   )}
                 </div>
+                {previewSplitEnabled && (
+                  <>
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        bottom: 0,
+                        right: `${previewRightPanePercent}%`,
+                        width: '1px',
+                        background: 'rgba(255,255,255,0.2)',
+                        zIndex: 8,
+                      }}
+                    />
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        bottom: 0,
+                        right: 0,
+                        width: `${previewRightPanePercent}%`,
+                        zIndex: 9,
+                        background: '#000',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      {sceneConfig.enableCameraTestMode ? (
+                        <div
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            transform: `scale(${previewCameraScale})`,
+                            transformOrigin: 'center center',
+                            background: 'linear-gradient(135deg, #0b1220 0%, #1f2a44 40%, #22325b 100%)',
+                            position: 'relative',
+                            overflow: 'hidden',
+                          }}
+                        >
+                          <div style={{
+                            position: 'absolute',
+                            inset: 0,
+                            backgroundImage: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.06) 0 12px, rgba(255,255,255,0.02) 12px 24px)',
+                          }} />
+                          <div style={{
+                            position: 'absolute',
+                            inset: '14px',
+                            border: '1px solid rgba(255,255,255,0.28)',
+                          }} />
+                          <div style={{
+                            position: 'absolute',
+                            left: 0,
+                            right: 0,
+                            top: '50%',
+                            height: '1px',
+                            background: 'rgba(255,255,255,0.32)',
+                          }} />
+                          <div style={{
+                            position: 'absolute',
+                            top: 0,
+                            bottom: 0,
+                            left: '50%',
+                            width: '1px',
+                            background: 'rgba(255,255,255,0.32)',
+                          }} />
+                          <div style={{
+                            position: 'absolute',
+                            left: '10px',
+                            top: '10px',
+                            fontSize: '10px',
+                            color: '#8ee7ff',
+                            fontWeight: 700,
+                            letterSpacing: '0.5px',
+                          }}>
+                            CAMERA
+                          </div>
+                          <div style={{
+                            position: 'absolute',
+                            right: '10px',
+                            bottom: '10px',
+                            fontSize: '10px',
+                            color: 'rgba(255,255,255,0.9)',
+                            fontFamily: 'monospace',
+                          }}>
+                            {new Date(previewTestNow).toLocaleTimeString()}
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <video
+                            ref={cameraPreviewRef}
+                            muted
+                            autoPlay
+                            playsInline
+                            style={{
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover',
+                              transform: `scale(${previewCameraScale})`,
+                              transformOrigin: 'center center',
+                            }}
+                          />
+                        </>
+                      )}
+                      {!sceneConfig.enableCameraTestMode && cameraStatus !== 'ok' && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            inset: 0,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            textAlign: 'center',
+                            fontSize: '11px',
+                            color: 'rgba(255,255,255,0.9)',
+                            background: 'rgba(0,0,0,0.6)',
+                            padding: '8px',
+                          }}
+                        >
+                          {cameraStatus === 'loading' ? 'Loading camera...' : cameraStatus === 'error' ? 'Camera unavailable' : 'Camera idle'}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
                 <div
                   style={{
                     position: 'absolute',
@@ -1407,7 +1769,7 @@ function ControlPanel() {
         </div>
 
         {/* Next Preview */}
-        <div className="preview-screen">
+          <div className="preview-screen" style={{ aspectRatio: '16 / 9' }}>
           <span className="preview-screen__label">Next</span>
           <div className="preview-screen__content">
             {projectorQueue.length > 0 ? (
@@ -1460,6 +1822,69 @@ function ControlPanel() {
             </div>
           </div>
 
+          <div style={{ display: 'none', padding: '8px', border: '1px solid var(--color-border)', borderRadius: '8px', background: 'rgba(255,255,255,0.02)', marginBottom: '12px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', marginBottom: '8px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={sceneConfig.mode === 'split_camera'}
+                onChange={(e) => setSceneConfig((prev) => ({ ...prev, mode: e.target.checked ? 'split_camera' : 'normal' }))}
+              />
+              Enable Camera Split (Left Content / Right Camera)
+            </label>
+            <div style={{ marginBottom: '8px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', marginBottom: '8px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={sceneConfig.enableCameraTestMode === true}
+                  onChange={(e) => setSceneConfig((prev) => ({ ...prev, enableCameraTestMode: e.target.checked }))}
+                />
+                Camera Test Mode (No physical camera)
+              </label>
+              <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginBottom: '3px' }}>Camera Device</div>
+              <select
+                value={sceneConfig.cameraDeviceId || ''}
+                onChange={(e) => setSceneConfig((prev) => ({ ...prev, cameraDeviceId: e.target.value }))}
+                disabled={sceneConfig.enableCameraTestMode === true}
+                style={{ width: '100%', padding: '4px 6px', fontSize: '11px', borderRadius: '6px', border: '1px solid var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text-primary)' }}
+              >
+                {cameraDevices.length === 0 && <option value="">No camera detected</option>}
+                {cameraDevices.map((d, idx) => (
+                  <option key={d.deviceId || idx} value={d.deviceId || ''}>
+                    {d.label || `Camera ${idx + 1}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginBottom: '3px' }}>
+                Right Camera Width (%): {Math.max(20, Math.min(40, sceneConfig.cameraPanePercent))}
+              </div>
+              <input
+                type="range"
+                min={20}
+                max={40}
+                step={1}
+                value={Math.max(20, Math.min(40, sceneConfig.cameraPanePercent))}
+                onChange={(e) => setSceneConfig((prev) => ({ ...prev, cameraPanePercent: Number(e.target.value) }))}
+                style={{ width: '100%' }}
+              />
+            </div>
+            <div style={{ marginTop: '8px' }}>
+              <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginBottom: '3px' }}>
+                Camera Center Crop (%): {Math.max(100, Math.min(220, sceneConfig.cameraCenterCropPercent || 100))}
+              </div>
+              <input
+                type="range"
+                min={100}
+                max={220}
+                step={5}
+                value={Math.max(100, Math.min(220, sceneConfig.cameraCenterCropPercent || 100))}
+                onChange={(e) => setSceneConfig((prev) => ({ ...prev, cameraCenterCropPercent: Number(e.target.value) }))}
+                style={{ width: '100%' }}
+              />
+            </div>
+          </div>
+
           <div className="preview-panel__title" style={{ marginBottom: '12px' }}>System Info</div>
           <div style={{
             fontSize: '12px',
@@ -1484,6 +1909,29 @@ function ControlPanel() {
                 {isElectron ? 'Electron' : 'Browser'}
               </span>
             </div>
+            <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+              <button
+                className="btn btn--ghost"
+                style={{ flex: 1, padding: '6px 8px', fontSize: '11px' }}
+                onClick={handleExportSetupBundle}
+                disabled={setupTransferBusy}
+              >
+                Export Setup
+              </button>
+              <button
+                className="btn btn--ghost"
+                style={{ flex: 1, padding: '6px 8px', fontSize: '11px' }}
+                onClick={handleImportSetupBundle}
+                disabled={setupTransferBusy}
+              >
+                Import Setup
+              </button>
+            </div>
+            {setupTransferBusy && (
+              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>
+                Processing setup package...
+              </div>
+            )}
           </div>
         </div>
       </div>

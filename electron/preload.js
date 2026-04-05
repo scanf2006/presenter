@@ -50,6 +50,7 @@ contextBridge.exposeInMainWorld('churchDisplay', {
 
   /** 发送过渡效果 */
   sendTransition: (transitionData) => ipcRenderer.send('projector-transition', transitionData),
+  sendProjectorScene: (sceneData) => ipcRenderer.send('projector-scene', sceneData),
 
   /** 发送背景内容（专门信道） */
   sendToProjectorBackground: (data) => ipcRenderer.send('send-to-projector-background', data),
@@ -75,6 +76,9 @@ contextBridge.exposeInMainWorld('churchDisplay', {
   /** 监听过渡效果（投影窗口使用） */
   onProjectorTransition: (callback) => {
     return onWithCleanup('projector-transition', (event, data) => callback(data));
+  },
+  onProjectorScene: (callback) => {
+    return onWithCleanup('projector-scene', (event, data) => callback(data));
   },
 
   /** 监听黑屏命令（投影窗口使用） */
@@ -103,6 +107,8 @@ contextBridge.exposeInMainWorld('churchDisplay', {
 
   /** 获取媒体目录路径 */
   getMediaDir: () => ipcRenderer.invoke('get-media-dir'),
+  exportSetupBundle: () => ipcRenderer.invoke('export-setup-bundle'),
+  importSetupBundle: () => ipcRenderer.invoke('import-setup-bundle'),
 
   /** 投屏队列持久化 */
   queueSave: (queue) => ipcRenderer.invoke('queue-save', queue),

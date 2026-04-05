@@ -21,7 +21,20 @@ function ProjectorView() {
   const sampleCanvasRef = useRef(null);
   const sampleIntervalRef = useRef(null);
   const timeoutRef = useRef([]);
-  const [adaptiveOverlayOpacity, setAdaptiveOverlayOpacity] = useState(0.3);
+  const [adaptiveOverlayOpacity, setAdaptiveOverlayOpacity] = useState(0.1);
+  const [sceneConfig, setSceneConfig] = useState({
+    mode: 'normal',
+    splitDirection: 'content_left_camera_right',
+    cameraDeviceId: '',
+    cameraPanePercent: 30,
+    cameraMuted: true,
+    cameraCenterCropPercent: 100,
+    enableCameraTestMode: false,
+  });
+  const cameraPaneVideoRef = useRef(null);
+  const cameraPaneStreamRef = useRef(null);
+  const [cameraPaneStatus, setCameraPaneStatus] = useState('idle');
+  const [cameraTestNow, setCameraTestNow] = useState(Date.now());
 
   const isElectron = typeof window.churchDisplay !== 'undefined';
 
@@ -41,6 +54,23 @@ function ProjectorView() {
       };
       transitionRef.current = next;
       setTransitionConfig(next);
+    });
+    const offProjectorScene = window.churchDisplay.onProjectorScene((data) => {
+      const nextMode = data?.mode === 'split_camera' ? 'split_camera' : 'normal';
+      setSceneConfig((prev) => ({
+        ...prev,
+        mode: nextMode,
+        splitDirection: data?.splitDirection || prev.splitDirection,
+        cameraDeviceId: typeof data?.cameraDeviceId === 'string' ? data.cameraDeviceId : prev.cameraDeviceId,
+        cameraPanePercent: Number.isFinite(data?.cameraPanePercent)
+          ? Math.max(20, Math.min(40, Number(data.cameraPanePercent)))
+          : prev.cameraPanePercent,
+        cameraMuted: data?.cameraMuted !== false,
+        cameraCenterCropPercent: Number.isFinite(data?.cameraCenterCropPercent)
+          ? Math.max(100, Math.min(220, Number(data.cameraCenterCropPercent)))
+          : prev.cameraCenterCropPercent,
+        enableCameraTestMode: data?.enableCameraTestMode === true,
+      }));
     });
 
     const offProjectorContent = window.churchDisplay.onProjectorContent((data) => {
@@ -131,6 +161,7 @@ function ProjectorView() {
       if (typeof offProjectorBlackout === 'function') offProjectorBlackout();
       if (typeof offMediaCommand === 'function') offMediaCommand();
       if (typeof offProjectorTransition === 'function') offProjectorTransition();
+      if (typeof offProjectorScene === 'function') offProjectorScene();
       clearTimers();
     };
   }, [isElectron]);
@@ -164,12 +195,14 @@ function ProjectorView() {
 
   const getProjectorTextSize = () => {
     const px = Number(content?.fontSizePx);
+    const paneRatio = splitEnabled ? (100 - rightPanePercent) / 100 : 1;
+    const scale = splitEnabled ? Math.max(0.72, paneRatio) : 1;
     if (Number.isFinite(px) && px > 0) {
-      return `${Math.max(20, Math.min(220, px))}px`;
+      const scaled = Math.max(20, Math.min(220, Math.round(px * scale)));
+      return `${scaled}px`;
     }
-    if (content?.fontSize === 'small') return '32px';
-    if (content?.fontSize === 'medium') return '48px';
-    return '72px';
+    const base = content?.fontSize === 'small' ? 32 : content?.fontSize === 'medium' ? 48 : 72;
+    return `${Math.round(base * scale)}px`;
   };
 
   const getMediaUrl = (filePath) => {
@@ -198,6 +231,72 @@ function ProjectorView() {
 
   const effectiveMedia = standaloneMedia || (backgroundMedia ? { ...backgroundMedia, standalone: false } : null);
   const isTextualContent = content && (content.type === 'text' || content.type === 'bible' || content.type === 'lyrics');
+  const rightPanePercent = Math.max(20, Math.min(40, Number(sceneConfig.cameraPanePercent || 30)));
+  const rightCameraScale = Math.max(1, Number(sceneConfig.cameraCenterCropPercent || 100) / 100);
+  const splitEnabled = false;
+  const contentPaneWidth = `${100 - rightPanePercent}%`;
+
+  useEffect(() => {
+    const stop = () => {
+      const stream = cameraPaneStreamRef.current;
+      if (stream) {
+        stream.getTracks().forEach((t) => t.stop());
+        cameraPaneStreamRef.current = null;
+      }
+      if (cameraPaneVideoRef.current) {
+        cameraPaneVideoRef.current.srcObject = null;
+      }
+    };
+
+    if (!splitEnabled) {
+      stop();
+      setCameraPaneStatus('idle');
+      return;
+    }
+
+    if (sceneConfig.enableCameraTestMode) {
+      stop();
+      setCameraPaneStatus('ok');
+      return;
+    }
+
+    const start = async () => {
+      if (!navigator?.mediaDevices?.getUserMedia) {
+        setCameraPaneStatus('unsupported');
+        return;
+      }
+      try {
+        setCameraPaneStatus('loading');
+        stop();
+        const constraints = sceneConfig.cameraDeviceId
+          ? { video: { deviceId: { exact: sceneConfig.cameraDeviceId } }, audio: false }
+          : { video: true, audio: false };
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        cameraPaneStreamRef.current = stream;
+        if (cameraPaneVideoRef.current) {
+          cameraPaneVideoRef.current.srcObject = stream;
+          cameraPaneVideoRef.current.muted = true;
+          cameraPaneVideoRef.current.defaultMuted = true;
+          cameraPaneVideoRef.current.play().catch(() => {});
+        }
+        setCameraPaneStatus('ok');
+      } catch (err) {
+        setCameraPaneStatus('error');
+        console.warn('[ProjectorCamera] start failed:', err);
+      }
+    };
+    start();
+
+    return () => {
+      stop();
+    };
+  }, [splitEnabled, sceneConfig.cameraDeviceId, sceneConfig.enableCameraTestMode]);
+
+  useEffect(() => {
+    if (!(splitEnabled && sceneConfig.enableCameraTestMode)) return;
+    const t = setInterval(() => setCameraTestNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [splitEnabled, sceneConfig.enableCameraTestMode]);
 
   const sampleAverageLuma = (drawable, width, height) => {
     try {
@@ -234,9 +333,9 @@ function ProjectorView() {
   };
 
   const lumaToOverlay = (luma) => {
-    if (!Number.isFinite(luma)) return 0.3;
+    if (!Number.isFinite(luma)) return 0.1;
     const normalized = Math.max(0, Math.min(1, luma / 255));
-    return 0.2 + normalized * 0.34;
+    return 0.05 + normalized * 0.1;
   };
 
   useEffect(() => {
@@ -246,7 +345,7 @@ function ProjectorView() {
     }
 
     if (!isTextualContent || !effectiveMedia) {
-      setAdaptiveOverlayOpacity(0.25);
+      setAdaptiveOverlayOpacity(0.08);
       return;
     }
 
@@ -256,7 +355,7 @@ function ProjectorView() {
         const luma = sampleAverageLuma(img, img.naturalWidth, img.naturalHeight);
         setAdaptiveOverlayOpacity(lumaToOverlay(luma));
       };
-      img.onerror = () => setAdaptiveOverlayOpacity(0.3);
+      img.onerror = () => setAdaptiveOverlayOpacity(0.1);
       img.src = getMediaUrl(effectiveMedia.path);
       return;
     }
@@ -295,6 +394,21 @@ function ProjectorView() {
     borderRadius: 0,
   };
 
+  const contentStageStyle = splitEnabled
+    ? {
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        bottom: 0,
+        width: contentPaneWidth,
+      }
+    : {
+        position: 'fixed',
+        inset: 0,
+        width: '100%',
+        height: '100%',
+      };
+
   return (
     <div
       style={{
@@ -308,10 +422,7 @@ function ProjectorView() {
     >
       <div
         style={{
-          position: 'fixed',
-          inset: 0,
-          width: '100%',
-          height: '100%',
+          ...contentStageStyle,
           zIndex: 1,
           overflow: 'hidden',
           background: effectiveMedia
@@ -368,8 +479,7 @@ function ProjectorView() {
       {!isBlackout && isTextualContent && (
         <div
           style={{
-            position: 'fixed',
-            inset: 0,
+            ...contentStageStyle,
             background: `rgba(0, 0, 0, ${adaptiveOverlayOpacity})`,
             zIndex: 2,
             pointerEvents: 'none',
@@ -380,8 +490,7 @@ function ProjectorView() {
 
       <div
         style={{
-          position: 'fixed',
-          inset: 0,
+          ...contentStageStyle,
           background: '#000',
           opacity: transitionMaskVisible ? 0.45 : 0,
           transition: `opacity ${transitionConfig.durationMs}ms ease`,
@@ -393,8 +502,7 @@ function ProjectorView() {
       {!isBlackout && content?.type === 'youtube' && (
         <div
           style={{
-            position: 'fixed',
-            inset: 0,
+            ...contentStageStyle,
             zIndex: 4,
             overflow: 'hidden',
             ...fadeAnimationStyle,
@@ -420,8 +528,7 @@ function ProjectorView() {
       {!isBlackout && content && (content.type === 'text' || content.type === 'bible' || content.type === 'lyrics') && (
         <div
           style={{
-            position: 'fixed',
-            inset: 0,
+            ...contentStageStyle,
             zIndex: 10,
             display: 'flex',
             alignItems: 'center',
@@ -433,7 +540,7 @@ function ProjectorView() {
           <div
             className={`projector-view__content ${fadeClass}`}
             style={{
-              width: 'min(88vw, 1800px)',
+              width: '88%',
               textAlign: 'center',
               ...fadeAnimationStyle,
             }}
@@ -469,6 +576,123 @@ function ProjectorView() {
               }}
             >
               {`- ${content.reference}`}
+            </div>
+          )}
+        </div>
+      )}
+
+      {splitEnabled && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            right: 0,
+            bottom: 0,
+            width: `${rightPanePercent}%`,
+            zIndex: 30,
+            background: '#000',
+            overflow: 'hidden',
+            borderLeft: '1px solid rgba(255,255,255,0.24)',
+          }}
+        >
+          {sceneConfig.enableCameraTestMode ? (
+            <div
+              style={{
+                width: '100%',
+                height: '100%',
+                transform: `scale(${rightCameraScale})`,
+                transformOrigin: 'center center',
+                background: 'linear-gradient(135deg, #081525 0%, #152b4a 50%, #1f3a63 100%)',
+                position: 'relative',
+                overflow: 'hidden',
+              }}
+            >
+              <div style={{
+                position: 'absolute',
+                inset: 0,
+                backgroundImage: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.06) 0 18px, rgba(255,255,255,0.02) 18px 36px)',
+              }} />
+              <div style={{
+                position: 'absolute',
+                inset: '24px',
+                border: '2px solid rgba(255,255,255,0.3)',
+              }} />
+              <div style={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                top: '50%',
+                height: '1px',
+                background: 'rgba(255,255,255,0.35)',
+              }} />
+              <div style={{
+                position: 'absolute',
+                top: 0,
+                bottom: 0,
+                left: '50%',
+                width: '1px',
+                background: 'rgba(255,255,255,0.35)',
+              }} />
+              <div style={{
+                position: 'absolute',
+                left: '20px',
+                top: '16px',
+                fontSize: '28px',
+                color: '#8ee7ff',
+                fontWeight: 700,
+                letterSpacing: '1px',
+              }}>
+                CAMERA
+              </div>
+              <div style={{
+                position: 'absolute',
+                right: '20px',
+                bottom: '16px',
+                fontSize: '26px',
+                color: 'rgba(255,255,255,0.95)',
+                fontFamily: 'monospace',
+              }}>
+                {new Date(cameraTestNow).toLocaleTimeString()}
+              </div>
+            </div>
+          ) : (
+            <video
+              ref={cameraPaneVideoRef}
+              autoPlay
+              playsInline
+              muted={sceneConfig.cameraMuted !== false}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                transform: `scale(${rightCameraScale})`,
+                transformOrigin: 'center center',
+              }}
+            />
+          )}
+          {!sceneConfig.enableCameraTestMode && cameraPaneStatus !== 'ok' && (
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'rgba(255,255,255,0.92)',
+                fontSize: '28px',
+                textAlign: 'center',
+                background: 'rgba(0,0,0,0.55)',
+                padding: '28px',
+                lineHeight: 1.5,
+              }}
+            >
+              {cameraPaneStatus === 'loading'
+                ? 'Loading camera...'
+                : cameraPaneStatus === 'error'
+                  ? 'Camera unavailable'
+                  : cameraPaneStatus === 'unsupported'
+                    ? 'Camera not supported'
+                    : 'Camera idle'}
             </div>
           )}
         </div>
