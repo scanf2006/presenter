@@ -1,13 +1,14 @@
-﻿import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import MediaManager from './MediaManager';
 import BibleBrowser from './BibleBrowser';
 import SongManager from './SongManager';
 import PdfRenderer from './PdfRenderer';
+import appPkg from '../../package.json';
 
 const QUEUE_STORAGE_KEY = 'churchdisplay.projectorQueue.v1';
 const TRANSITION_STORAGE_KEY = 'churchdisplay.transition.v1';
 const SCENE_STORAGE_KEY = 'churchdisplay.scene.v1';
-const APP_VERSION = '0.3.1';
+const APP_VERSION = appPkg.version;
 const TEXT_FONT_OPTIONS = ['Noto Sans SC', 'Microsoft YaHei', 'Arial', 'Times New Roman', 'SimHei'];
 const DEFAULT_SCENE_CONFIG = {
   mode: 'normal',
@@ -20,8 +21,6 @@ const DEFAULT_SCENE_CONFIG = {
 };
 
 /**
- * 控制台主面板
- * 负责Displays、Content编辑和Projection
  */
 function ControlPanel() {
   const resolveSectionForPayload = useCallback((payload) => {
@@ -57,19 +56,21 @@ function ControlPanel() {
   // Projector Status
   const [projectorActive, setProjectorActive] = useState(false);
   const [projectorDisplayId, setProjectorDisplayId] = useState(null);
-  // 当前活动的侧边栏项
   const [activeSection, setActiveSection] = useState('text');
-  // 文字Content编辑
   const [textContent, setTextContent] = useState('');
   const [fontSize, setFontSize] = useState('large');
   const [textFontFamily, setTextFontFamily] = useState('Noto Sans SC');
   const [textColor, setTextColor] = useState('#ffffff');
   const [textSizePx, setTextSizePx] = useState(72);
+  const [textCanvasWidth, setTextCanvasWidth] = useState(0);
   const [textBackground, setTextBackground] = useState(null);
+  const [textLayout, setTextLayout] = useState({ xPercent: 50, yPercent: 50, scale: 1 });
+  const [textSnapGuide, setTextSnapGuide] = useState({ vertical: false, horizontal: false });
   // Current projected content
   const [currentSlide, setCurrentSlide] = useState(null);
   // Preview side uses its own transition state
   const [previewSlide, setPreviewSlide] = useState(null);
+  const [previewStageWidth, setPreviewStageWidth] = useState(0);
   const [previewMaskVisible, setPreviewMaskVisible] = useState(false);
   const [previewVideoCurrent, setPreviewVideoCurrent] = useState(0);
   const [previewVideoDuration, setPreviewVideoDuration] = useState(0);
@@ -77,6 +78,16 @@ function ControlPanel() {
   const [previewVideoMuted, setPreviewVideoMuted] = useState(false);
   const previewTimersRef = useRef([]);
   const previewVideoRef = useRef(null);
+  const textCanvasRef = useRef(null);
+  const textLayerRef = useRef(null);
+  const textEditableRef = useRef(null);
+  const textTransformRef = useRef({
+    mode: null,
+    startX: 0,
+    startY: 0,
+    startLayout: null,
+    startTextSizePx: 72,
+  });
   // Queue
   const [projectorQueue, setProjectorQueue] = useState([]);
   const [queueHydrated, setQueueHydrated] = useState(false);
@@ -85,6 +96,8 @@ function ControlPanel() {
   const [editingQueueId, setEditingQueueId] = useState(null);
   const [editingQueueTitle, setEditingQueueTitle] = useState('');
   const [songsListOpenToken, setSongsListOpenToken] = useState(0);
+  const [bibleCatalogOpenToken, setBibleCatalogOpenToken] = useState(0);
+  const [mediaHomeOpenToken, setMediaHomeOpenToken] = useState(0);
   const [activePreloadItem, setActivePreloadItem] = useState(null);
   const [backgroundPickerTarget, setBackgroundPickerTarget] = useState(null); // 'songs' | 'bible' | 'text' | null
   const [songPickedBackground, setSongPickedBackground] = useState(null);
@@ -97,6 +110,7 @@ function ControlPanel() {
   const [cameraStatus, setCameraStatus] = useState('idle');
   const [previewTestNow, setPreviewTestNow] = useState(Date.now());
   const cameraPreviewRef = useRef(null);
+  const previewStageRef = useRef(null);
   const cameraStreamRef = useRef(null);
   const [showLegalModal, setShowLegalModal] = useState(false);
   const [setupTransferBusy, setSetupTransferBusy] = useState(false);
@@ -110,14 +124,120 @@ function ControlPanel() {
   const [licenseActionMsg, setLicenseActionMsg] = useState('');
   const [licenseActionError, setLicenseActionError] = useState('');
   const [eulaText, setEulaText] = useState('');
+  const [toast, setToast] = useState(null);
+  const toastTimerRef = useRef(null);
 
-  // 检查是否在 Electron 环境
   const isElectron = typeof window.churchDisplay !== 'undefined';
   const previewSplitEnabled = false;
   const previewRightPanePercent = Math.max(20, Math.min(40, sceneConfig.cameraPanePercent || 30));
   const previewContentPanePercent = 100 - previewRightPanePercent;
   const previewCameraScale = Math.max(1, Number(sceneConfig.cameraCenterCropPercent || 100) / 100);
   const activeProjectorDisplay = displays.find((d) => d.id === projectorDisplayId) || null;
+  const clamp = useCallback((v, min, max) => Math.max(min, Math.min(max, v)), []);
+
+  const startTextDrag = useCallback((event) => {
+    if (!textCanvasRef.current) return;
+    if (event.button !== 0) return;
+    if (event.target?.closest?.('[contenteditable="true"]')) return;
+    event.preventDefault();
+    textTransformRef.current = {
+      mode: 'drag',
+      startX: event.clientX,
+      startY: event.clientY,
+      startLayout: { ...textLayout },
+    };
+  }, [textLayout]);
+
+  const startTextResize = useCallback((event) => {
+    if (!textCanvasRef.current) return;
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    textTransformRef.current = {
+      mode: 'resize',
+      startX: event.clientX,
+      startY: event.clientY,
+      startLayout: { ...textLayout },
+      startTextSizePx: textSizePx,
+    };
+  }, [textLayout, textSizePx]);
+
+  useEffect(() => {
+    const onMouseMove = (event) => {
+      const state = textTransformRef.current;
+      if (!state?.mode || !textCanvasRef.current || !state.startLayout) return;
+      const rect = textCanvasRef.current.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+
+      if (state.mode === 'drag') {
+        const deltaXPct = ((event.clientX - state.startX) / rect.width) * 100;
+        const deltaYPct = ((event.clientY - state.startY) / rect.height) * 100;
+        const layerRect = textLayerRef.current?.getBoundingClientRect?.();
+        const halfWidthPct = layerRect?.width ? (layerRect.width / rect.width) * 50 : 8;
+        const halfHeightPct = layerRect?.height ? (layerRect.height / rect.height) * 50 : 10;
+        const minX = Math.max(2, Math.min(50, halfWidthPct));
+        const maxX = Math.min(98, Math.max(50, 100 - halfWidthPct));
+        const minY = Math.max(2, Math.min(50, halfHeightPct));
+        const maxY = Math.min(98, Math.max(50, 100 - halfHeightPct));
+        let nextX = clamp(state.startLayout.xPercent + deltaXPct, minX, maxX);
+        let nextY = clamp(state.startLayout.yPercent + deltaYPct, minY, maxY);
+        const guide = { vertical: false, horizontal: false };
+        const snapThreshold = 1.5;
+        if (Math.abs(nextX - 50) <= snapThreshold && 50 >= minX && 50 <= maxX) {
+          nextX = 50;
+          guide.vertical = true;
+        }
+        if (Math.abs(nextY - 50) <= snapThreshold && 50 >= minY && 50 <= maxY) {
+          nextY = 50;
+          guide.horizontal = true;
+        }
+        setTextSnapGuide(guide);
+        setTextLayout((prev) => ({ ...prev, xPercent: nextX, yPercent: nextY }));
+        return;
+      }
+
+      if (state.mode === 'resize') {
+        const delta = (event.clientX - state.startX) + (event.clientY - state.startY);
+        const baseSize = Number(state.startTextSizePx || textSizePx || 72) * Number(state.startLayout?.scale || 1);
+        const nextSizePx = Math.round(clamp(baseSize + (delta / 3), 24, 220));
+        setTextSizePx(nextSizePx);
+        setTextLayout((prev) => ({ ...prev, scale: 1 }));
+      }
+    };
+
+    const onMouseUp = () => {
+      if (textTransformRef.current?.mode) {
+        textTransformRef.current = { mode: null, startX: 0, startY: 0, startLayout: null, startTextSizePx: 72 };
+        setTextSnapGuide({ vertical: false, horizontal: false });
+      }
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, [clamp, textSizePx]);
+  const showToast = useCallback((message, tone = 'success') => {
+    if (!message) return;
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
+    }
+    setToast({ message, tone, token: Date.now() });
+    toastTimerRef.current = setTimeout(() => {
+      setToast(null);
+      toastTimerRef.current = null;
+    }, 1600);
+  }, []);
+
+  useEffect(() => () => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+  }, []);
+
   const previewAspectRatio = (() => {
     const w = activeProjectorDisplay?.bounds?.width || activeProjectorDisplay?.size?.width;
     const h = activeProjectorDisplay?.bounds?.height || activeProjectorDisplay?.size?.height;
@@ -154,7 +274,6 @@ function ControlPanel() {
         if (typeof offProjectorStatus === 'function') offProjectorStatus();
       };
     } else {
-      // 非 Electron 环境模拟数据
       setDisplays([
         { id: 1, label: 'Primary Display', bounds: { x: 0, y: 0, width: 1920, height: 1080 }, isPrimary: true, size: { width: 1920, height: 1080 } },
         { id: 2, label: 'Secondary Display', bounds: { x: 1920, y: 0, width: 1920, height: 1080 }, isPrimary: false, size: { width: 1920, height: 1080 } },
@@ -218,7 +337,6 @@ function ControlPanel() {
     persistQueue();
   }, [projectorQueue, isElectron, queueHydrated]);
 
-  // 恢复Transition设置
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(TRANSITION_STORAGE_KEY);
@@ -410,6 +528,45 @@ function ControlPanel() {
     }
   }, [cameraStatus, sceneConfig.mode, sceneConfig.cameraDeviceId]);
 
+  useEffect(() => {
+    const el = previewStageRef.current;
+    if (!el) return;
+    const applySize = () => setPreviewStageWidth(el.clientWidth || 0);
+    applySize();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', applySize);
+      return () => window.removeEventListener('resize', applySize);
+    }
+    const observer = new ResizeObserver(() => applySize());
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const el = textCanvasRef.current;
+    if (!el) return;
+    const applySize = () => setTextCanvasWidth(el.clientWidth || 0);
+    applySize();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', applySize);
+      return () => window.removeEventListener('resize', applySize);
+    }
+    const observer = new ResizeObserver(() => applySize());
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [activeSection]);
+
+  useEffect(() => {
+    const el = textEditableRef.current;
+    if (!el) return;
+    if (document.activeElement === el) return;
+    const current = (el.innerText || '').replace(/\r/g, '');
+    const next = (textContent || '').replace(/\r/g, '');
+    if (current !== next) {
+      el.innerText = next;
+    }
+  }, [textContent, activeSection]);
+
   const clearPreviewTimers = useCallback(() => {
     previewTimersRef.current.forEach((t) => clearTimeout(t));
     previewTimersRef.current = [];
@@ -424,18 +581,23 @@ function ControlPanel() {
 
   const getPreviewTextSize = useCallback((slide, fallbackPx) => {
     const raw = Number(slide?.fontSizePx);
+    const widthRatio = Math.max(0.12, (previewStageWidth || 384) / 1920);
     if (Number.isFinite(raw) && raw > 0) {
-      const scaled = Math.round(raw / 5);
-      return `${Math.max(9, Math.min(28, scaled))}px`;
+      const scaled = Math.round(raw * widthRatio);
+      return `${Math.max(9, Math.min(72, scaled))}px`;
     }
-    return `${fallbackPx}px`;
-  }, []);
+    const fallbackScaled = Math.round(Number(fallbackPx || 14) * Math.max(0.85, widthRatio * 5));
+    return `${Math.max(9, Math.min(42, fallbackScaled))}px`;
+  }, [previewStageWidth]);
 
   const getPreviewMediaUrl = useCallback((filePath) => {
     if (!filePath) return '';
     if (/^https?:\/\//i.test(filePath)) return filePath;
     return `local-media://${encodeURIComponent(filePath)}`;
   }, []);
+
+  const textCanvasWidthRatio = Math.max(0.12, (textCanvasWidth || 960) / 1920);
+  const textCanvasDisplayFontPx = Math.max(12, Math.min(220, Math.round(textSizePx * textCanvasWidthRatio)));
 
   const normalizeYouTubeUrl = useCallback((payload) => {
     const direct = payload?.url?.trim();
@@ -558,7 +720,6 @@ function ControlPanel() {
     return () => clearPreviewTimers();
   }, [clearPreviewTimers]);
 
-  // 启动投影
   const handleStartProjector = useCallback((displayId) => {
     if (isElectron) {
       window.churchDisplay.startProjector(displayId);
@@ -607,7 +768,6 @@ function ControlPanel() {
     }
   }, [isElectron, applyPreviewTransition, sceneConfig]);
 
-  // 发送Content到投影
   const handleSendToProjector = useCallback((content) => {
     const data = {
       type: 'text',
@@ -617,10 +777,11 @@ function ControlPanel() {
       fontFamily: textFontFamily,
       textColor: textColor,
       background: textBackground,
+      textLayout,
       timestamp: Date.now(),
     };
     pushToProjector(data);
-  }, [textContent, fontSize, textSizePx, textFontFamily, textColor, textBackground, pushToProjector]);
+  }, [textContent, fontSize, textSizePx, textFontFamily, textColor, textBackground, textLayout, pushToProjector]);
 
   const handleAddTextToQueue = useCallback(() => {
     if (!textContent.trim()) return;
@@ -632,10 +793,27 @@ function ControlPanel() {
       fontFamily: textFontFamily,
       textColor: textColor,
       background: textBackground,
+      textLayout,
       timestamp: Date.now(),
     };
-    setProjectorQueue((prev) => [...prev, buildQueueItem(payload, getQueueItemTitle(payload), 'text')]);
-  }, [textContent, fontSize, textSizePx, textFontFamily, textColor, textBackground, buildQueueItem, getQueueItemTitle]);
+    setProjectorQueue((prev) => {
+      const title = getQueueItemTitle(payload);
+      if (activeQueueIndex >= 0 && activeQueueIndex < prev.length) {
+        const existing = prev[activeQueueIndex];
+        const next = [...prev];
+        next[activeQueueIndex] = {
+          ...existing,
+          title,
+          type: payload.type,
+          payload,
+          section: 'text',
+          updatedAt: Date.now(),
+        };
+        return next;
+      }
+      return [...prev, buildQueueItem(payload, title, 'text')];
+    });
+  }, [textContent, fontSize, textSizePx, textFontFamily, textColor, textBackground, textLayout, buildQueueItem, getQueueItemTitle, activeQueueIndex]);
 
   useEffect(() => {
     if (activeSection === 'text' && textContent.trim() && currentSlide?.type === 'text') {
@@ -651,6 +829,18 @@ function ControlPanel() {
       window.churchDisplay.blackout();
     }
   }, [isElectron, applyPreviewTransition]);
+
+  const resetFreeTextEditor = useCallback(() => {
+    setTextContent('');
+    setFontSize('large');
+    setTextSizePx(72);
+    setTextFontFamily('Noto Sans SC');
+    setTextColor('#ffffff');
+    setTextBackground(null);
+    setTextLayout({ xPercent: 50, yPercent: 50, scale: 1 });
+    setTextSnapGuide({ vertical: false, horizontal: false });
+    textTransformRef.current = { mode: null, startX: 0, startY: 0, startLayout: null, startTextSizePx: 72 };
+  }, []);
 
   const handleExportSetupBundle = useCallback(async () => {
     if (!isElectron || typeof window.churchDisplay?.exportSetupBundle !== 'function') {
@@ -714,7 +904,6 @@ function ControlPanel() {
     }
   }, [isElectron]);
 
-  // 媒体投屏回调
   const handleProjectMedia = useCallback(async (mediaData) => {
     try {
       const playableData = mediaData?.type === 'youtube'
@@ -735,18 +924,101 @@ function ControlPanel() {
     const payload = item?.payload || null;
     if (!payload) return;
     const title = item?.name || getQueueItemTitle(payload);
-    setProjectorQueue((prev) => [...prev, buildQueueItem(payload, title, 'media')]);
-  }, [buildQueueItem, getQueueItemTitle]);
+    setProjectorQueue((prev) => {
+      if (activeQueueIndex >= 0 && activeQueueIndex < prev.length) {
+        const existing = prev[activeQueueIndex];
+        const next = [...prev];
+        next[activeQueueIndex] = {
+          ...existing,
+          title,
+          type: payload.type || 'media',
+          payload,
+          section: 'media',
+          updatedAt: Date.now(),
+        };
+        return next;
+      }
+      return [...prev, buildQueueItem(payload, title, 'media')];
+    });
+  }, [buildQueueItem, getQueueItemTitle, activeQueueIndex]);
 
   const handleAddSongQueueItem = useCallback((payload, title) => {
     if (!payload) return;
-    setProjectorQueue((prev) => [...prev, buildQueueItem(payload, title || getQueueItemTitle(payload), 'songs')]);
-  }, [buildQueueItem, getQueueItemTitle]);
+    const nextTitle = title || getQueueItemTitle(payload);
+    setProjectorQueue((prev) => {
+      if (activeQueueIndex >= 0 && activeQueueIndex < prev.length) {
+        const existing = prev[activeQueueIndex];
+        const next = [...prev];
+        next[activeQueueIndex] = {
+          ...existing,
+          title: nextTitle,
+          type: payload.type || 'song',
+          payload,
+          section: 'songs',
+          updatedAt: Date.now(),
+        };
+        return next;
+      }
+      return [...prev, buildQueueItem(payload, nextTitle, 'songs')];
+    });
+  }, [buildQueueItem, getQueueItemTitle, activeQueueIndex]);
 
   const handleAddBibleQueueItem = useCallback((payload, title) => {
     if (!payload) return;
-    setProjectorQueue((prev) => [...prev, buildQueueItem(payload, title || getQueueItemTitle(payload), 'bible')]);
-  }, [buildQueueItem, getQueueItemTitle]);
+    const nextTitle = title || getQueueItemTitle(payload);
+    setProjectorQueue((prev) => {
+      if (activeQueueIndex >= 0 && activeQueueIndex < prev.length) {
+        const existing = prev[activeQueueIndex];
+        const next = [...prev];
+        next[activeQueueIndex] = {
+          ...existing,
+          title: nextTitle,
+          type: payload.type || 'bible',
+          payload,
+          section: 'bible',
+          updatedAt: Date.now(),
+        };
+        return next;
+      }
+      return [...prev, buildQueueItem(payload, nextTitle, 'bible')];
+    });
+  }, [buildQueueItem, getQueueItemTitle, activeQueueIndex]);
+
+  const handleUpdateActiveQueueItem = useCallback((payload, title, expectedSection = null) => {
+    if (!payload) return;
+    let didUpdate = false;
+    setProjectorQueue((prev) => {
+      if (activeQueueIndex < 0 || activeQueueIndex >= prev.length) return prev;
+      const existing = prev[activeQueueIndex];
+      if (expectedSection && existing?.section && existing.section !== expectedSection) {
+        return prev;
+      }
+      const resolvedTitle = title || existing?.title || getQueueItemTitle(payload);
+      const resolvedType = payload.type || existing?.type || 'text';
+      const resolvedSection = expectedSection || existing?.section || resolveSectionForPayload(payload);
+      const samePayload = JSON.stringify(existing?.payload ?? null) === JSON.stringify(payload ?? null);
+      const sameTitle = (existing?.title || '') === resolvedTitle;
+      const sameType = (existing?.type || '') === resolvedType;
+      const sameSection = (existing?.section || '') === resolvedSection;
+      if (samePayload && sameTitle && sameType && sameSection) {
+        return prev;
+      }
+      const next = [...prev];
+      next[activeQueueIndex] = {
+        ...existing,
+        title: resolvedTitle,
+        type: resolvedType,
+        payload,
+        section: resolvedSection,
+        updatedAt: Date.now(),
+      };
+      didUpdate = true;
+      return next;
+    });
+    if (didUpdate) {
+      showToast('Auto-saved to selected queue card');
+    }
+  }, [activeQueueIndex, getQueueItemTitle, resolveSectionForPayload, showToast]);
 
   const handlePlayQueueItem = useCallback(async (index) => {
     if (index < 0 || index >= projectorQueue.length) return;
@@ -777,6 +1049,15 @@ function ControlPanel() {
         token: Date.now(),
       });
       return;
+    } else if (item.section === 'bible' && item.payload?.type === 'bible') {
+      setActivePreloadItem({
+        type: 'bible',
+        payload: {
+          ...item.payload,
+          title: item.title,
+        },
+        token: Date.now(),
+      });
     } else {
       setActivePreloadItem(null);
     }
@@ -989,38 +1270,15 @@ function ControlPanel() {
     }
   }, [isElectron, licenseStatus]);
 
-  // 示例Content
-  const sampleContent = [
-    {
-      id: 1,
-      title: '濂囧紓鎭╁吀',
-      text: '奇异恩典 何等甘甜\n我罪已得赦免\n前我失丧 今被寻回\n瞎眼今得看见',
-    },
-    {
-      id: 2,
-      title: '绾︾堪绂忛煶 3:16',
-      text: '神爱世人，甚至将他的独生子赐给他们，\n叫一切信他的，不至灭亡，反得永生。',
-    },
-    {
-      id: 3,
-      title: '诗篇 23:1-3',
-      text: '耶和华是我的牧者，我必不至缺乏。\n他使我躺卧在青草地上，\n领我在可安歇的水边。\n他使我的灵魂苏醒，\n为自己的名引导我走义路。',
-    },
-    {
-      id: 4,
-      title: '鎰熻阿绁',
-      text: '鎰熻阿绁?璧愭垜鏁戣祹涓籠n鎰熻阿绁?涓板瘜棰勫\n鎰熻阿绁?杩囧幓鐨勫悓鍦╘n鎰熻阿绁?涓诲湪鎴戞梺',
-    },
-  ];
 
   return (
     <div className="app-container">
       {/* === Top Bar === */}
       <div className="top-bar">
         <div className="top-bar__brand">
-          <div className="top-bar__logo">✦</div>
+          <div className="top-bar__logo">CD</div>
                 <span className="top-bar__title">
-                  ChurchDisplay Pro (此版本为多伦多神召会活石堂特供--版权属于Aiden所有scanf2006@gmail.com) v{APP_VERSION}
+                  ChurchDisplay Pro ({'\u6b64\u7248\u672c\u4e3a\u591a\u4f26\u591a\u795e\u53ec\u4f1a\u6d3b\u77f3\u5802\u7279\u4f9b--\u7248\u6743\u5c5e\u4e8eAiden\u6240\u6709scanf2006@gmail.com'}) v{APP_VERSION}
                 </span>
         </div>
         <div className="top-bar__controls">
@@ -1033,25 +1291,25 @@ function ControlPanel() {
             License
           </button>
           <button className="btn btn--ghost btn--icon" onClick={() => handleSendToProjector(' ')} title="Clear">
-            ⊘
+            Clr
           </button>
           {/* Blackout */}
           <button className="btn btn--ghost btn--icon" onClick={handleBlackout} title="Blackout">
-            ◼
+            Blk
           </button>
           <button
             className="btn btn--ghost btn--icon"
             onClick={handleMinimizeWindow}
             title="Minimize"
           >
-            ─
+            _
           </button>
           <button
             className="btn btn--ghost btn--icon"
             onClick={handleToggleMaximizeWindow}
             title="Maximize / Restore"
           >
-            □
+            [ ]
           </button>
           <button
             className="btn btn--ghost btn--icon"
@@ -1059,7 +1317,7 @@ function ControlPanel() {
             title="Close"
             style={{ color: '#ff6b6b' }}
           >
-            ✕
+            X
           </button>
         </div>
       </div>
@@ -1070,16 +1328,23 @@ function ControlPanel() {
           <div className="sidebar__section-title">Projection</div>
           <div
             className={`sidebar__item ${activeSection === 'displays' ? 'sidebar__item--active' : ''}`}
-            onClick={() => setActiveSection('displays')}
+            onClick={() => {
+              setActiveQueueIndex(-1);
+              setActiveSection('displays');
+            }}
           >
-            <span className="sidebar__item-icon">🖥</span>
+            <span className="sidebar__item-icon">D</span>
             Displays
           </div>
 
           <div className="sidebar__section-title">Content</div>
           <div
             className={`sidebar__item ${activeSection === 'text' ? 'sidebar__item--active' : ''}`}
-            onClick={() => setActiveSection('text')}
+            onClick={() => {
+              setActiveQueueIndex(-1);
+              resetFreeTextEditor();
+              setActiveSection('text');
+            }}
           >
             <span className="sidebar__item-icon">T</span>
             Free Text
@@ -1087,6 +1352,7 @@ function ControlPanel() {
           <div
             className={`sidebar__item ${activeSection === 'songs' ? 'sidebar__item--active' : ''}`}
             onClick={() => {
+              setActiveQueueIndex(-1);
               setSongsListOpenToken(Date.now());
               setActiveSection('songs');
             }}
@@ -1096,14 +1362,22 @@ function ControlPanel() {
           </div>
           <div
             className={`sidebar__item ${activeSection === 'bible' ? 'sidebar__item--active' : ''}`}
-            onClick={() => setActiveSection('bible')}
+            onClick={() => {
+              setActiveQueueIndex(-1);
+              setBibleCatalogOpenToken(Date.now());
+              setActiveSection('bible');
+            }}
           >
             <span className="sidebar__item-icon">B</span>
             Bible
           </div>
           <div
             className={`sidebar__item ${activeSection === 'media' ? 'sidebar__item--active' : ''}`}
-            onClick={() => setActiveSection('media')}
+            onClick={() => {
+              setActiveQueueIndex(-1);
+              setMediaHomeOpenToken(Date.now());
+              setActiveSection('media');
+            }}
           >
             <span className="sidebar__item-icon">M</span>
             Media
@@ -1144,7 +1418,7 @@ function ControlPanel() {
                     title="Drag to reorder"
                     style={{ fontSize: '10px', color: 'var(--color-text-muted)', cursor: 'grab', userSelect: 'none' }}
                   >
-                    ⋮⋮
+                    ::
                   </span>
                   <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', minWidth: '16px' }}>{index + 1}.</span>
                   {editingQueueId === item.id ? (
@@ -1186,14 +1460,14 @@ function ControlPanel() {
                   {editingQueueId !== item.id && (
                     <button
                       className="btn btn--ghost"
-                      style={{ padding: '1px 5px', fontSize: '10px' }}
+                      style={{ padding: '1px 6px', fontSize: '10px' }}
                       onClick={(e) => {
                         e.stopPropagation();
                         handleStartRenameQueueItem(item);
                       }}
                       title="Rename card"
                     >
-                      ✎
+                      Edit
                     </button>
                   )}
                 </div>
@@ -1207,12 +1481,12 @@ function ControlPanel() {
             disabled={activeQueueIndex < 0 || activeQueueIndex >= projectorQueue.length}
             title="Delete selected queue card"
           >
-            🗑 Delete Selected
+            Del Selected
           </button>
-          <button className="btn btn--ghost" style={{ width: '100%', marginTop: '8px' }} onClick={handleClearQueue} disabled={projectorQueue.length === 0}>
-            Clear Queue
-          </button>
-        </div>
+              <button className="btn btn--ghost" style={{ width: '100%', marginTop: '8px' }} onClick={handleClearQueue} disabled={projectorQueue.length === 0}>
+                Clear Queue
+              </button>
+            </div>
       </div>
 
       {/* === Main Content === */}
@@ -1236,7 +1510,7 @@ function ControlPanel() {
                     <div className="display-card__name">{display.label || `Display ${display.id}`}</div>
                     <div className="display-card__resolution">
                       {display.size.width} x {display.size.height}
-                      {display.bounds && ` · Position (${display.bounds.x}, ${display.bounds.y})`}
+                      {display.bounds && ` | Position (${display.bounds.x}, ${display.bounds.y})`}
                     </div>
                   </div>
                   {display.isPrimary && (
@@ -1255,7 +1529,7 @@ function ControlPanel() {
                 style={{ marginTop: '24px', width: '100%' }}
                 onClick={handleStopProjector}
               >
-                ⏹ Stop Projector
+                Stop Projector
               </button>
             )}
 
@@ -1269,7 +1543,7 @@ function ControlPanel() {
                 color: 'var(--color-warning)',
                 fontSize: '13px',
               }}>
-                ⚠️ No external display detected. Connect a projector/monitor and try again.
+                No external display detected. Connect a projector/monitor and try again.
               </div>
             )}
           </div>
@@ -1280,22 +1554,160 @@ function ControlPanel() {
               Type any text and click "Send to Projector".
             </p>
 
-            <textarea
-              className="text-editor__textarea"
-              placeholder="Type text to project..."
-              value={textContent}
-              onChange={(e) => setTextContent(e.target.value)}
+            <div
+              ref={textCanvasRef}
               style={{
-                fontFamily: textFontFamily,
-                color: textColor,
-                fontSize: `${Math.max(16, Math.min(96, textSizePx))}px`,
-                lineHeight: 1.5,
+                position: 'relative',
+                width: '100%',
+                aspectRatio: previewAspectRatio || '16 / 9',
+                border: '1px solid var(--color-border)',
+                borderRadius: '10px',
+                overflow: 'hidden',
+                background: '#000',
+                marginBottom: '10px',
               }}
-            />
+            >
+              {textBackground?.type === 'image' && textBackground?.path && (
+                <img
+                  src={getPreviewMediaUrl(textBackground.path)}
+                  alt="text-bg"
+                  style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: 1 }}
+                />
+              )}
+              {textBackground?.type === 'video' && textBackground?.path && (
+                <video
+                  src={getPreviewMediaUrl(textBackground.path)}
+                  autoPlay
+                  loop
+                  muted
+                  style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: 1 }}
+                />
+              )}
+              <div style={{ position: 'absolute', inset: 0, background: 'rgba(0, 0, 0, 0.22)', zIndex: 2 }} />
+              {textSnapGuide.vertical && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    bottom: 0,
+                    left: '50%',
+                    width: '1px',
+                    background: 'rgba(76, 201, 240, 0.95)',
+                    boxShadow: '0 0 8px rgba(76, 201, 240, 0.8)',
+                    zIndex: 4,
+                    pointerEvents: 'none',
+                  }}
+                />
+              )}
+              {textSnapGuide.horizontal && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    right: 0,
+                    top: '50%',
+                    height: '1px',
+                    background: 'rgba(76, 201, 240, 0.95)',
+                    boxShadow: '0 0 8px rgba(76, 201, 240, 0.8)',
+                    zIndex: 4,
+                    pointerEvents: 'none',
+                  }}
+                />
+              )}
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  zIndex: 5,
+                }}
+              >
+                <div
+                  ref={textLayerRef}
+                  style={{
+                    position: 'absolute',
+                    left: `${textLayout.xPercent}%`,
+                    top: `${textLayout.yPercent}%`,
+                    transform: `translate(-50%, -50%) scale(${textLayout.scale})`,
+                    transformOrigin: 'center center',
+                    width: '88%',
+                    maxWidth: '88%',
+                  }}
+                  onMouseDown={startTextDrag}
+                >
+                  <div
+                    onMouseDown={startTextDrag}
+                    title="Drag to move"
+                    style={{
+                      position: 'absolute',
+                      top: '-24px',
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      padding: '2px 10px',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      letterSpacing: '0.4px',
+                      borderRadius: '999px',
+                      border: '1px solid rgba(255,255,255,0.75)',
+                      background: 'rgba(76, 201, 240, 0.9)',
+                      color: '#0b1024',
+                      cursor: 'move',
+                      userSelect: 'none',
+                    }}
+                  >
+                    MOVE
+                  </div>
+                  <div
+                    ref={textEditableRef}
+                    contentEditable
+                    suppressContentEditableWarning
+                    spellCheck={false}
+                    onInput={(e) => setTextContent(e.currentTarget.innerText.replace(/\r/g, ''))}
+                    style={{
+                      width: '100%',
+                      minHeight: '56%',
+                      maxHeight: '86%',
+                      overflowY: 'auto',
+                      padding: '8px 6px',
+                      outline: 'none',
+                      border: '1px dashed rgba(255,255,255,0.28)',
+                      borderRadius: '8px',
+                      background: 'rgba(0,0,0,0.08)',
+                      fontFamily: textFontFamily,
+                      color: textColor,
+                      fontSize: `${textCanvasDisplayFontPx}px`,
+                      fontWeight: 700,
+                      lineHeight: 1.6,
+                      whiteSpace: 'pre-wrap',
+                      textAlign: 'center',
+                      direction: 'ltr',
+                      unicodeBidi: 'plaintext',
+                      writingMode: 'horizontal-tb',
+                      textShadow: '2px 2px 8px rgba(0, 0, 0, 0.85)',
+                    }}
+                  />
+                  <div
+                    onMouseDown={startTextResize}
+                    title="Drag to resize"
+                    style={{
+                      position: 'absolute',
+                      right: '-8px',
+                      bottom: '-8px',
+                      width: '14px',
+                      height: '14px',
+                      borderRadius: '3px',
+                      background: 'rgba(76, 201, 240, 0.95)',
+                      border: '1px solid rgba(255,255,255,0.8)',
+                      cursor: 'nwse-resize',
+                      boxShadow: '0 0 8px rgba(76, 201, 240, 0.6)',
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
 
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
               <button className="btn btn--ghost" onClick={() => handleOpenBackgroundPicker('text')}>
-                🎬 Pick Background from Media
+                Pick Background from Media
               </button>
               {textBackground && (
                 <button className="btn btn--ghost" onClick={() => setTextBackground(null)}>Clear Background</button>
@@ -1311,7 +1723,12 @@ function ControlPanel() {
                 <button
                   key={size}
                   className={`btn ${fontSize === size ? 'btn--primary' : 'btn--ghost'}`}
-                  onClick={() => setFontSize(size)}
+                  onClick={() => {
+                    setFontSize(size);
+                    if (size === 'small') setTextSizePx(48);
+                    else if (size === 'medium') setTextSizePx(72);
+                    else setTextSizePx(96);
+                  }}
                 >
                   {size === 'small' ? 'Small' : size === 'medium' ? 'Medium' : 'Large'}
                 </button>
@@ -1342,14 +1759,13 @@ function ControlPanel() {
                 title="Text Color"
               />
             </div>
-
             <button
               className="btn btn--success btn--lg"
               style={{ width: '100%' }}
               onClick={() => handleSendToProjector()}
               disabled={!textContent.trim()}
             >
-              📤 Send to Projector            </button>
+              Send to Projector            </button>
             <button
               className="btn btn--ghost"
               style={{ width: '100%' }}
@@ -1364,6 +1780,9 @@ function ControlPanel() {
           <BibleBrowser
             onProjectContent={handleProjectMedia}
             onQueueContent={handleAddBibleQueueItem}
+            onUpdateActiveQueueItem={handleUpdateActiveQueueItem}
+            activePreloadItem={activePreloadItem}
+            forceShowBibleCatalogToken={bibleCatalogOpenToken}
             onOpenBackgroundPicker={() => handleOpenBackgroundPicker('bible')}
             externalBackground={biblePickedBackground}
           />
@@ -1373,6 +1792,7 @@ function ControlPanel() {
           <SongManager
             onProjectContent={handleProjectMedia}
             onQueueContent={handleAddSongQueueItem}
+            onUpdateActiveQueueItem={handleUpdateActiveQueueItem}
             activePreloadItem={activePreloadItem}
             onOpenBackgroundPicker={() => handleOpenBackgroundPicker('songs')}
             externalBackground={songPickedBackground}
@@ -1385,6 +1805,7 @@ function ControlPanel() {
             onProjectMedia={handleProjectMedia}
             onAddPlaylist={handleAddPlaylistItem}
             activePreloadItem={activePreloadItem}
+            forceShowMediaHomeToken={mediaHomeOpenToken}
             backgroundPickerTarget={backgroundPickerTarget}
             onPickBackground={handlePickBackgroundFromMedia}
             onCancelBackgroundPick={handleCancelBackgroundPicker}
@@ -1397,7 +1818,7 @@ function ControlPanel() {
         <div className="preview-panel__title">Live Preview</div>
 
         {/* Projector Preview */}
-        <div className="preview-screen" style={{ aspectRatio: '16 / 9' }}>
+        <div ref={previewStageRef} className="preview-screen" style={{ aspectRatio: '16 / 9' }}>
           <span className="preview-screen__label">Projector Output</span>
           <div className="preview-screen__content">
             {previewSlide ? (
@@ -1406,7 +1827,7 @@ function ControlPanel() {
                   width: '100%',
                   height: '100%',
                   position: 'relative',
-                  textAlign: 'center',
+                  textAlign: previewSlide?.type === 'bible' ? 'left' : 'center',
                   overflow: 'hidden',
                   background: '#000',
                 }}
@@ -1447,15 +1868,27 @@ function ControlPanel() {
                   }}
                 >
                   {previewSlide.type === 'text' && (
-                    <div style={{
-                      fontSize: getPreviewTextSize(previewSlide, previewSlide.fontSize === 'large' ? 16 : previewSlide.fontSize === 'medium' ? 12 : 10),
-                      fontWeight: '700',
-                      color: previewSlide.textColor || '#fff',
-                      fontFamily: previewSlide.fontFamily || 'inherit',
-                      whiteSpace: 'pre-line',
-                      lineHeight: '1.6',
-                    }}>
-                      {previewSlide.text}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        left: `${Math.max(8, Math.min(92, Number(previewSlide?.textLayout?.xPercent ?? 50)))}%`,
+                        top: `${Math.max(10, Math.min(90, Number(previewSlide?.textLayout?.yPercent ?? 50)))}%`,
+                        transform: `translate(-50%, -50%) scale(${Math.max(0.5, Math.min(3.2, Number(previewSlide?.textLayout?.scale ?? 1)))})`,
+                        width: '88%',
+                        textAlign: 'center',
+                      }}
+                    >
+                      <div style={{
+                        fontSize: getPreviewTextSize(previewSlide, previewSlide.fontSize === 'large' ? 16 : previewSlide.fontSize === 'medium' ? 12 : 10),
+                        fontWeight: '700',
+                        color: previewSlide.textColor || '#fff',
+                        fontFamily: previewSlide.fontFamily || 'inherit',
+                        whiteSpace: 'pre-line',
+                        lineHeight: '1.6',
+                        textShadow: '1px 1px 4px rgba(0,0,0,0.8)',
+                      }}>
+                        {previewSlide.text}
+                      </div>
                     </div>
                   )}
                   {previewSlide.type === 'image' && (
@@ -1587,7 +2020,7 @@ function ControlPanel() {
                           borderRadius: '4px',
                         }}
                       >
-                        {previewSlide.name} · Page {previewSlide.page || 1}                      </div>
+                        {previewSlide.name} | Page {previewSlide.page || 1}                      </div>
                     </div>
                   )}
                   {previewSlide.type === 'bible' && (
@@ -1597,15 +2030,16 @@ function ControlPanel() {
                         inset: 0,
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'center',
+                        justifyContent: 'flex-start',
                         padding: '8px',
+                        width: '100%',
                         fontSize: getPreviewTextSize(previewSlide, previewSlide.fontSize === 'large' ? 14 : previewSlide.fontSize === 'medium' ? 11 : 9),
                         fontWeight: '600',
                         color: previewSlide.textColor || '#fff',
                         fontFamily: previewSlide.fontFamily || 'inherit',
                         whiteSpace: 'pre-line',
                         lineHeight: '1.6',
-                        textAlign: 'center',
+                        textAlign: 'left',
                       }}>
                         {previewSlide.text}
                       </div>
@@ -1618,7 +2052,7 @@ function ControlPanel() {
                         fontStyle: 'italic',
                         textShadow: '1px 1px 4px rgba(0,0,0,0.9)',
                       }}>
-                        — {previewSlide.reference}
+                        - {previewSlide.reference}
                       </div>
                     </div>
                   )}
@@ -1627,7 +2061,7 @@ function ControlPanel() {
                     {(previewSlide.songTitle || previewSlide.sectionTitle) && (
                       <div style={{ fontSize: '9px', color: 'var(--color-primary)', fontWeight: 'bold' }}>
                         {previewSlide.songTitle || ''}
-                        {previewSlide.songTitle && previewSlide.sectionTitle ? ' · ' : ''}
+                        {previewSlide.songTitle && previewSlide.sectionTitle ? ' | ' : ''}
                         {previewSlide.sectionTitle || ''}
                       </div>
                     )}
@@ -1995,7 +2429,7 @@ function ControlPanel() {
               EULA: {licenseStatus.hasAcceptedEula ? `Accepted (${licenseStatus.acceptedEulaAt || ''})` : 'Not accepted'}
             </div>
             <div style={{ fontSize: '12px', color: '#f6d365', marginBottom: '12px' }}>
-              Copyright Notice: 版权所有归 Aiden 所有；ChurchDisplay Pro 多伦多神召会活石堂版为赠与版（non-transferable gifted edition）。
+              Copyright Notice: {'\u7248\u6743\u6240\u6709\u5f52 Aiden \u6240\u6709\uff1bChurchDisplay Pro \u591a\u4f26\u591a\u795e\u53ec\u4f1a\u6d3b\u77f3\u5802\u7248\u4e3a\u8d60\u4e0e\u7248\uff08non-transferable gifted edition\uff09\u3002'}
             </div>
 
             <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
@@ -2048,10 +2482,36 @@ function ControlPanel() {
           </div>
         </div>
       )}
+      {toast && (
+        <div
+          style={{
+            position: 'fixed',
+            right: '16px',
+            bottom: '16px',
+            zIndex: 2100,
+            padding: '10px 12px',
+            borderRadius: '8px',
+            border: '1px solid rgba(255,255,255,0.16)',
+            background: toast.tone === 'success' ? 'rgba(16,185,129,0.18)' : 'rgba(59,130,246,0.18)',
+            color: '#eafaf3',
+            fontSize: '12px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.28)',
+            backdropFilter: 'blur(4px)',
+          }}
+        >
+          {toast.message}
+        </div>
+      )}
     </div>
   );
 }
 
 export default ControlPanel;
+
+
+
+
+
+
 
 

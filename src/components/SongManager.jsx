@@ -4,8 +4,17 @@ const TEXT_FONT_OPTIONS = ['Noto Sans SC', 'Microsoft YaHei', 'Arial', 'Times Ne
 
 /**
  * 诗歌歌词管理组件
- * 支持歌曲管理、分段编辑??段落??择投屏和歌词文件导?? */
-function SongManager({ onProjectContent, onQueueContent, activePreloadItem, onOpenBackgroundPicker, externalBackground, forceShowSongListToken }) {
+ * Supports song management, section editing, projection and lyrics import.
+ */
+function SongManager({
+  onProjectContent,
+  onQueueContent,
+  onUpdateActiveQueueItem,
+  activePreloadItem,
+  onOpenBackgroundPicker,
+  externalBackground,
+  forceShowSongListToken,
+}) {
   // 歌曲列表
   const [songs, setSongs] = useState([]);
   // current editing song
@@ -57,14 +66,14 @@ function SongManager({ onProjectContent, onQueueContent, activePreloadItem, onOp
     const lines = normalized.split('\n');
     const hasMarkers = lines.some((line) => /^\s*\[(V\d*|C|B|P|E)\]/i.test(line.trim()));
 
-    // 无标记模式：按空行自动分??
+    // No marker mode: split sections by blank lines.
     if (!hasMarkers) {
       const blocks = normalized
         .split(/\n\s*\n+/)
         .map((block) => block.split('\n').map((line) => line.trim()).filter(Boolean))
         .filter((block) => block.length > 0);
 
-      // 若没有空行导致只有一个大段，则按??4 行自动分段，便于点击投屏
+      // If only one large paragraph, auto-split every 4 lines for easier projection.
       if (blocks.length === 1 && blocks[0].length > 4) {
         const single = blocks[0];
         const autoBlocks = [];
@@ -85,7 +94,7 @@ function SongManager({ onProjectContent, onQueueContent, activePreloadItem, onOp
       }));
     }
 
-    // 标记模式：兼??[V1]/[C]/[B]/[P]/[E]
+    // Marker mode: supports [V1]/[C]/[B]/[P]/[E]
     const sections = [];
     let currentSection = { tag: '', title: 'Section 1', lines: [] };
 
@@ -181,8 +190,24 @@ function SongManager({ onProjectContent, onQueueContent, activePreloadItem, onOp
     setSelectedSong(null);
   };
 
+  const buildSelectedSongQueuePayload = useCallback((song, section = null, sectionIndex = null) => {
+    if (!song) return null;
+    return {
+      type: 'song',
+      songId: song.id,
+      songTitle: song.title,
+      background: songBackground ? {
+        type: songBackground.type,
+        path: songBackground.path,
+      } : null,
+      lastSectionIndex: Number.isFinite(sectionIndex) ? sectionIndex : null,
+      lastSectionTitle: section?.title || '',
+      lastSectionTag: section?.tag || '',
+    };
+  }, [songBackground]);
+
   // Project one section (lyrics text only)
-  const handleProjectSection = useCallback((section) => {
+  const handleProjectSection = useCallback((section, sectionIndex = null) => {
     const payload = {
       type: 'lyrics',
       text: section.lines.join('\n'),
@@ -197,7 +222,24 @@ function SongManager({ onProjectContent, onQueueContent, activePreloadItem, onOp
     }
     lastProjectedSectionRef.current = { section };
     onProjectContent(payload);
-  }, [fontSize, fontSizePx, fontFamily, textColor, onProjectContent, songBackground, isElectron]);
+    if (selectedSong && typeof onUpdateActiveQueueItem === 'function') {
+      const queuePayload = buildSelectedSongQueuePayload(selectedSong, section, sectionIndex);
+      if (queuePayload) {
+        onUpdateActiveQueueItem(queuePayload, `Song: ${selectedSong.title}`, 'songs');
+      }
+    }
+  }, [
+    fontSize,
+    fontSizePx,
+    fontFamily,
+    textColor,
+    onProjectContent,
+    songBackground,
+    isElectron,
+    selectedSong,
+    onUpdateActiveQueueItem,
+    buildSelectedSongQueuePayload,
+  ]);
 
   const handleQueueSong = useCallback((song) => {
     if (typeof onQueueContent !== 'function' || !song) return;
@@ -281,7 +323,16 @@ function SongManager({ onProjectContent, onQueueContent, activePreloadItem, onOp
         backgroundPath: nextSong.backgroundPath,
       });
     }
-  }, [selectedSong, isElectron]);
+    if (typeof onUpdateActiveQueueItem === 'function') {
+      const queuePayload = {
+        type: 'song',
+        songId: nextSong.id,
+        songTitle: nextSong.title,
+        background: bg ? { type: bg.type, path: bg.path } : null,
+      };
+      onUpdateActiveQueueItem(queuePayload, `Song: ${nextSong.title}`, 'songs');
+    }
+  }, [selectedSong, isElectron, onUpdateActiveQueueItem]);
 
   useEffect(() => {
     if (!externalBackground) return;
@@ -312,7 +363,7 @@ function SongManager({ onProjectContent, onQueueContent, activePreloadItem, onOp
     persistSelectedSongBackground,
   ]);
 
-  // 导入歌词文件（优??UTF-8，异常时回??? GB18030，避免乱码）
+  // Import lyrics file (try UTF-8 first; fallback to GB18030 to avoid mojibake).
   const handleImportFile = useCallback((event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -497,7 +548,7 @@ function SongManager({ onProjectContent, onQueueContent, activePreloadItem, onOp
           {sections.map((section, idx) => (
             <div
               key={idx}
-              onClick={() => handleProjectSection(section)}
+              onClick={() => handleProjectSection(section, idx)}
               style={{
                 cursor: 'pointer',
                 borderRadius: '10px',

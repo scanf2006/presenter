@@ -4,7 +4,15 @@
  * Bible browser component
  * Keeps Chinese Bible content and supports Chinese quick-index search.
  */
-function BibleBrowser({ onProjectContent, onQueueContent, onOpenBackgroundPicker, externalBackground }) {
+function BibleBrowser({
+  onProjectContent,
+  onQueueContent,
+  onUpdateActiveQueueItem,
+  onOpenBackgroundPicker,
+  externalBackground,
+  activePreloadItem,
+  forceShowBibleCatalogToken,
+}) {
   // 圣经版本
   const [version, setVersion] = useState('cuvs');
   // 书卷列表
@@ -27,6 +35,9 @@ function BibleBrowser({ onProjectContent, onQueueContent, onOpenBackgroundPicker
   const [fontSize, setFontSize] = useState('large');  // 投屏正文是否显示每节节号
   const [showVerseNumbers, setShowVerseNumbers] = useState(false);
   const [bibleBackground, setBibleBackground] = useState(null);
+  const [pendingPreloadSelection, setPendingPreloadSelection] = useState(null);
+  const [preloadFocusVerse, setPreloadFocusVerse] = useState(null);
+  const verseRowRefs = useRef(new Map());
 
   const isElectron = typeof window.churchDisplay !== 'undefined';
   const searchTimer = useRef(null);
@@ -87,6 +98,20 @@ function BibleBrowser({ onProjectContent, onQueueContent, onOpenBackgroundPicker
     return { bookSN, chapter, verse };
   }, []);
 
+  const normalizeBookName = useCallback((s) => String(s || '').replace(/\s+/g, '').toLowerCase(), []);
+
+  const parseReference = useCallback((ref) => {
+    if (typeof ref !== 'string') return null;
+    const m = ref.trim().match(/^(.*)\s+(\d+):(\d+)(?:-(\d+))?$/);
+    if (!m) return null;
+    const bookName = (m[1] || '').trim();
+    const chapter = Number(m[2]);
+    const fromVerse = Number(m[3]);
+    const toVerse = Number(m[4] || m[3]);
+    if (!bookName || !Number.isFinite(chapter) || !Number.isFinite(fromVerse) || !Number.isFinite(toVerse)) return null;
+    return { bookName, chapter, fromVerse, toVerse };
+  }, []);
+
   // 搜索处理
   const handleSearch = useCallback((query) => {
     setSearchQuery(query);
@@ -97,7 +122,7 @@ function BibleBrowser({ onProjectContent, onQueueContent, onOpenBackgroundPicker
       return;
     }
 
-    // 先尝试快速索�?
+    // Try quick index parsing first.
     const indexed = parseQuickIndex(query.trim());
     if (indexed) {
       const book = books.find(b => b.sn === indexed.bookSN);
@@ -152,7 +177,10 @@ function BibleBrowser({ onProjectContent, onQueueContent, onOpenBackgroundPicker
     if (isElectron && typeof window.churchDisplay?.sendToProjectorBackground === 'function') {
       window.churchDisplay.sendToProjectorBackground(bibleBackground || null);
     }
-  }, [buildSelectedPayload, onProjectContent, bibleBackground, isElectron]);
+    if (typeof onUpdateActiveQueueItem === 'function') {
+      onUpdateActiveQueueItem(payload, `📖 ${payload.reference}`, 'bible');
+    }
+  }, [buildSelectedPayload, onProjectContent, bibleBackground, isElectron, onUpdateActiveQueueItem]);
 
   const handleQueueSelected = useCallback(() => {
     if (typeof onQueueContent !== 'function') return;
@@ -163,17 +191,21 @@ function BibleBrowser({ onProjectContent, onQueueContent, onOpenBackgroundPicker
 
   // 投屏搜索结果中的某节经文
   const handleProjectSearchResult = useCallback((result) => {
-    onProjectContent({
+    const payload = {
       type: 'bible',
       text: showVerseNumbers ? `${result.verse} ${result.text}` : `${result.text}`,
       reference: `${result.fullName} ${result.chapter}:${result.verse}`,
       fontSize,
       background: bibleBackground,
-    });
+    };
+    onProjectContent(payload);
     if (isElectron && typeof window.churchDisplay?.sendToProjectorBackground === 'function') {
       window.churchDisplay.sendToProjectorBackground(bibleBackground || null);
     }
-  }, [fontSize, onProjectContent, bibleBackground, isElectron, showVerseNumbers]);
+    if (typeof onUpdateActiveQueueItem === 'function') {
+      onUpdateActiveQueueItem(payload, `📖 ${payload.reference}`, 'bible');
+    }
+  }, [fontSize, onProjectContent, bibleBackground, isElectron, showVerseNumbers, onUpdateActiveQueueItem]);
 
   const handleQueueSearchResult = useCallback((result) => {
     if (typeof onQueueContent !== 'function') return;
@@ -194,10 +226,84 @@ function BibleBrowser({ onProjectContent, onQueueContent, onOpenBackgroundPicker
   }, [bibleBackground]);
 
   useEffect(() => {
+    if (selectedVerses.length === 0 || typeof onUpdateActiveQueueItem !== 'function') return;
+    const payload = buildSelectedPayload();
+    if (!payload) return;
+    onUpdateActiveQueueItem(payload, `📖 ${payload.reference}`, 'bible');
+  }, [selectedVerses, buildSelectedPayload, onUpdateActiveQueueItem]);
+
+  useEffect(() => {
     if (externalBackground) {
       setBibleBackground(externalBackground);
     }
   }, [externalBackground?.path, externalBackground?.type]);
+
+  useEffect(() => {
+    if (!forceShowBibleCatalogToken) return;
+    setSearchQuery('');
+    setSearchResults([]);
+    setSelectedBook(null);
+    setSelectedChapter(null);
+    setVerses([]);
+    setSelectedVerses([]);
+    setPendingPreloadSelection(null);
+    setPreloadFocusVerse(null);
+  }, [forceShowBibleCatalogToken]);
+
+  useEffect(() => {
+    if (!activePreloadItem || activePreloadItem.type !== 'bible' || !activePreloadItem.payload) return;
+
+    const payload = activePreloadItem.payload;
+    if (payload.fontSize) setFontSize(payload.fontSize);
+    if (payload.background) setBibleBackground(payload.background);
+
+    const parsed = parseReference(payload.reference);
+    if (!parsed || books.length === 0) return;
+
+    const targetNorm = normalizeBookName(parsed.bookName);
+    const targetBook = books.find((b) => (
+      normalizeBookName(b.fullName) === targetNorm ||
+      normalizeBookName(b.shortName) === targetNorm
+    ));
+    if (!targetBook) return;
+
+    setSearchResults([]);
+    setSearchQuery('');
+    setSelectedBook(targetBook);
+    setSelectedChapter(parsed.chapter);
+    setPendingPreloadSelection({
+      chapter: parsed.chapter,
+      fromVerse: parsed.fromVerse,
+      toVerse: parsed.toVerse,
+      token: activePreloadItem.token || Date.now(),
+    });
+  }, [activePreloadItem?.token, books, normalizeBookName, parseReference]);
+
+  useEffect(() => {
+    if (!pendingPreloadSelection) return;
+    if (!selectedBook || !selectedChapter || !verses.length) return;
+    if (selectedChapter !== pendingPreloadSelection.chapter) return;
+
+    const selected = verses.filter((v) => (
+      v.verse >= pendingPreloadSelection.fromVerse &&
+      v.verse <= pendingPreloadSelection.toVerse
+    ));
+    if (selected.length > 0) {
+      setSelectedVerses(selected);
+      setPreloadFocusVerse(selected[0].verse);
+    }
+    setPendingPreloadSelection(null);
+  }, [pendingPreloadSelection, selectedBook, selectedChapter, verses]);
+
+  useEffect(() => {
+    if (!preloadFocusVerse) return;
+    const el = verseRowRefs.current.get(preloadFocusVerse);
+    if (el && typeof el.scrollIntoView === 'function') {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    const t = setTimeout(() => setPreloadFocusVerse(null), 1200);
+    return () => clearTimeout(t);
+  }, [preloadFocusVerse, verses]);
 
   // 旧约/新约书卷分组
   const oldTestament = books.filter(b => !b.isNewTestament);
@@ -426,16 +532,23 @@ function BibleBrowser({ onProjectContent, onQueueContent, onOpenBackgroundPicker
               <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
                 {verses.map(v => {
                   const isSelected = selectedVerses.some(sv => sv.verse === v.verse);
+                  const isFocusedFromQueue = preloadFocusVerse === v.verse;
                   return (
                     <div
                       key={v.verse}
+                      ref={(el) => {
+                        if (el) verseRowRefs.current.set(v.verse, el);
+                        else verseRowRefs.current.delete(v.verse);
+                      }}
                       onClick={() => toggleVerse(v)}
                       style={{
                         padding: '10px 12px', marginBottom: '4px', cursor: 'pointer',
                         background: isSelected ? 'rgba(99,102,241,0.15)' : 'transparent',
-                        border: isSelected ? '1px solid var(--color-primary)' : '1px solid transparent',
+                        border: isSelected
+                          ? (isFocusedFromQueue ? '2px solid #ff4d4f' : '1px solid var(--color-primary)')
+                          : '1px solid transparent',
                         borderRadius: '6px', fontSize: '14px', lineHeight: '1.6',
-                        transition: 'all 0.15s',
+                        transition: 'all 0.18s',
                       }}
                     >
                       <span style={{ color: 'var(--color-primary)', fontWeight: 'bold', marginRight: '6px', fontSize: '12px' }}>

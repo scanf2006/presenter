@@ -1,7 +1,7 @@
 {
   "name": "churchdisplay-pro",
-  "version": "0.3.1",
-  "description": "教会敬拜投屏软件 - 多屏幕投影控制系统",
+  "version": "0.3.18",
+  "description": "ChurchDisplay Pro - Worship projection system",
   "main": "electron/main.js",
   "build": {
     "appId": "com.aiden.churchdisplaypro",
@@ -66,3 +66,9 @@
     "wait-on": "^8.0.1"
   }
 }
+
+
+
+
+
+
