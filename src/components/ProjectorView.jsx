@@ -231,6 +231,12 @@ function ProjectorView() {
 
   const effectiveMedia = standaloneMedia || (backgroundMedia ? { ...backgroundMedia, standalone: false } : null);
   const isTextualContent = content && (content.type === 'text' || content.type === 'bible' || content.type === 'lyrics');
+  const isFreeText = content?.type === 'text';
+  const textLayout = {
+    xPercent: Math.max(8, Math.min(92, Number(content?.textLayout?.xPercent ?? 50))),
+    yPercent: Math.max(10, Math.min(90, Number(content?.textLayout?.yPercent ?? 50))),
+    scale: Math.max(0.5, Math.min(3.2, Number(content?.textLayout?.scale ?? 1))),
+  };
   const rightPanePercent = Math.max(20, Math.min(40, Number(sceneConfig.cameraPanePercent || 30)));
   const rightCameraScale = Math.max(1, Number(sceneConfig.cameraCenterCropPercent || 100) / 100);
   const splitEnabled = false;
@@ -530,9 +536,9 @@ function ProjectorView() {
           style={{
             ...contentStageStyle,
             zIndex: 10,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+            display: isFreeText ? 'block' : 'flex',
+            alignItems: isFreeText ? undefined : 'center',
+            justifyContent: isFreeText ? undefined : 'center',
             padding: 'clamp(24px, 5vh, 72px) clamp(28px, 6vw, 120px)',
             pointerEvents: 'none',
           }}
@@ -541,7 +547,12 @@ function ProjectorView() {
             className={`projector-view__content ${fadeClass}`}
             style={{
               width: '88%',
-              textAlign: 'center',
+              position: isFreeText ? 'absolute' : 'relative',
+              left: isFreeText ? `${textLayout.xPercent}%` : undefined,
+              top: isFreeText ? `${textLayout.yPercent}%` : undefined,
+              transform: isFreeText ? `translate(-50%, -50%) scale(${textLayout.scale})` : undefined,
+              transformOrigin: isFreeText ? 'center center' : undefined,
+              textAlign: content.type === 'bible' ? 'left' : 'center',
               ...fadeAnimationStyle,
             }}
           >
@@ -549,7 +560,7 @@ function ProjectorView() {
               className={`projector-text ${getTextSizeClass()}`}
               style={{
                 whiteSpace: 'pre-line',
-                textAlign: 'center',
+                textAlign: content.type === 'bible' ? 'left' : 'center',
                 lineHeight: '1.6',
                 textShadow: '3px 3px 10px rgba(0, 0, 0, 0.9)',
                 color: content.textColor || '#ffffff',

@@ -420,6 +420,9 @@ async function downloadWithYtDlp(url, outputPath) {
 // 窗口引用
 let controlWindow = null;   // 控制台窗口
 let projectorWindow = null;  // 投影窗口
+let splashWindow = null;
+let controlWindowShown = false;
+let splashOpenedAt = 0;
 let projectorExternalMode = false;
 let projectorPendingPayload = null;
 let latestProjectorScene = {
@@ -440,6 +443,51 @@ function forceWindowZoom100(win) {
   try {
     win.webContents.setVisualZoomLevelLimits(1, 1);
   } catch (_) {}
+}
+
+function createSplashWindow() {
+  if (splashWindow && !splashWindow.isDestroyed()) return;
+  const primaryDisplay = ScreenManager.getPrimaryDisplay();
+  splashWindow = new BrowserWindow({
+    width: 760,
+    height: 440,
+    x: primaryDisplay.workArea.x + Math.max(0, Math.floor((primaryDisplay.workArea.width - 760) / 2)),
+    y: primaryDisplay.workArea.y + Math.max(0, Math.floor((primaryDisplay.workArea.height - 440) / 2)),
+    frame: false,
+    transparent: true,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    show: false,
+    backgroundColor: '#00000000',
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+    },
+  });
+  splashWindow.setMenuBarVisibility(false);
+  splashWindow.loadFile(path.join(__dirname, 'splash.html'));
+  splashWindow.once('ready-to-show', () => {
+    splashOpenedAt = Date.now();
+    splashWindow?.show();
+  });
+}
+
+function closeSplashWindow() {
+  if (!splashWindow || splashWindow.isDestroyed()) return;
+  splashWindow.close();
+  splashWindow = null;
+}
+
+function revealControlWindow() {
+  if (!controlWindow || controlWindow.isDestroyed() || controlWindowShown) return;
+  controlWindowShown = true;
+  closeSplashWindow();
+  controlWindow.show();
+  controlWindow.focus();
 }
 
 function getRuntimePptConvertScriptPath() {
@@ -773,6 +821,7 @@ function createControlWindow() {
     y: primaryDisplay.workArea.y + 50,
     title: 'ChurchDisplay Pro (此版本为多伦多神召会活石堂特供--版权属于Aiden所有scanf2006@gmail.com)',
     frame: false,
+    show: false,
     backgroundColor: '#0a0a0f',
     webPreferences: {
       nodeIntegration: false,
@@ -795,6 +844,12 @@ function createControlWindow() {
   controlWindow.webContents.on('did-finish-load', () => {
     forceWindowZoom100(controlWindow);
   });
+  controlWindow.once('ready-to-show', () => {
+    const elapsed = splashOpenedAt > 0 ? (Date.now() - splashOpenedAt) : 0;
+    const minDuration = 2600;
+    const delay = Math.max(0, minDuration - elapsed);
+    setTimeout(() => revealControlWindow(), delay);
+  });
 
   controlWindow.on('close', (event) => {
     if (allowControlWindowClose) return;
@@ -809,8 +864,10 @@ function createControlWindow() {
   controlWindow.on('closed', () => {
     allowControlWindowClose = false;
     controlWindow = null;
+    controlWindowShown = false;
     // 关闭控制台时同时关闭投影窗口
     forceCloseProjectorWindow('control-window-closed');
+    closeSplashWindow();
   });
 }
 
@@ -1876,6 +1933,7 @@ app.whenReady().then(async () => {
 
   setupIPC();
   setupBibleIPC();
+  createSplashWindow();
   createControlWindow();
   watchDisplayChanges();
 });
