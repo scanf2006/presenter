@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import PdfThumbnail from './PdfThumbnail';
+import { getYouTubeVideoIdFromUrl, normalizeYouTubeWatchUrl } from '../utils/youtube';
 
 function MediaManager({
   onProjectMedia,
@@ -16,7 +17,7 @@ function MediaManager({
   const [importing, setImporting] = useState(false);
   const [pptConverting, setPptConverting] = useState(false);
   const [pptSlides, setPptSlides] = useState(null);
-  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+  const [currentSlideIndex, setCurrentSlideIndex] = useState(-1);
 
   const [pdfLoading, setPdfLoading] = useState(false);
   const [activePdf, setActivePdf] = useState(null);
@@ -136,14 +137,7 @@ function MediaManager({
 
     if (result.success && result.slides.length > 0) {
       setPptSlides(result.slides);
-      setCurrentSlideIndex(0);
-      if (!file.deferProject) {
-        onProjectMedia({
-          type: 'image',
-          path: result.slides[0].path,
-          name: `${file.name} - Page 1`,
-        });
-      }
+      setCurrentSlideIndex(-1);
       return;
     }
 
@@ -176,23 +170,8 @@ function MediaManager({
   }, [backgroundPickerTarget, onPickBackground, onProjectMedia, handleLoadPdfGrid, handleConvertPpt]);
 
   const parseYouTubeId = useCallback((url) => {
-    if (!url) return null;
-    const input = url.trim();
-    try {
-      const u = new URL(input);
-      if (u.hostname.includes('youtu.be')) {
-        return u.pathname.replace('/', '').trim() || null;
-      }
-      if (u.hostname.includes('youtube.com')) {
-        if (u.pathname.startsWith('/watch')) return u.searchParams.get('v');
-        if (u.pathname.startsWith('/shorts/')) return u.pathname.split('/')[2] || null;
-        if (u.pathname.startsWith('/embed/')) return u.pathname.split('/')[2] || null;
-      }
-    } catch (_) {
-      const match = input.match(/(?:v=|youtu\.be\/|shorts\/|embed\/)([A-Za-z0-9_-]{11})/);
-      return match ? match[1] : null;
-    }
-    return null;
+    const id = getYouTubeVideoIdFromUrl(url);
+    return id || null;
   }, []);
 
   const handleProjectYouTube = useCallback(() => {
@@ -204,7 +183,7 @@ function MediaManager({
     onProjectMedia({
       type: 'youtube',
       videoId: id,
-      url: youtubeUrl.trim(),
+      url: normalizeYouTubeWatchUrl(youtubeUrl) || youtubeUrl.trim(),
       name: `YouTube - ${id}`,
     });
   }, [youtubeUrl, parseYouTubeId, onProjectMedia]);
@@ -222,7 +201,7 @@ function MediaManager({
         payload: {
           type: 'youtube',
           videoId: id,
-          url: youtubeUrl.trim(),
+          url: normalizeYouTubeWatchUrl(youtubeUrl) || youtubeUrl.trim(),
           name: `YouTube - ${id}`,
         },
       });
@@ -251,7 +230,7 @@ function MediaManager({
     setPdfLoading(false);
     setPptSlides(null);
     setActivePdf(null);
-    setCurrentSlideIndex(0);
+    setCurrentSlideIndex(-1);
     setCurrentPdfPage(1);
     setActiveFilter('all');
   }, [forceShowMediaHomeToken]);
@@ -456,7 +435,7 @@ function MediaManager({
         <div className="media-slide-selector" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <h3 style={{ fontSize: '15px', fontWeight: 'bold' }}>
-              PPT Slides <span style={{ color: 'var(--color-text-secondary)', fontSize: '13px', fontWeight: 'normal' }}>({currentSlideIndex + 1} / {pptSlides.length})</span>
+              PPT Slides <span style={{ color: 'var(--color-text-secondary)', fontSize: '13px', fontWeight: 'normal' }}>({currentSlideIndex >= 0 ? currentSlideIndex + 1 : '-'} / {pptSlides.length})</span>
             </h3>
             <button className="btn btn--ghost" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => setPptSlides(null)}>Close</button>
           </div>
@@ -466,18 +445,42 @@ function MediaManager({
                 key={slide.path}
                 onClick={() => {
                   setCurrentSlideIndex(index);
-                  onProjectMedia({ type: 'image', path: slide.path, name: `PPT - Page ${index + 1}` });
+                  onProjectMedia({ type: 'image', path: slide.path, name: `PPT - Page ${index + 1}`, fitMode: 'contain' });
                 }}
                 style={{
                   cursor: 'pointer',
-                  border: currentSlideIndex === index ? '2px solid var(--color-primary)' : '2px solid transparent',
+                  border: currentSlideIndex === index ? '3px solid #ff4d4f' : '2px solid transparent',
                   borderRadius: '6px',
                   overflow: 'hidden',
                   position: 'relative',
                   backgroundColor: '#000',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                  boxShadow: currentSlideIndex === index
+                    ? '0 0 0 2px rgba(255,77,79,0.28), 0 4px 16px rgba(255,77,79,0.35)'
+                    : '0 2px 8px rgba(0,0,0,0.2)',
+                  transform: currentSlideIndex === index ? 'scale(1.01)' : 'scale(1)',
+                  transition: 'all 0.16s ease',
                 }}
               >
+                {currentSlideIndex === index && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 6,
+                      left: 6,
+                      zIndex: 2,
+                      background: 'rgba(255,77,79,0.92)',
+                      color: '#fff',
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      letterSpacing: '0.4px',
+                      padding: '2px 7px',
+                      borderRadius: '999px',
+                      border: '1px solid rgba(255,255,255,0.75)',
+                    }}
+                  >
+                    SELECTED
+                  </div>
+                )}
                 <img src={`local-media://${encodeURIComponent(slide.path)}`} alt={`Slide ${index + 1}`} style={{ width: '100%', display: 'block', aspectRatio: '16/9', objectFit: 'contain' }} />
                 <div style={{ position: 'absolute', bottom: 0, right: 0, background: currentSlideIndex === index ? 'var(--color-primary)' : 'rgba(0,0,0,0.7)', color: '#fff', fontSize: '12px', fontWeight: 'bold', padding: '2px 8px', borderTopLeftRadius: '6px' }}>
                   {index + 1}

@@ -1,0 +1,78 @@
+const fs = require('fs');
+const path = require('path');
+
+function createDatabaseStore() {
+  let bibleDbCuvs = null;
+  let bibleDbKjv = null;
+  let songsDb = null;
+
+  return {
+    setBibleDbCuvs(db) { bibleDbCuvs = db; },
+    setBibleDbKjv(db) { bibleDbKjv = db; },
+    setSongsDb(db) { songsDb = db; },
+    getBibleDb(version) { return version === 'kjv' ? bibleDbKjv : bibleDbCuvs; },
+    getSongsDb() { return songsDb; },
+    saveSongsDb(userDataDir) {
+      if (!songsDb) return;
+      const data = songsDb.export();
+      const songsPath = path.join(userDataDir, 'songs.db');
+      fs.writeFileSync(songsPath, Buffer.from(data));
+    },
+  };
+}
+
+async function initBibleAndSongsDatabases({
+  initSqlJs,
+  userDataDir,
+  dataDir,
+  dbStore,
+  logger = console,
+}) {
+  const SQL = await initSqlJs();
+
+  const cuvsPath = path.join(dataDir, 'bible_cuvs.db');
+  if (fs.existsSync(cuvsPath)) {
+    const data = fs.readFileSync(cuvsPath);
+    dbStore.setBibleDbCuvs(new SQL.Database(data));
+    logger.log('[BibleDB] Chinese CUVS loaded');
+  }
+
+  const kjvPath = path.join(dataDir, 'bible_kjv.db');
+  if (fs.existsSync(kjvPath)) {
+    const data = fs.readFileSync(kjvPath);
+    dbStore.setBibleDbKjv(new SQL.Database(data));
+    logger.log('[BibleDB] English KJV loaded');
+  }
+
+  const songsPath = path.join(userDataDir, 'songs.db');
+  if (fs.existsSync(songsPath)) {
+    const data = fs.readFileSync(songsPath);
+    dbStore.setSongsDb(new SQL.Database(data));
+  } else {
+    dbStore.setSongsDb(new SQL.Database());
+  }
+
+  const songsDb = dbStore.getSongsDb();
+  songsDb.run(`CREATE TABLE IF NOT EXISTS songs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    author TEXT DEFAULT '',
+    lyrics TEXT NOT NULL,
+    background_type TEXT DEFAULT '',
+    background_path TEXT DEFAULT '',
+    created_at INTEGER DEFAULT (strftime('%s','now')),
+    updated_at INTEGER DEFAULT (strftime('%s','now'))
+  )`);
+  try {
+    songsDb.run(`ALTER TABLE songs ADD COLUMN background_type TEXT DEFAULT ''`);
+  } catch (_) {}
+  try {
+    songsDb.run(`ALTER TABLE songs ADD COLUMN background_path TEXT DEFAULT ''`);
+  } catch (_) {}
+  logger.log('[SongsDB] Songs database initialized');
+}
+
+module.exports = {
+  createDatabaseStore,
+  initBibleAndSongsDatabases,
+};
