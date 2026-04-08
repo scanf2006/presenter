@@ -231,6 +231,8 @@ function ProjectorView() {
 
   const effectiveMedia = standaloneMedia || (backgroundMedia ? { ...backgroundMedia, standalone: false } : null);
   const isTextualContent = content && (content.type === 'text' || content.type === 'bible' || content.type === 'lyrics');
+  const hasVideoBackgroundForText = Boolean(isTextualContent && effectiveMedia?.type === 'video' && !effectiveMedia?.standalone);
+  const textOverlayOpacity = hasVideoBackgroundForText ? 0 : adaptiveOverlayOpacity;
   const isFreeText = content?.type === 'text';
   const textLayout = {
     xPercent: Math.max(8, Math.min(92, Number(content?.textLayout?.xPercent ?? 50))),
@@ -367,23 +369,9 @@ function ProjectorView() {
     }
 
     if (effectiveMedia.type === 'video') {
-      const sampleFrame = () => {
-        const v = mediaSampleVideoRef.current;
-        if (!v || v.readyState < 2 || !v.videoWidth || !v.videoHeight) return;
-        const luma = sampleAverageLuma(v, v.videoWidth, v.videoHeight);
-        if (Number.isFinite(luma)) {
-          setAdaptiveOverlayOpacity(lumaToOverlay(luma));
-        }
-      };
-
-      sampleFrame();
-      sampleIntervalRef.current = setInterval(sampleFrame, 1200);
-      return () => {
-        if (sampleIntervalRef.current) {
-          clearInterval(sampleIntervalRef.current);
-          sampleIntervalRef.current = null;
-        }
-      };
+      // Keep video backgrounds bright when text overlays are active.
+      setAdaptiveOverlayOpacity(0);
+      return;
     }
   }, [isTextualContent, effectiveMedia?.type, effectiveMedia?.path]);
 
@@ -394,7 +382,7 @@ function ProjectorView() {
   const fullScreenMediaStyle = {
     width: '100%',
     height: '100%',
-    objectFit: 'cover',
+    objectFit: (content?.fitMode || effectiveMedia?.fitMode) === 'contain' ? 'contain' : 'cover',
     objectPosition: 'center center',
     display: 'block',
     borderRadius: 0,
@@ -486,7 +474,7 @@ function ProjectorView() {
         <div
           style={{
             ...contentStageStyle,
-            background: `rgba(0, 0, 0, ${adaptiveOverlayOpacity})`,
+            background: `rgba(0, 0, 0, ${textOverlayOpacity})`,
             zIndex: 2,
             pointerEvents: 'none',
             transition: 'background 300ms ease',

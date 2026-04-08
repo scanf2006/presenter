@@ -3,3 +3,6 @@ dist/
 dist-electron/
 *.log
 .DS_Store
+tmp-yt-dlp.exe
+tmpasar/
+app.log

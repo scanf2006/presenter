@@ -1,0 +1,78 @@
+const { buildIpcRegistrationOptions } = require('./ipc-runtime');
+const { buildMainIpcDeps } = require('./ipc-deps-factory');
+const { registerIpcFromRuntime } = require('./ipc-bootstrap');
+const { createSetupIpcRuntime } = require('./ipc-setup-runtime');
+
+function createMainSetupIpc({
+  registerAllIPC,
+  ipcMain,
+  screenManager,
+  createProjectorWindow,
+  projectorRecoveryBridge,
+  projectorControlBridge,
+  getControlWindow,
+  getProjectorWindow,
+  appendBgDebug,
+  projectorSceneState,
+  resolveYouTubeStream,
+  sanitizeMediaFileName,
+  mediaState,
+  downloadService,
+  ytdlpService,
+  verifyLicenseToken,
+  licenseRuntime,
+  readLegalDocument,
+  dialog,
+  resolveAbsolutePath,
+  normalizeForCompare,
+  isPathWithinRoot,
+  pptConvertTimeoutMs,
+  resolveRuntimePptConvertScriptPath,
+  app,
+  electronDir,
+  processResourcesPath,
+  formatBackupStamp,
+  collectReferencedMediaPathsFromQueue,
+  copyDirectoryMerge,
+}) {
+  return createSetupIpcRuntime({
+    registerIpcFromRuntime,
+    buildIpcRegistrationOptions,
+    registerAllIPC,
+    depsFactory: () => buildMainIpcDeps({
+      ipcMain,
+      screenManager,
+      createProjectorWindow,
+      projectorRecoveryBridge,
+      projectorControlBridge,
+      getControlWindow,
+      getProjectorWindow,
+      appendBgDebug,
+      projectorSceneState,
+      resolveYouTubeStream,
+      sanitizeMediaFileName,
+      mediaState,
+      downloadService,
+      ytdlpService,
+      verifyLicenseToken,
+      licenseRuntime,
+      readLegalDocument,
+      dialog,
+      resolveAbsolutePath,
+      normalizeForCompare,
+      isPathWithinRoot,
+      pptConvertTimeoutMs,
+      resolveRuntimePptConvertScriptPath,
+      app,
+      electronDir,
+      processResourcesPath,
+      formatBackupStamp,
+      collectReferencedMediaPathsFromQueue,
+      copyDirectoryMerge,
+    }),
+  });
+}
+
+module.exports = {
+  createMainSetupIpc,
+};

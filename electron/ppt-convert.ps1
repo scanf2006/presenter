@@ -1,54 +1,63 @@
-# ChurchDisplay Pro - PPT 转图片脚本
-param([Parameter(Mandatory=$true)][string]$PptPath, [Parameter(Mandatory=$true)][string]$OutputDir)
+﻿param(
+    [Parameter(Mandatory=$true)][string]$PptPath,
+    [Parameter(Mandatory=$true)][string]$OutputDir
+)
 
-trap { Write-Error "PPT 转换失败: $_"; try { if ($presentation) { $presentation.Close() }; if ($ppt) { $ppt.Quit() } } catch {}; exit 1 }
+$ErrorActionPreference = 'Stop'
 
-# 检查文件是否存在
-if (-not (Test-Path $PptPath)) {
-    Write-Error "文件不存在: $PptPath"
-    exit 1
+function Cleanup-PowerPoint {
+    param(
+        [object]$Presentation,
+        [object]$PptApp
+    )
+    try { if ($Presentation) { $Presentation.Close() } } catch {}
+    try { if ($PptApp) { $PptApp.Quit() } } catch {}
+    try {
+        if ($Presentation) { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($Presentation) }
+        if ($PptApp) { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($PptApp) }
+    } catch {}
+    [GC]::Collect()
+    [GC]::WaitForPendingFinalizers()
 }
 
-# 创建输出目录
-if (-not (Test-Path $OutputDir)) {
+if (-not (Test-Path -LiteralPath $PptPath)) {
+    throw "PPT file not found: $PptPath"
+}
+
+if (-not (Test-Path -LiteralPath $OutputDir)) {
     New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
 }
 
-# 启动 PowerPoint COM 对象
-Write-Output "正在启动 PowerPoint..."
-$ppt = New-Object -ComObject PowerPoint.Application
-$ppt.Visible = [Microsoft.Office.Core.MsoTriState]::msoTrue
+$ppt = $null
+$presentation = $null
 
-# 禁用所有弹窗警告，防止卡死
 try {
-    $ppt.DisplayAlerts = 1 # ppAlertsNone
-} catch {
-    Write-Output "警告：未能配置 DisplayAlerts"
+    $ppt = New-Object -ComObject PowerPoint.Application
+    $ppt.Visible = [Microsoft.Office.Core.MsoTriState]::msoTrue
+    try { $ppt.DisplayAlerts = 1 } catch {}
+
+    $presentation = $ppt.Presentations.Open(
+        $PptPath,
+        [Microsoft.Office.Core.MsoTriState]::msoTrue,
+        [Microsoft.Office.Core.MsoTriState]::msoFalse,
+        [Microsoft.Office.Core.MsoTriState]::msoFalse
+    )
+
+    $slideCount = $presentation.Slides.Count
+    for ($i = 1; $i -le $slideCount; $i++) {
+        $slide = $presentation.Slides.Item($i)
+        $outputFile = Join-Path $OutputDir ("slide_{0:D3}.png" -f $i)
+        $slide.Export($outputFile, 'PNG', 1920, 1080)
+        Write-Output "Exported: $outputFile"
+    }
+
+    Write-Output "DONE: $slideCount slides exported"
+    exit 0
 }
-
-# 打开演示文稿
-Write-Output "正在打开文件: $PptPath"
-$presentation = $ppt.Presentations.Open($PptPath, [Microsoft.Office.Core.MsoTriState]::msoTrue, [Microsoft.Office.Core.MsoTriState]::msoFalse, [Microsoft.Office.Core.MsoTriState]::msoFalse)
-
-# 导出每一张幻灯片为 PNG
-$slideCount = $presentation.Slides.Count
-Write-Output "共 $slideCount 张幻灯片"
-
-for ($i = 1; $i -le $slideCount; $i++) {
-    $slide = $presentation.Slides.Item($i)
-    $outputFile = Join-Path $OutputDir ("slide_{0:D3}.png" -f $i)
-    $slide.Export($outputFile, "PNG", 1920, 1080)
-    Write-Output "已导出: slide_$('{0:D3}' -f $i).png"
+catch {
+    Write-Error "PPT conversion failed: $($_.Exception.Message)"
+    exit 1
 }
-
-# 关闭演示文稿和 PowerPoint
-$presentation.Close()
-$ppt.Quit()
-
-# 释放 COM 对象
-[System.Runtime.InteropServices.Marshal]::ReleaseComObject($presentation) | Out-Null
-[System.Runtime.InteropServices.Marshal]::ReleaseComObject($ppt) | Out-Null
-[System.GC]::Collect() | Out-Null
-
-Write-Output "PPT 转换完成，共导出 $slideCount 张图片到: $OutputDir"
-exit 0
+finally {
+    Cleanup-PowerPoint -Presentation $presentation -PptApp $ppt
+}
