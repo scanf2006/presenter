@@ -61,7 +61,8 @@ function ProjectorView() {
         ...prev,
         mode: nextMode,
         splitDirection: data?.splitDirection || prev.splitDirection,
-        cameraDeviceId: typeof data?.cameraDeviceId === 'string' ? data.cameraDeviceId : prev.cameraDeviceId,
+        cameraDeviceId:
+          typeof data?.cameraDeviceId === 'string' ? data.cameraDeviceId : prev.cameraDeviceId,
         cameraPanePercent: Number.isFinite(data?.cameraPanePercent)
           ? Math.max(20, Math.min(40, Number(data.cameraPanePercent)))
           : prev.cameraPanePercent,
@@ -173,9 +174,10 @@ function ProjectorView() {
     v.defaultMuted = true;
     v.muted = true;
     v.volume = 1;
+    let unmuteTimer = null;
     v.play()
       .then(() => {
-        setTimeout(() => {
+        unmuteTimer = setTimeout(() => {
           v.muted = false;
           v.defaultMuted = false;
           v.volume = 1;
@@ -184,6 +186,9 @@ function ProjectorView() {
       .catch((err) => {
         console.error('[ProjectorView] video play failed:', err);
       });
+    return () => {
+      if (unmuteTimer != null) clearTimeout(unmuteTimer);
+    };
   }, [content]);
 
   const getTextSizeClass = () => {
@@ -218,20 +223,20 @@ function ProjectorView() {
   };
 
   const backgroundMedia =
-    content?.background ||
-    content?.payload?.background ||
-    content?.bg ||
-    backgroundContent ||
-    null;
+    content?.background || content?.payload?.background || content?.bg || backgroundContent || null;
 
   const standaloneMedia =
     (content?.type === 'image' || content?.type === 'video') && content?.path
       ? { type: content.type, path: content.path, standalone: true }
       : null;
 
-  const effectiveMedia = standaloneMedia || (backgroundMedia ? { ...backgroundMedia, standalone: false } : null);
-  const isTextualContent = content && (content.type === 'text' || content.type === 'bible' || content.type === 'lyrics');
-  const hasVideoBackgroundForText = Boolean(isTextualContent && effectiveMedia?.type === 'video' && !effectiveMedia?.standalone);
+  const effectiveMedia =
+    standaloneMedia || (backgroundMedia ? { ...backgroundMedia, standalone: false } : null);
+  const isTextualContent =
+    content && (content.type === 'text' || content.type === 'bible' || content.type === 'lyrics');
+  const hasVideoBackgroundForText = Boolean(
+    isTextualContent && effectiveMedia?.type === 'video' && !effectiveMedia?.standalone
+  );
   const textOverlayOpacity = hasVideoBackgroundForText ? 0 : adaptiveOverlayOpacity;
   const isFreeText = content?.type === 'text';
   const textLayout = {
@@ -358,14 +363,24 @@ function ProjectorView() {
     }
 
     if (effectiveMedia.type === 'image' && effectiveMedia.path) {
+      let cancelled = false;
       const img = new Image();
       img.onload = () => {
+        if (cancelled) return;
         const luma = sampleAverageLuma(img, img.naturalWidth, img.naturalHeight);
         setAdaptiveOverlayOpacity(lumaToOverlay(luma));
       };
-      img.onerror = () => setAdaptiveOverlayOpacity(0.1);
+      img.onerror = () => {
+        if (cancelled) return;
+        setAdaptiveOverlayOpacity(0.1);
+      };
       img.src = getMediaUrl(effectiveMedia.path);
-      return;
+      return () => {
+        cancelled = true;
+        img.onload = null;
+        img.onerror = null;
+        img.src = '';
+      };
     }
 
     if (effectiveMedia.type === 'video') {
@@ -444,7 +459,8 @@ function ProjectorView() {
               if (!effectiveMedia.standalone) return;
               videoEl.muted = true;
               videoEl.volume = 1;
-              videoEl.play()
+              videoEl
+                .play()
                 .then(() => {
                   setTimeout(() => {
                     videoEl.muted = false;
@@ -519,66 +535,72 @@ function ProjectorView() {
         </div>
       )}
 
-      {!isBlackout && content && (content.type === 'text' || content.type === 'bible' || content.type === 'lyrics') && (
-        <div
-          style={{
-            ...contentStageStyle,
-            zIndex: 10,
-            display: isFreeText ? 'block' : 'flex',
-            alignItems: isFreeText ? undefined : 'center',
-            justifyContent: isFreeText ? undefined : 'center',
-            padding: 'clamp(24px, 5vh, 72px) clamp(28px, 6vw, 120px)',
-            pointerEvents: 'none',
-          }}
-        >
+      {!isBlackout &&
+        content &&
+        (content.type === 'text' || content.type === 'bible' || content.type === 'lyrics') && (
           <div
-            className={`projector-view__content ${fadeClass}`}
             style={{
-              width: '88%',
-              position: isFreeText ? 'absolute' : 'relative',
-              left: isFreeText ? `${textLayout.xPercent}%` : undefined,
-              top: isFreeText ? `${textLayout.yPercent}%` : undefined,
-              transform: isFreeText ? `translate(-50%, -50%) scale(${textLayout.scale})` : undefined,
-              transformOrigin: isFreeText ? 'center center' : undefined,
-              textAlign: content.type === 'bible' ? 'left' : 'center',
-              ...fadeAnimationStyle,
+              ...contentStageStyle,
+              zIndex: 10,
+              display: isFreeText ? 'block' : 'flex',
+              alignItems: isFreeText ? undefined : 'center',
+              justifyContent: isFreeText ? undefined : 'center',
+              padding: 'clamp(24px, 5vh, 72px) clamp(28px, 6vw, 120px)',
+              pointerEvents: 'none',
             }}
           >
             <div
-              className={`projector-text ${getTextSizeClass()}`}
+              className={`projector-view__content ${fadeClass}`}
               style={{
-                whiteSpace: 'pre-line',
+                width: '88%',
+                position: isFreeText ? 'absolute' : 'relative',
+                left: isFreeText ? `${textLayout.xPercent}%` : undefined,
+                top: isFreeText ? `${textLayout.yPercent}%` : undefined,
+                transform: isFreeText
+                  ? `translate(-50%, -50%) scale(${textLayout.scale})`
+                  : undefined,
+                transformOrigin: isFreeText ? 'center center' : undefined,
                 textAlign: content.type === 'bible' ? 'left' : 'center',
-                lineHeight: '1.6',
-                textShadow: '3px 3px 10px rgba(0, 0, 0, 0.9)',
-                color: content.textColor || '#ffffff',
-                fontFamily: content.fontFamily || "'Noto Sans SC', 'Inter', sans-serif",
-                fontSize: getProjectorTextSize(),
+                ...fadeAnimationStyle,
               }}
             >
-              {content.text}
+              <div
+                className={`projector-text ${getTextSizeClass()}`}
+                style={{
+                  whiteSpace: 'pre-line',
+                  textAlign: content.type === 'bible' ? 'left' : 'center',
+                  lineHeight: content.type === 'bible' ? '1.9' : '1.6',
+                  letterSpacing: content.type === 'bible' ? '0.015em' : 'normal',
+                  wordBreak: content.type === 'bible' ? 'break-word' : 'normal',
+                  textShadow: '3px 3px 10px rgba(0, 0, 0, 0.9)',
+                  color: content.textColor || '#ffffff',
+                  fontFamily: content.fontFamily || "'Noto Sans SC', 'Inter', sans-serif",
+                  fontSize: getProjectorTextSize(),
+                }}
+              >
+                {content.text}
+              </div>
             </div>
-          </div>
 
-          {content.reference && (
-            <div
-              style={{
-                position: 'absolute',
-                right: 'clamp(28px, 4.5vw, 96px)',
-                bottom: 'clamp(22px, 4vh, 72px)',
-                fontSize: 'clamp(22px, 2vw, 34px)',
-                fontStyle: 'italic',
-                color: 'rgba(255, 255, 255, 0.96)',
-                textAlign: 'right',
-                textShadow: '2px 2px 8px rgba(0, 0, 0, 0.9)',
-                pointerEvents: 'none',
-              }}
-            >
-              {`- ${content.reference}`}
-            </div>
-          )}
-        </div>
-      )}
+            {content.reference && (
+              <div
+                style={{
+                  position: 'absolute',
+                  right: 'clamp(28px, 4.5vw, 96px)',
+                  bottom: 'clamp(22px, 4vh, 72px)',
+                  fontSize: 'clamp(22px, 2vw, 34px)',
+                  fontStyle: 'italic',
+                  color: 'rgba(255, 255, 255, 0.96)',
+                  textAlign: 'right',
+                  textShadow: '2px 2px 8px rgba(0, 0, 0, 0.9)',
+                  pointerEvents: 'none',
+                }}
+              >
+                {`- ${content.reference}`}
+              </div>
+            )}
+          </div>
+        )}
 
       {splitEnabled && (
         <div
@@ -606,51 +628,64 @@ function ProjectorView() {
                 overflow: 'hidden',
               }}
             >
-              <div style={{
-                position: 'absolute',
-                inset: 0,
-                backgroundImage: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.06) 0 18px, rgba(255,255,255,0.02) 18px 36px)',
-              }} />
-              <div style={{
-                position: 'absolute',
-                inset: '24px',
-                border: '2px solid rgba(255,255,255,0.3)',
-              }} />
-              <div style={{
-                position: 'absolute',
-                left: 0,
-                right: 0,
-                top: '50%',
-                height: '1px',
-                background: 'rgba(255,255,255,0.35)',
-              }} />
-              <div style={{
-                position: 'absolute',
-                top: 0,
-                bottom: 0,
-                left: '50%',
-                width: '1px',
-                background: 'rgba(255,255,255,0.35)',
-              }} />
-              <div style={{
-                position: 'absolute',
-                left: '20px',
-                top: '16px',
-                fontSize: '28px',
-                color: '#8ee7ff',
-                fontWeight: 700,
-                letterSpacing: '1px',
-              }}>
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  backgroundImage:
+                    'repeating-linear-gradient(45deg, rgba(255,255,255,0.06) 0 18px, rgba(255,255,255,0.02) 18px 36px)',
+                }}
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: '24px',
+                  border: '2px solid rgba(255,255,255,0.3)',
+                }}
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  right: 0,
+                  top: '50%',
+                  height: '1px',
+                  background: 'rgba(255,255,255,0.35)',
+                }}
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  bottom: 0,
+                  left: '50%',
+                  width: '1px',
+                  background: 'rgba(255,255,255,0.35)',
+                }}
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '20px',
+                  top: '16px',
+                  fontSize: '28px',
+                  color: '#8ee7ff',
+                  fontWeight: 700,
+                  letterSpacing: '1px',
+                }}
+              >
                 CAMERA
               </div>
-              <div style={{
-                position: 'absolute',
-                right: '20px',
-                bottom: '16px',
-                fontSize: '26px',
-                color: 'rgba(255,255,255,0.95)',
-                fontFamily: 'monospace',
-              }}>
+              <div
+                style={{
+                  position: 'absolute',
+                  right: '20px',
+                  bottom: '16px',
+                  fontSize: '26px',
+                  color: 'rgba(255,255,255,0.95)',
+                  fontFamily: 'monospace',
+                }}
+              >
                 {new Date(cameraTestNow).toLocaleTimeString()}
               </div>
             </div>

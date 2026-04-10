@@ -3,6 +3,7 @@ function configureAppBootstrap({ app, protocol }) {
   app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
   // Register custom protocol privileges before app ready.
+  // M1: Removed bypassCSP — CSP is now enforced via session-hooks.js.
   protocol.registerSchemesAsPrivileged([
     {
       scheme: 'local-media',
@@ -11,7 +12,6 @@ function configureAppBootstrap({ app, protocol }) {
         supportFetchAPI: true,
         corsEnabled: true,
         stream: true,
-        bypassCSP: true,
       },
     },
   ]);

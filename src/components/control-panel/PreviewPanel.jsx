@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import PdfRenderer from '../PdfRenderer';
 import { formatTime, getPreviewTextSize, getPreviewMediaUrl } from '../../utils/preview';
 import { PREVIEW, SCENE, TEXT_EDITOR, TRANSITION } from '../../constants/ui';
@@ -49,9 +49,73 @@ function PreviewPanel(props) {
     setupTransferBusy,
   } = props;
 
+  const previewTypeLabel = (() => {
+    const t = previewSlide?.type;
+    if (!t) return 'NONE';
+    if (t === 'text') return 'TEXT';
+    if (t === 'lyrics') return 'LYRICS';
+    if (t === 'bible') return 'BIBLE';
+    if (t === 'image') return 'IMAGE';
+    if (t === 'video') return 'VIDEO';
+    if (t === 'pdf') return 'PDF';
+    if (t === 'youtube') return 'YOUTUBE';
+    return String(t).toUpperCase();
+  })();
+
+  const previewPrimaryLabel = (
+    previewSlide?.songTitle ||
+    previewSlide?.name ||
+    previewSlide?.reference ||
+    previewSlide?.title ||
+    ''
+  );
+
+  const [showPreviewStatusStrip, setShowPreviewStatusStrip] = useState(false);
+  const [compactPreviewStatusStrip, setCompactPreviewStatusStrip] = useState(false);
+
+  useEffect(() => {
+    try {
+      const savedVisible = window.localStorage.getItem('churchdisplay.ui.previewStatusVisible.v2');
+      const savedCompact = window.localStorage.getItem('churchdisplay.ui.previewStatusCompact.v2');
+      if (savedVisible === '1') setShowPreviewStatusStrip(true);
+      if (savedCompact === '1') setCompactPreviewStatusStrip(true);
+    } catch (_) {
+      // ignore restore failures
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('churchdisplay.ui.previewStatusVisible.v2', showPreviewStatusStrip ? '1' : '0');
+      window.localStorage.setItem('churchdisplay.ui.previewStatusCompact.v2', compactPreviewStatusStrip ? '1' : '0');
+    } catch (_) {
+      // ignore persist failures
+    }
+  }, [showPreviewStatusStrip, compactPreviewStatusStrip]);
+
   return (
     <div className="preview-panel">
-      <div className="preview-panel__title">Live Preview</div>
+      <div className="preview-panel__head">
+        <div className="preview-panel__title">Live Preview</div>
+        <div className="preview-panel__head-actions">
+          <button
+            className="btn btn--ghost preview-head-btn"
+            onClick={() => setShowPreviewStatusStrip((v) => !v)}
+            title={showPreviewStatusStrip ? 'Hide status strip' : 'Show status strip'}
+          >
+            {showPreviewStatusStrip ? 'Hide Info' : 'Show Info'}
+          </button>
+          {showPreviewStatusStrip && (
+            <button
+              className="btn btn--ghost preview-head-btn"
+              onClick={() => setCompactPreviewStatusStrip((v) => !v)}
+              title={compactPreviewStatusStrip ? 'Expand status strip' : 'Compact status strip'}
+            >
+              {compactPreviewStatusStrip ? 'Expand' : 'Compact'}
+            </button>
+          )}
+        </div>
+      </div>
 
       <div ref={previewStageRef} className="preview-screen" style={{ aspectRatio: PREVIEW.ASPECT_RATIO_16_9 }}>
         <span className="preview-screen__label">Projector Output</span>
@@ -241,7 +305,9 @@ function PreviewPanel(props) {
                         color: previewSlide.textColor || '#fff',
                         fontFamily: previewSlide.fontFamily || 'inherit',
                         whiteSpace: 'pre-line',
-                        lineHeight: '1.8',
+                        lineHeight: '1.9',
+                        letterSpacing: '0.012em',
+                        wordBreak: 'break-word',
                         textAlign: 'left',
                       }}
                     >
@@ -362,6 +428,17 @@ function PreviewPanel(props) {
           )}
         </div>
       </div>
+
+      {showPreviewStatusStrip && (
+        <div className={`preview-status-strip ${compactPreviewStatusStrip ? 'preview-status-strip--compact' : ''}`}>
+          <span className="preview-osd__pill">{previewTypeLabel}</span>
+          {!compactPreviewStatusStrip && previewPrimaryLabel && <span className="preview-osd__text">{previewPrimaryLabel}</span>}
+          <span className="preview-osd__text">Queue {projectorQueue.length}</span>
+          <span className="preview-osd__text">
+            {transitionEnabled ? `Fade ${transitionDelayMs}/${transitionDurationMs}` : 'Cut'}
+          </span>
+        </div>
+      )}
 
       <div className="preview-screen" style={{ aspectRatio: PREVIEW.ASPECT_RATIO_16_9 }}>
         <span className="preview-screen__label">Next</span>

@@ -5,18 +5,29 @@ export default function useWindowProjectorControls({
   setProjectorActive,
   setProjectorDisplayId,
 }) {
-  const startProjector = useCallback((displayId) => {
-    if (isElectron) {
-      window.churchDisplay.startProjector(displayId);
-      return;
-    }
-    setProjectorActive(true);
-    setProjectorDisplayId(displayId);
-  }, [isElectron, setProjectorActive, setProjectorDisplayId]);
+  const startProjector = useCallback(
+    (displayId) => {
+      if (isElectron) {
+        try {
+          window.churchDisplay.startProjector(displayId);
+        } catch (err) {
+          console.error('[useWindowProjectorControls] startProjector failed:', err);
+        }
+        return;
+      }
+      setProjectorActive(true);
+      setProjectorDisplayId(displayId);
+    },
+    [isElectron, setProjectorActive, setProjectorDisplayId]
+  );
 
   const stopProjector = useCallback(() => {
     if (isElectron) {
-      window.churchDisplay.stopProjector();
+      try {
+        window.churchDisplay.stopProjector();
+      } catch (err) {
+        console.error('[useWindowProjectorControls] stopProjector failed:', err);
+      }
       return;
     }
     setProjectorActive(false);

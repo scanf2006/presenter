@@ -1,11 +1,8 @@
 const fs = require('fs');
 const path = require('path');
-const {
-  verifyLicenseToken,
-  createReadableLicenseSummary,
-} = require('../license');
+const { verifyLicenseToken, createReadableLicenseSummary } = require('../license');
 
-function createAppSettingsStore(settingsPath) {
+function createAppSettingsStore(settingsPath, appVersion = null) {
   function readAppSettings() {
     if (!settingsPath) return { licenseKey: '', acceptedEulaAt: null };
     try {
@@ -47,7 +44,7 @@ function createAppSettingsStore(settingsPath) {
       };
     }
 
-    const verified = verifyLicenseToken(settings.licenseKey);
+    const verified = verifyLicenseToken(settings.licenseKey, new Date(), appVersion);
     if (!verified.ok) {
       return {
         isLicensed: false,

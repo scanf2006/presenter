@@ -4,6 +4,7 @@ function registerLicenseIPC({
   getLicenseStatus,
   writeAppSettings,
   readLegalDocument,
+  appVersion,
 }) {
   ipcMain.handle('license-get-status', () => getLicenseStatus());
 
@@ -13,7 +14,7 @@ function registerLicenseIPC({
       return { success: false, error: 'License key is required.' };
     }
 
-    const verified = verifyLicenseToken(normalized);
+    const verified = verifyLicenseToken(normalized, new Date(), appVersion || null);
     if (!verified.ok) {
       return { success: false, error: verified.error };
     }

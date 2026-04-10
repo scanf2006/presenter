@@ -16,22 +16,27 @@ export default function useProjectorQueue({
     return 'media';
   }, []);
 
-  const buildQueueItem = useCallback((payload, title, section) => ({
-    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    title: title || payload?.name || payload?.reference || payload?.type || 'Untitled Content',
-    type: payload?.type || 'text',
-    payload,
-    section: section || resolveSectionForPayload(payload),
-    createdAt: Date.now(),
-  }), [resolveSectionForPayload]);
+  const buildQueueItem = useCallback(
+    (payload, title, section) => ({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      title: title || payload?.name || payload?.reference || payload?.type || 'Untitled Content',
+      type: payload?.type || 'text',
+      payload,
+      section: section || resolveSectionForPayload(payload),
+      createdAt: Date.now(),
+    }),
+    [resolveSectionForPayload]
+  );
 
   const getQueueItemTitle = useCallback((payload) => {
     if (!payload) return 'Untitled Content';
     if (payload.type === 'text') return payload.text?.split('\n')?.[0]?.slice(0, 24) || 'Free Text';
-    if (payload.type === 'lyrics') return payload.text?.split('\n')?.[0]?.slice(0, 24) || 'Lyrics Section';
+    if (payload.type === 'lyrics')
+      return payload.text?.split('\n')?.[0]?.slice(0, 24) || 'Lyrics Section';
     if (payload.type === 'bible') return payload.reference || 'Bible';
     if (payload.type === 'song') return payload.songTitle || 'Song';
-    if (payload.type === 'image' || payload.type === 'video' || payload.type === 'pdf') return payload.name || 'Media';
+    if (payload.type === 'image' || payload.type === 'video' || payload.type === 'pdf')
+      return payload.name || 'Media';
     return payload.name || payload.type || 'Untitled Content';
   }, []);
 
@@ -83,63 +88,80 @@ export default function useProjectorQueue({
     persistQueue();
   }, [projectorQueue, isElectron, queueHydrated, storageKey]);
 
-  const addOrUpdateQueueItem = useCallback((payload, title, section) => {
-    if (!payload) return;
-    const nextTitle = title || getQueueItemTitle(payload);
-    setProjectorQueue((prev) => {
-      if (activeQueueIndex >= 0 && activeQueueIndex < prev.length) {
+  const addOrUpdateQueueItem = useCallback(
+    (payload, title, section, options = {}) => {
+      if (!payload) return;
+      const forceAppend = Boolean(options?.forceAppend);
+      const nextTitle = title || getQueueItemTitle(payload);
+      setProjectorQueue((prev) => {
+        if (!forceAppend && activeQueueIndex >= 0 && activeQueueIndex < prev.length) {
+          const existing = prev[activeQueueIndex];
+          const next = [...prev];
+          next[activeQueueIndex] = {
+            ...existing,
+            title: nextTitle,
+            type: payload.type || existing?.type || 'text',
+            payload,
+            section: section || existing?.section || resolveSectionForPayload(payload),
+            updatedAt: Date.now(),
+          };
+          return next;
+        }
+        return [...prev, buildQueueItem(payload, nextTitle, section)];
+      });
+    },
+    [activeQueueIndex, buildQueueItem, getQueueItemTitle, resolveSectionForPayload]
+  );
+
+  const updateActiveQueueItem = useCallback(
+    (payload, title, expectedSection = null, options = {}) => {
+      if (!payload) return;
+      const silent = Boolean(options?.silent);
+      // Use an object instead of a plain `let` so that React 18 Strict Mode
+      // double-invocation of the updater always writes to the same reference
+      // and the final value is reliable after setState returns.
+      const updateFlag = { value: false };
+      setProjectorQueue((prev) => {
+        if (activeQueueIndex < 0 || activeQueueIndex >= prev.length) {
+          updateFlag.value = false;
+          return prev;
+        }
         const existing = prev[activeQueueIndex];
+        if (expectedSection && existing?.section && existing.section !== expectedSection) {
+          updateFlag.value = false;
+          return prev;
+        }
+        const resolvedTitle = title || existing?.title || getQueueItemTitle(payload);
+        const resolvedType = payload.type || existing?.type || 'text';
+        const resolvedSection =
+          expectedSection || existing?.section || resolveSectionForPayload(payload);
+        const samePayload =
+          JSON.stringify(existing?.payload ?? null) === JSON.stringify(payload ?? null);
+        const sameTitle = (existing?.title || '') === resolvedTitle;
+        const sameType = (existing?.type || '') === resolvedType;
+        const sameSection = (existing?.section || '') === resolvedSection;
+        if (samePayload && sameTitle && sameType && sameSection) {
+          updateFlag.value = false;
+          return prev;
+        }
         const next = [...prev];
         next[activeQueueIndex] = {
           ...existing,
-          title: nextTitle,
-          type: payload.type || existing?.type || 'text',
+          title: resolvedTitle,
+          type: resolvedType,
           payload,
-          section: section || existing?.section || resolveSectionForPayload(payload),
+          section: resolvedSection,
           updatedAt: Date.now(),
         };
+        updateFlag.value = true;
         return next;
+      });
+      if (updateFlag.value && !silent && typeof showToast === 'function') {
+        showToast('Auto-saved to selected queue card');
       }
-      return [...prev, buildQueueItem(payload, nextTitle, section)];
-    });
-  }, [activeQueueIndex, buildQueueItem, getQueueItemTitle, resolveSectionForPayload]);
-
-  const updateActiveQueueItem = useCallback((payload, title, expectedSection = null, options = {}) => {
-    if (!payload) return;
-    const silent = Boolean(options?.silent);
-    let didUpdate = false;
-    setProjectorQueue((prev) => {
-      if (activeQueueIndex < 0 || activeQueueIndex >= prev.length) return prev;
-      const existing = prev[activeQueueIndex];
-      if (expectedSection && existing?.section && existing.section !== expectedSection) {
-        return prev;
-      }
-      const resolvedTitle = title || existing?.title || getQueueItemTitle(payload);
-      const resolvedType = payload.type || existing?.type || 'text';
-      const resolvedSection = expectedSection || existing?.section || resolveSectionForPayload(payload);
-      const samePayload = JSON.stringify(existing?.payload ?? null) === JSON.stringify(payload ?? null);
-      const sameTitle = (existing?.title || '') === resolvedTitle;
-      const sameType = (existing?.type || '') === resolvedType;
-      const sameSection = (existing?.section || '') === resolvedSection;
-      if (samePayload && sameTitle && sameType && sameSection) {
-        return prev;
-      }
-      const next = [...prev];
-      next[activeQueueIndex] = {
-        ...existing,
-        title: resolvedTitle,
-        type: resolvedType,
-        payload,
-        section: resolvedSection,
-        updatedAt: Date.now(),
-      };
-      didUpdate = true;
-      return next;
-    });
-    if (didUpdate && !silent && typeof showToast === 'function') {
-      showToast('Auto-saved to selected queue card');
-    }
-  }, [activeQueueIndex, getQueueItemTitle, resolveSectionForPayload, showToast]);
+    },
+    [activeQueueIndex, getQueueItemTitle, resolveSectionForPayload, showToast]
+  );
 
   const moveQueueItem = useCallback((fromIndex, toIndex) => {
     if (fromIndex === toIndex) return;
@@ -183,9 +205,9 @@ export default function useProjectorQueue({
     if (!editingQueueId) return;
     const nextTitle = editingQueueTitle.trim();
     if (nextTitle) {
-      setProjectorQueue((prev) => prev.map((item) => (
-        item.id === editingQueueId ? { ...item, title: nextTitle } : item
-      )));
+      setProjectorQueue((prev) =>
+        prev.map((item) => (item.id === editingQueueId ? { ...item, title: nextTitle } : item))
+      );
     }
     setEditingQueueId(null);
     setEditingQueueTitle('');

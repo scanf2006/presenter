@@ -22,6 +22,7 @@ function createControlWindowInstance({
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: true,
       preload: preloadPath,
       autoplayPolicy: 'no-user-gesture-required',
       backgroundThrottling: false,
@@ -39,11 +40,7 @@ function createControlWindowInstance({
   return controlWindow;
 }
 
-function createProjectorWindowInstance({
-  BrowserWindow,
-  display,
-  preloadPath,
-}) {
+function createProjectorWindowInstance({ BrowserWindow, display, preloadPath }) {
   return new BrowserWindow({
     x: display.bounds.x,
     y: display.bounds.y,
@@ -57,6 +54,7 @@ function createProjectorWindowInstance({
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: true,
       preload: preloadPath,
       autoplayPolicy: 'no-user-gesture-required',
       backgroundThrottling: false,
@@ -82,11 +80,7 @@ function createProjectorShellUrl({ isDev, timestamp }) {
   };
 }
 
-function loadProjectorShellIntoWindow({
-  targetWindow,
-  isDev,
-  timestamp = Date.now(),
-}) {
+function loadProjectorShellIntoWindow({ targetWindow, isDev, timestamp = Date.now() }) {
   if (!targetWindow || targetWindow.isDestroyed()) return;
   const shellTarget = createProjectorShellUrl({ isDev, timestamp });
   if (shellTarget.mode === 'url') {

@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 function registerYouTubeIPC({
   ipcMain,
@@ -10,8 +11,42 @@ function registerYouTubeIPC({
   downloadUrlToFileWithRetry,
   downloadWithYtDlp,
 }) {
+  const inflightByCacheKey = new Map();
+
+  const buildCacheKey = (resolved, rawUrl) => {
+    if (resolved?.videoId) return `vid:${resolved.videoId}`;
+    const hash = crypto
+      .createHash('sha1')
+      .update(String(rawUrl || ''))
+      .digest('hex')
+      .slice(0, 12);
+    return `url:${hash}`;
+  };
+
+  const cleanupStalePartFiles = (outputPath) => {
+    const outDir = path.dirname(outputPath);
+    const outBase = path.basename(outputPath);
+    if (!fs.existsSync(outDir)) return;
+    const entries = fs.readdirSync(outDir);
+    entries.forEach((name) => {
+      if (name === outBase) return;
+      if (!name.startsWith(outBase)) return;
+      if (!name.includes('.part')) return;
+      const stalePath = path.join(outDir, name);
+      try {
+        fs.unlinkSync(stalePath);
+      } catch (_) {
+        // Ignore cleanup failures; downloader can still retry.
+      }
+    });
+  };
+
   ipcMain.handle('youtube-resolve', async (_event, inputUrl) => {
-    return resolveYouTubeStream(inputUrl);
+    try {
+      return await resolveYouTubeStream(inputUrl);
+    } catch (err) {
+      return { success: false, error: err?.message || 'Failed to resolve YouTube stream.' };
+    }
   });
 
   ipcMain.handle('youtube-cache-download', async (_event, inputUrl) => {
@@ -26,16 +61,38 @@ function registerYouTubeIPC({
     }
 
     try {
-      const fileBase = sanitizeFileName(`${resolved.videoId || 'youtube'}_${resolved.title || 'video'}`) || 'youtube_video';
-      const outputPath = path.join(mediaYouTubeCacheDir, `${fileBase}.mp4`);
-      if (!fs.existsSync(outputPath) || fs.statSync(outputPath).size < 1024 * 100) {
-        try {
-          await downloadUrlToFileWithRetry(resolved.streamUrl, outputPath);
-        } catch (primaryErr) {
-          appendBgDebug('youtube-download-primary-failed', { error: primaryErr?.message || String(primaryErr) });
-          appendBgDebug('youtube-download-fallback-ytdlp-start', { url: raw });
-          await downloadWithYtDlp(raw, outputPath);
-          appendBgDebug('youtube-download-fallback-ytdlp-success', { outputPath });
+      // Keep cache filenames short and deterministic on Windows to avoid rename/path issues.
+      const cacheKey = buildCacheKey(resolved, raw);
+      const safeBase = sanitizeFileName(cacheKey) || 'youtube_cache';
+      const outputPath = path.join(mediaYouTubeCacheDir, `${safeBase}.mp4`);
+
+      const existing = fs.existsSync(outputPath) ? fs.statSync(outputPath) : null;
+      if (!existing || existing.size < 1024 * 100) {
+        if (inflightByCacheKey.has(cacheKey)) {
+          await inflightByCacheKey.get(cacheKey);
+        } else {
+          const downloadPromise = (async () => {
+            try {
+              cleanupStalePartFiles(outputPath);
+              if (fs.existsSync(outputPath) && fs.statSync(outputPath).size < 1024 * 100) {
+                fs.unlinkSync(outputPath);
+              }
+              try {
+                await downloadUrlToFileWithRetry(resolved.streamUrl, outputPath);
+              } catch (primaryErr) {
+                appendBgDebug('youtube-download-primary-failed', {
+                  error: primaryErr?.message || String(primaryErr),
+                });
+                appendBgDebug('youtube-download-fallback-ytdlp-start', { url: raw });
+                await downloadWithYtDlp(raw, outputPath);
+                appendBgDebug('youtube-download-fallback-ytdlp-success', { outputPath });
+              }
+            } finally {
+              inflightByCacheKey.delete(cacheKey);
+            }
+          })();
+          inflightByCacheKey.set(cacheKey, downloadPromise);
+          await downloadPromise;
         }
       }
       appendBgDebug('youtube-cache-download-success', {
@@ -51,7 +108,10 @@ function registerYouTubeIPC({
         originalUrl: resolved.originalUrl || raw,
       };
     } catch (err) {
-      appendBgDebug('youtube-cache-download-failed', { url: raw, error: err?.message || 'Download failed.' });
+      appendBgDebug('youtube-cache-download-failed', {
+        url: raw,
+        error: err?.message || 'Download failed.',
+      });
       return { success: false, error: err?.message || 'Download failed.' };
     }
   });

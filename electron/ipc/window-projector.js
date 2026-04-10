@@ -8,54 +8,88 @@ function registerWindowProjectorIPC({
   getProjectorWindow,
 }) {
   ipcMain.handle('get-displays', () => {
-    return screenManager.getDisplaysInfo();
+    try {
+      return screenManager.getDisplaysInfo();
+    } catch (err) {
+      console.error('[WindowIPC] get-displays error:', err?.message);
+      return [];
+    }
   });
 
   ipcMain.handle('start-projector', (_event, displayId) => {
-    let targetDisplay = null;
-    if (displayId) {
-      targetDisplay = screenManager.getAllDisplays().find((d) => d.id === displayId);
+    try {
+      let targetDisplay = null;
+      if (displayId) {
+        targetDisplay = screenManager.getAllDisplays().find((d) => d.id === displayId);
+      }
+      createProjectorWindow(targetDisplay);
+      return { success: true };
+    } catch (err) {
+      console.error('[WindowIPC] start-projector error:', err?.message);
+      return { success: false, error: err?.message || 'Failed to start projector.' };
     }
-    createProjectorWindow(targetDisplay);
-    return { success: true };
   });
 
   ipcMain.handle('stop-projector', () => {
-    forceCloseProjectorWindow('ipc-stop-projector');
-    return { success: true };
+    try {
+      forceCloseProjectorWindow('ipc-stop-projector');
+      return { success: true };
+    } catch (err) {
+      console.error('[WindowIPC] stop-projector error:', err?.message);
+      return { success: false, error: err?.message || 'Failed to stop projector.' };
+    }
   });
 
   ipcMain.handle('close-control-window', () => {
-    return requestCloseControlWindow();
+    try {
+      return requestCloseControlWindow();
+    } catch (err) {
+      console.error('[WindowIPC] close-control-window error:', err?.message);
+      return { success: false };
+    }
   });
 
   ipcMain.handle('minimize-control-window', () => {
-    const controlWindow = getControlWindow();
-    if (controlWindow && !controlWindow.isDestroyed()) {
-      controlWindow.minimize();
-      return { success: true };
+    try {
+      const controlWindow = getControlWindow();
+      if (controlWindow && !controlWindow.isDestroyed()) {
+        controlWindow.minimize();
+        return { success: true };
+      }
+      return { success: false };
+    } catch (err) {
+      console.error('[WindowIPC] minimize-control-window error:', err?.message);
+      return { success: false };
     }
-    return { success: false };
   });
 
   ipcMain.handle('toggle-maximize-control-window', () => {
-    const controlWindow = getControlWindow();
-    if (controlWindow && !controlWindow.isDestroyed()) {
-      if (controlWindow.isMaximized()) {
-        controlWindow.unmaximize();
-        return { success: true, isMaximized: false };
+    try {
+      const controlWindow = getControlWindow();
+      if (controlWindow && !controlWindow.isDestroyed()) {
+        if (controlWindow.isMaximized()) {
+          controlWindow.unmaximize();
+          return { success: true, isMaximized: false };
+        }
+        controlWindow.maximize();
+        return { success: true, isMaximized: true };
       }
-      controlWindow.maximize();
-      return { success: true, isMaximized: true };
+      return { success: false, isMaximized: false };
+    } catch (err) {
+      console.error('[WindowIPC] toggle-maximize error:', err?.message);
+      return { success: false, isMaximized: false };
     }
-    return { success: false, isMaximized: false };
   });
 
   ipcMain.handle('get-projector-status', () => {
-    const projectorWindow = getProjectorWindow();
-    return {
-      active: projectorWindow !== null && !projectorWindow.isDestroyed(),
-    };
+    try {
+      const projectorWindow = getProjectorWindow();
+      return {
+        active: projectorWindow !== null && !projectorWindow.isDestroyed(),
+      };
+    } catch (err) {
+      return { active: false };
+    }
   });
 }
 

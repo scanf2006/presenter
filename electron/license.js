@@ -2,6 +2,22 @@ const crypto = require('crypto');
 
 const PRODUCT_CODE = 'churchdisplay-pro';
 
+/**
+ * Compare two semver-like version strings (e.g., "1.2.3" vs "1.3.0").
+ * Returns: negative if a < b, 0 if equal, positive if a > b.
+ */
+function compareVersions(a, b) {
+  const pa = String(a).split('.').map(Number);
+  const pb = String(b).split('.').map(Number);
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i++) {
+    const na = pa[i] || 0;
+    const nb = pb[i] || 0;
+    if (na !== nb) return na - nb;
+  }
+  return 0;
+}
+
 // Public key only. Keep private key offline and use it to sign license payloads.
 const LICENSE_PUBLIC_KEY_PEM = `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyxfky0sWY27OxCUbZD0C
@@ -53,7 +69,7 @@ function parseLicenseToken(token) {
   }
 }
 
-function verifyLicenseToken(token, now = new Date()) {
+function verifyLicenseToken(token, now = new Date(), appVersion = null) {
   const parsed = parseLicenseToken(token);
   if (!parsed.ok) {
     return parsed;
@@ -85,6 +101,28 @@ function verifyLicenseToken(token, now = new Date()) {
     }
   }
 
+  // M5: Basic clock-tamper detection — reject if system time is before the issuedAt date,
+  // which would indicate the clock has been set backwards to extend an expired license.
+  if (payload.issuedAt) {
+    const issued = new Date(payload.issuedAt);
+    if (!Number.isNaN(issued.getTime()) && now < issued) {
+      return {
+        ok: false,
+        error: 'System clock appears to be set incorrectly (before license issue date).',
+      };
+    }
+  }
+
+  // H8: Enforce maxVersion — reject license if app version exceeds the licensed version.
+  if (payload.maxVersion && appVersion) {
+    if (compareVersions(appVersion, payload.maxVersion) > 0) {
+      return {
+        ok: false,
+        error: `License is valid up to version ${payload.maxVersion}, but current version is ${appVersion}.`,
+      };
+    }
+  }
+
   return {
     ok: true,
     payload: {
@@ -102,7 +140,9 @@ function createReadableLicenseSummary(license) {
   if (!license || !license.payload) {
     return 'Unlicensed';
   }
-  const expiry = license.payload.expiresAt ? `, expires ${license.payload.expiresAt}` : ', lifetime';
+  const expiry = license.payload.expiresAt
+    ? `, expires ${license.payload.expiresAt}`
+    : ', lifetime';
   return `${license.payload.holder}${expiry}`;
 }
 
@@ -123,6 +163,6 @@ module.exports = {
   PRODUCT_CODE,
   verifyLicenseToken,
   createReadableLicenseSummary,
-  buildLicenseToken,
+  // L10: buildLicenseToken is for offline tooling only; do not ship in production exports.
+  // Use scripts/generate-license.js to create license tokens.
 };
-
