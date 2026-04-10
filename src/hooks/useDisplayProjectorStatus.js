@@ -8,17 +8,27 @@ export default function useDisplayProjectorStatus({ isElectron }) {
   useEffect(() => {
     if (isElectron) {
       let isMounted = true;
-      window.churchDisplay.getDisplays().then((data) => {
-        if (isMounted) setDisplays(data);
-      });
+      window.churchDisplay
+        .getDisplays()
+        .then((data) => {
+          if (isMounted) setDisplays(data);
+        })
+        .catch((err) => {
+          console.warn('[useDisplayProjectorStatus] getDisplays failed:', err);
+        });
       const offDisplaysChanged = window.churchDisplay.onDisplaysChanged(setDisplays);
       const offProjectorStatus = window.churchDisplay.onProjectorStatus((status) => {
         setProjectorActive(status.active);
         setProjectorDisplayId(status.displayId || null);
       });
-      window.churchDisplay.getProjectorStatus().then((status) => {
-        if (isMounted) setProjectorActive(status.active);
-      });
+      window.churchDisplay
+        .getProjectorStatus()
+        .then((status) => {
+          if (isMounted) setProjectorActive(status.active);
+        })
+        .catch((err) => {
+          console.warn('[useDisplayProjectorStatus] getProjectorStatus failed:', err);
+        });
 
       return () => {
         isMounted = false;

@@ -23,6 +23,7 @@ const PdfRenderer = ({ path, pageNumber = 1, className = '', onLoadSuccess }) =>
 
   useEffect(() => {
     let isMounted = true;
+    let pdfDocument = null;
 
     const renderPdf = async () => {
       if (!path) return;
@@ -31,7 +32,10 @@ const PdfRenderer = ({ path, pageNumber = 1, className = '', onLoadSuccess }) =>
         setErrorMsg(null);
 
         const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.min.mjs');
-        const workerUrl = new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).toString();
+        const workerUrl = new URL(
+          'pdfjs-dist/legacy/build/pdf.worker.min.mjs',
+          import.meta.url
+        ).toString();
         pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
         const fileUrl = `local-media://${encodeURIComponent(path)}`;
@@ -43,6 +47,7 @@ const PdfRenderer = ({ path, pageNumber = 1, className = '', onLoadSuccess }) =>
         const dataBuffer = await response.arrayBuffer();
         const loadingTask = pdfjsLib.getDocument({ data: dataBuffer });
         const pdf = await loadingTask.promise;
+        pdfDocument = pdf;
 
         if (!isMounted) return;
         if (onLoadSuccess) onLoadSuccess({ numPages: pdf.numPages });
@@ -96,6 +101,11 @@ const PdfRenderer = ({ path, pageNumber = 1, className = '', onLoadSuccess }) =>
 
     return () => {
       isMounted = false;
+      // M6: Destroy PDF document to release memory.
+      if (pdfDocument) {
+        pdfDocument.destroy().catch(() => {});
+        pdfDocument = null;
+      }
     };
   }, [path, pageNumber, containerVersion, onLoadSuccess]);
 
@@ -128,7 +138,10 @@ const PdfRenderer = ({ path, pageNumber = 1, className = '', onLoadSuccess }) =>
           {errorMsg}
         </div>
       ) : (
-        <canvas ref={canvasRef} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+        <canvas
+          ref={canvasRef}
+          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+        />
       )}
     </div>
   );

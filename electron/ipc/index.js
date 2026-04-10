@@ -82,12 +82,14 @@ function registerAllIPC(config) {
     getLicenseStatus,
     writeAppSettings,
     readLegalDocument,
+    appVersion: app ? app.getVersion() : null,
   });
 
   registerMediaIPC({
     ipcMain,
     dialog,
-    getParentWindow: () => (getControlWindow() && !getControlWindow().isDestroyed() ? getControlWindow() : null),
+    getParentWindow: () =>
+      getControlWindow() && !getControlWindow().isDestroyed() ? getControlWindow() : null,
     resolveAbsolutePath,
     normalizeForCompare,
     isPathWithinRoot,
@@ -104,7 +106,8 @@ function registerAllIPC(config) {
     ipcMain,
     dialog,
     app,
-    getParentWindow: () => (getControlWindow() && !getControlWindow().isDestroyed() ? getControlWindow() : null),
+    getParentWindow: () =>
+      getControlWindow() && !getControlWindow().isDestroyed() ? getControlWindow() : null,
     formatBackupStamp,
     collectReferencedMediaPathsFromQueue,
     copyDirectoryMerge,

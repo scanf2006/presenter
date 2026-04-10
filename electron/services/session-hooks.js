@@ -29,9 +29,13 @@ function createSessionHooks({ session, logger = console }) {
         pathname = u.pathname || '';
       } catch (_) {}
 
-      const isMediaOrXhr = resourceType === 'media' || resourceType === 'xhr' || resourceType === 'fetch';
+      const isMediaOrXhr =
+        resourceType === 'media' || resourceType === 'xhr' || resourceType === 'fetch';
       const isGoogleVideo = hostname.endsWith('.googlevideo.com');
-      const isYtStatic = hostname.endsWith('.ytimg.com') || hostname === 'i.ytimg.com' || hostname === 'yt3.ggpht.com';
+      const isYtStatic =
+        hostname.endsWith('.ytimg.com') ||
+        hostname === 'i.ytimg.com' ||
+        hostname === 'yt3.ggpht.com';
       const isEmbedPath = pathname.startsWith('/embed/');
 
       // Only patch media/embed requests; do not affect watch-page document requests.
@@ -50,13 +54,20 @@ function createSessionHooks({ session, logger = console }) {
     youtubeHeaderHookInstalled = true;
   }
 
+  // H4: Only grant camera/microphone to the app's own origin, not to all content.
   function setupMediaPermissionHandlers() {
     try {
       const ses = session.defaultSession;
       if (!ses) return;
-      ses.setPermissionRequestHandler((_webContents, permission, callback) => {
+      ses.setPermissionRequestHandler((webContents, permission, callback) => {
         if (permission === 'media' || permission === 'camera' || permission === 'microphone') {
-          callback(true);
+          try {
+            const url = webContents.getURL();
+            const isLocalApp = url.startsWith('file://') || url.startsWith('http://localhost');
+            callback(isLocalApp);
+          } catch (_) {
+            callback(false);
+          }
           return;
         }
         callback(false);
@@ -66,9 +77,37 @@ function createSessionHooks({ session, logger = console }) {
     }
   }
 
+  // H5: Inject Content Security Policy headers for all pages.
+  function setupContentSecurityPolicy() {
+    try {
+      const ses = session.defaultSession;
+      if (!ses || !ses.webRequest) return;
+      ses.webRequest.onHeadersReceived((details, callback) => {
+        callback({
+          responseHeaders: {
+            ...details.responseHeaders,
+            'Content-Security-Policy': [
+              "default-src 'self' local-media:; " +
+                "script-src 'self' 'unsafe-inline'; " +
+                "style-src 'self' 'unsafe-inline'; " +
+                "img-src 'self' local-media: data: https://i.ytimg.com https://*.ytimg.com; " +
+                "media-src 'self' local-media: https://*.googlevideo.com blob:; " +
+                "frame-src 'self' https://www.youtube.com; " +
+                "connect-src 'self' https://www.youtube.com https://*.youtube.com https://*.googlevideo.com; " +
+                "font-src 'self' data:;",
+            ],
+          },
+        });
+      });
+    } catch (err) {
+      logger.warn('[CSP] setup failed:', err.message);
+    }
+  }
+
   return {
     setupYouTubeRequestHeaders,
     setupMediaPermissionHandlers,
+    setupContentSecurityPolicy,
   };
 }
 

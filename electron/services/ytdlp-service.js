@@ -29,6 +29,17 @@ function createYtDlpService({
   }
 
   async function downloadWithYtDlp(url, outputPath) {
+    // M3: Validate URL format to prevent CLI injection via crafted strings
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch {
+      throw new Error('Invalid URL provided to yt-dlp');
+    }
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      throw new Error(`Disallowed protocol for yt-dlp: ${parsed.protocol}`);
+    }
+
     const yt = await getYtDlpInstance();
     if (!yt) throw new Error('yt-dlp unavailable');
     const outDir = path.dirname(outputPath);
@@ -39,6 +50,13 @@ function createYtDlpService({
     await yt.execPromise([
       '--no-playlist',
       '--no-warnings',
+      '--no-part',
+      '--concurrent-fragments',
+      '1',
+      '--retries',
+      '3',
+      '--fragment-retries',
+      '3',
       '-f',
       'b[ext=mp4]/b',
       '--output',

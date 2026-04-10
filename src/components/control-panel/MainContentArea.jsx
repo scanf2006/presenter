@@ -263,51 +263,71 @@ function MainContentArea(props) {
           </span>
         </div>
 
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>Font Size:</span>
-          {['small', 'medium', 'large'].map((size) => (
-            <button
-              key={size}
-              className={`btn ${fontSize === size ? 'btn--primary' : 'btn--ghost'}`}
-              onClick={() => {
-                setFontSize(size);
-                if (size === 'small') setTextSizePx(TEXT_EDITOR.SIZE_SMALL_PX);
-                else if (size === 'medium') setTextSizePx(TEXT_EDITOR.SIZE_MEDIUM_PX);
-                else setTextSizePx(TEXT_EDITOR.SIZE_LARGE_PX);
-              }}
-            >
-              {size === 'small' ? 'Small' : size === 'medium' ? 'Medium' : 'Large'}
-            </button>
-          ))}
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', alignItems: 'center' }}>
-          <input
-            type="number"
-            min={TEXT_EDITOR.SIZE_INPUT_MIN_PX}
-            max={TEXT_EDITOR.SIZE_INPUT_MAX_PX}
-            value={textSizePx}
-            onChange={(e) => setTextSizePx(Math.max(TEXT_EDITOR.SIZE_INPUT_MIN_PX, Math.min(TEXT_EDITOR.SIZE_INPUT_MAX_PX, Number(e.target.value || TEXT_EDITOR.DEFAULT_SIZE_PX))))}
-            className="cp-input-md"
-            title="Text Size (px)"
-          />
-          <select
-            value={textFontFamily}
-            onChange={(e) => setTextFontFamily(e.target.value)}
-            className="cp-input-md"
-          >
-            {TEXT_FONT_OPTIONS.map((f) => (
-              <option key={f} value={f}>
-                {f}
-              </option>
-            ))}
-          </select>
-          <input
-            type="color"
-            value={textColor}
-            onChange={(e) => setTextColor(e.target.value)}
-            style={{ width: '100%', height: '36px', border: '1px solid var(--color-border)', borderRadius: '6px', background: 'transparent' }}
-            title="Text Color"
-          />
+        <div className="text-settings-card">
+          <div className="text-settings-head">Text Style Controls</div>
+
+          <div className="text-settings-row">
+            <div className="text-settings-presets">
+              {['small', 'medium', 'large'].map((size) => (
+                <button
+                  key={size}
+                  className={`text-size-chip ${fontSize === size ? 'text-size-chip--active' : ''}`}
+                  onClick={() => {
+                    setFontSize(size);
+                    if (size === 'small') setTextSizePx(TEXT_EDITOR.SIZE_SMALL_PX);
+                    else if (size === 'medium') setTextSizePx(TEXT_EDITOR.SIZE_MEDIUM_PX);
+                    else setTextSizePx(TEXT_EDITOR.SIZE_LARGE_PX);
+                  }}
+                >
+                  {size === 'small' ? 'Small' : size === 'medium' ? 'Medium' : 'Large'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="text-settings-grid">
+            <label className="text-settings-field">
+              <span className="text-settings-label">Size (px)</span>
+              <input
+                type="number"
+                min={TEXT_EDITOR.SIZE_INPUT_MIN_PX}
+                max={TEXT_EDITOR.SIZE_INPUT_MAX_PX}
+                value={textSizePx}
+                onChange={(e) => setTextSizePx(Math.max(TEXT_EDITOR.SIZE_INPUT_MIN_PX, Math.min(TEXT_EDITOR.SIZE_INPUT_MAX_PX, Number(e.target.value || TEXT_EDITOR.DEFAULT_SIZE_PX))))}
+                className="cp-input-md"
+                title="Text Size (px)"
+              />
+            </label>
+
+            <label className="text-settings-field">
+              <span className="text-settings-label">Font Family</span>
+              <select
+                value={textFontFamily}
+                onChange={(e) => setTextFontFamily(e.target.value)}
+                className="cp-input-md"
+              >
+                {TEXT_FONT_OPTIONS.map((f) => (
+                  <option key={f} value={f}>
+                    {f}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="text-settings-field">
+              <span className="text-settings-label">Text Color</span>
+              <div className="text-color-control">
+                <input
+                  type="color"
+                  value={textColor}
+                  onChange={(e) => setTextColor(e.target.value)}
+                  className="text-color-input"
+                  title="Text Color"
+                />
+                <span className="text-color-value">{String(textColor || '#ffffff').toUpperCase()}</span>
+              </div>
+            </label>
+          </div>
         </div>
         <button className="btn btn--success btn--lg" style={{ width: '100%' }} onClick={() => handleSendToProjector()} disabled={!textContent.trim()}>
           Send to Projector

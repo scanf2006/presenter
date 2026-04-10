@@ -3,6 +3,24 @@
  * Handles window lifecycle, IPC, media pipeline, and persistence.
  */
 const { app, BrowserWindow, screen, ipcMain, dialog, protocol, session } = require('electron');
+
+// C2: Global error handlers — prevent silent crashes.
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL] Uncaught Exception:', err);
+  try {
+    dialog.showErrorBox(
+      'ChurchDisplay Pro - Unexpected Error',
+      `An unexpected error occurred:\n\n${err?.message || String(err)}\n\nThe application will now exit.`
+    );
+  } catch (_) {
+    // dialog may not be available yet
+  }
+  app.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[FATAL] Unhandled Rejection:', reason);
+});
 const initSqlJs = require('sql.js');
 const { ScreenManager } = require('./services/screen-manager');
 const {
@@ -10,10 +28,7 @@ const {
   normalizeForCompare,
   isPathWithinRoot,
 } = require('./services/path-utils');
-const {
-  normalizeYouTubeWatchUrl,
-  createYouTubeResolver,
-} = require('./services/youtube-service');
+const { normalizeYouTubeWatchUrl, createYouTubeResolver } = require('./services/youtube-service');
 const {
   collectReferencedMediaPathsFromQueue,
   copyDirectoryMerge,
@@ -28,7 +43,9 @@ const { ensureMediaDirs, sanitizeMediaFileName } = require('./services/media-run
 const { loadOptionalMediaModules } = require('./services/optional-modules');
 const { configureAppBootstrap } = require('./services/app-bootstrap-config');
 const { forceCloseProjectorWindowInstance } = require('./services/projector-window');
-const { recoverDesktopAfterDisplaySwitch: recoverDisplayDesktop } = require('./services/display-recovery');
+const {
+  recoverDesktopAfterDisplaySwitch: recoverDisplayDesktop,
+} = require('./services/display-recovery');
 const { formatBackupStamp } = require('./services/date-utils');
 const { registerAppLifecycleHandlers } = require('./services/app-lifecycle');
 const { setupLifecycleRuntime } = require('./services/lifecycle-runtime');
@@ -71,21 +88,11 @@ const {
   PPT_CONVERT_TIMEOUT_MS,
 } = require('./services/app-constants');
 const { initializeStartupRuntime } = require('./services/startup-runtime');
-const {
-  createAppSettingsStore,
-  readLegalDocument,
-} = require('./services/app-settings');
-const {
-  createDatabaseStore,
-  initBibleAndSongsDatabases,
-} = require('./services/database-service');
+const { createAppSettingsStore, readLegalDocument } = require('./services/app-settings');
+const { createDatabaseStore, initBibleAndSongsDatabases } = require('./services/database-service');
 const { registerBibleSongsIPC } = require('./ipc/bible-songs');
 const { registerAllIPC } = require('./ipc');
-const {
-  ytdl,
-  playDl,
-  YTDlpWrap,
-} = loadOptionalMediaModules();
+const { ytdl, playDl, YTDlpWrap } = loadOptionalMediaModules();
 const { verifyLicenseToken } = require('./license');
 const screenManager = new ScreenManager(screen);
 const resolveYouTubeStream = createYouTubeResolver({ playDl, ytdl });
@@ -114,10 +121,7 @@ const {
   getAppSettingsStore: () => appSettingsStore,
   confirmExitDialog,
 });
-const {
-  projectorChannel,
-  splashController,
-} = createMainUiRuntime({
+const { projectorChannel, splashController } = createMainUiRuntime({
   normalizeYouTubeWatchUrl,
   loadProjectorShellIntoWindow,
   isDev,
@@ -125,7 +129,7 @@ const {
   screenManager,
   electronDir: __dirname,
 });
-let controlWindow = null;   // Control window
+let controlWindow = null; // Control window
 let projectorWindow = null; // Projector window
 const projectorControlBridge = createProjectorControlBridge({
   controlCloseController,
@@ -136,17 +140,16 @@ const projectorControlBridge = createProjectorControlBridge({
 });
 const projectorRecoveryBridge = createProjectorRecoveryBridge({
   getProjectorWindow: () => projectorWindow,
-  setProjectorWindow: (nextWindow) => { projectorWindow = nextWindow; },
+  setProjectorWindow: (nextWindow) => {
+    projectorWindow = nextWindow;
+  },
   appendBgDebug: (tag, payload) => bgDebug.append(tag, payload),
   forceCloseProjectorWindowInstance,
   recoverDisplayDesktop,
   BrowserWindow,
   getControlWindow: () => controlWindow,
 });
-const {
-  controlWindowDeps,
-  projectorWindowDeps,
-} = buildWindowRuntimeDeps({
+const { controlWindowDeps, projectorWindowDeps } = buildWindowRuntimeDeps({
   BrowserWindow,
   createControlWindowInstance,
   screenManager,
@@ -178,16 +181,21 @@ const {
 
 const windowRuntimeManager = createWindowRuntimeManager({
   createAndWireControlWindow,
-  setControlWindow: (nextWindow) => { controlWindow = nextWindow; },
+  setControlWindow: (nextWindow) => {
+    controlWindow = nextWindow;
+  },
   controlWindowDeps,
   openProjectorWindowWithRuntime,
   projectorWindowRef: () => projectorWindow,
-  setProjectorWindow: (nextWindow) => { projectorWindow = nextWindow; },
+  setProjectorWindow: (nextWindow) => {
+    projectorWindow = nextWindow;
+  },
   projectorWindowDeps,
 });
 
 const createControlWindow = () => windowRuntimeManager.createControlWindow();
-const createProjectorWindow = (targetDisplay) => windowRuntimeManager.createProjectorWindow(targetDisplay);
+const createProjectorWindow = (targetDisplay) =>
+  windowRuntimeManager.createProjectorWindow(targetDisplay);
 const setupIPC = createMainSetupIpc({
   registerAllIPC,
   ipcMain,
@@ -223,58 +231,77 @@ const setupIPC = createMainSetupIpc({
 
 // =================  =================
 
-app.whenReady().then(async () => {
-  await runWhenReadyRuntime(buildWhenReadyOptions({
-    sessionHooks,
-    hydrateUserDataFromBundledSeed,
+// C1: Add .catch() to prevent silent startup failures.
+app
+  .whenReady()
+  .then(async () => {
+    await runWhenReadyRuntime(
+      buildWhenReadyOptions({
+        sessionHooks,
+        hydrateUserDataFromBundledSeed,
+        app,
+        userDataSeedMarker: USERDATA_SEED_MARKER,
+        createAppSettingsStore,
+        buildRuntimePaths,
+        ensureMediaDirs,
+        bgDebug,
+        initializeStartupRuntime,
+        mediaState,
+        ytdlpService,
+        bootstrapCoreServices,
+        protocol,
+        registerLocalMediaProtocol,
+        resolveAbsolutePath,
+        isPathWithinRoot,
+        initBibleAndSongsDatabases,
+        initSqlJs,
+        dbStore,
+        electronDir: __dirname,
+        runStartupUiRuntime,
+        setupIPC,
+        registerBibleSongsIPC,
+        ipcMain,
+        getBibleDb: (version) => dbStore.getBibleDb(version),
+        getSongsDb: () => dbStore.getSongsDb(),
+        saveSongsDb: (userDataDir) => dbStore.saveSongsDb(userDataDir),
+        registerDisplayWatchRuntime,
+        watchDisplayTopology,
+        screen,
+        controlWindowRef: () => controlWindow,
+        screenManager,
+        onRecover: projectorRecoveryBridge.recoverDesktopAfterDisplaySwitch,
+        splashController,
+        createControlWindow,
+        setAppSettingsStore: (store) => {
+          appSettingsStore = store;
+        },
+        logger: console,
+      })
+    );
+  })
+  .catch((err) => {
+    console.error('[FATAL] Startup failed:', err);
+    try {
+      dialog.showErrorBox(
+        'ChurchDisplay Pro - Startup Error',
+        `Failed to start the application:\n\n${err?.message || String(err)}`
+      );
+    } catch (_) {}
+    app.quit();
+  });
+
+setupLifecycleRuntime(
+  buildLifecycleOptions({
+    registerAppLifecycleHandlers,
     app,
-    userDataSeedMarker: USERDATA_SEED_MARKER,
-    createAppSettingsStore,
-    buildRuntimePaths,
-    ensureMediaDirs,
-    bgDebug,
-    initializeStartupRuntime,
-    mediaState,
-    ytdlpService,
-    bootstrapCoreServices,
-    protocol,
-    registerLocalMediaProtocol,
-    resolveAbsolutePath,
-    isPathWithinRoot,
-    initBibleAndSongsDatabases,
-    initSqlJs,
-    dbStore,
-    electronDir: __dirname,
-    runStartupUiRuntime,
-    setupIPC,
-    registerBibleSongsIPC,
-    ipcMain,
-    getBibleDb: (version) => dbStore.getBibleDb(version),
-    getSongsDb: () => dbStore.getSongsDb(),
-    saveSongsDb: (userDataDir) => dbStore.saveSongsDb(userDataDir),
-    registerDisplayWatchRuntime,
-    watchDisplayTopology,
-    screen,
+    forceCloseProjectorWindow: projectorRecoveryBridge.forceCloseProjectorWindow,
+    controlCloseController,
     controlWindowRef: () => controlWindow,
-    screenManager,
-    onRecover: projectorRecoveryBridge.recoverDesktopAfterDisplaySwitch,
-    splashController,
     createControlWindow,
-    setAppSettingsStore: (store) => { appSettingsStore = store; },
-    logger: console,
-  }));
-});
-
-setupLifecycleRuntime(buildLifecycleOptions({
-  registerAppLifecycleHandlers,
-  app,
-  forceCloseProjectorWindow: projectorRecoveryBridge.forceCloseProjectorWindow,
-  controlCloseController,
-  controlWindowRef: () => controlWindow,
-  createControlWindow,
-  onBeforeQuitExtra: () => bgDebug.close(),
-}));
-
-
-
-
+    onBeforeQuitExtra: () => {
+      // M8: Close all SQLite databases before exit.
+      dbStore.closeAll();
+      bgDebug.close();
+    },
+  })
+);

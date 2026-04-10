@@ -21,38 +21,73 @@ function SidebarQueue({
   handleStartRenameQueueItem,
   handleRemoveActiveQueueItem,
   handleClearQueue,
+  showQueueTypeTags,
+  setShowQueueTypeTags,
 }) {
+  const getQueueTypeLabel = (item) => {
+    const section = item?.section || '';
+    const type = item?.type || item?.payload?.type || '';
+    if (section === 'songs' || type === 'song' || type === 'lyrics') return 'SONG';
+    if (section === 'bible' || type === 'bible') return 'BIBLE';
+    if (section === 'text' || type === 'text') return 'TEXT';
+    if (type === 'video') return 'VIDEO';
+    if (type === 'image') return 'IMAGE';
+    if (type === 'pdf') return 'PDF';
+    if (type === 'ppt') return 'PPT';
+    if (type === 'youtube') return 'YT';
+    return 'MEDIA';
+  };
+
+  const getDisplayTitle = (rawTitle) => String(rawTitle || '')
+    .replace(/^\s*Song:\s*/i, '')
+    .replace(/^\s*[📖]\s*/u, '')
+    .trim();
+
+  const navItems = [
+    { key: 'displays', icon: 'D', label: 'Displays', hint: 'Screen output', onClick: openDisplays },
+    { key: 'text', icon: 'T', label: 'Free Text', hint: 'Custom words', onClick: openText },
+    { key: 'songs', icon: 'S', label: 'Songs', hint: 'Lyrics cards', onClick: openSongs },
+    { key: 'bible', icon: 'B', label: 'Bible', hint: 'Verses and refs', onClick: openBible },
+    { key: 'media', icon: 'M', label: 'Media', hint: 'Image/Video/PDF/PPT', onClick: openMedia },
+  ];
+
   return (
     <div className="sidebar">
       <div className="sidebar-nav">
-        <div className="sidebar__section-title">Projection</div>
-        <button className={`sidebar__item ${activeSection === 'displays' ? 'sidebar__item--active' : ''}`} onClick={openDisplays}>
-          <span className="sidebar__item-icon">D</span>
-          Displays
-        </button>
-
-        <div className="sidebar__section-title">Content</div>
-        <button className={`sidebar__item ${activeSection === 'text' ? 'sidebar__item--active' : ''}`} onClick={openText}>
-          <span className="sidebar__item-icon">T</span>
-          Free Text
-        </button>
-        <button className={`sidebar__item ${activeSection === 'songs' ? 'sidebar__item--active' : ''}`} onClick={openSongs}>
-          <span className="sidebar__item-icon">S</span>
-          Songs
-        </button>
-        <button className={`sidebar__item ${activeSection === 'bible' ? 'sidebar__item--active' : ''}`} onClick={openBible}>
-          <span className="sidebar__item-icon">B</span>
-          Bible
-        </button>
-        <button className={`sidebar__item ${activeSection === 'media' ? 'sidebar__item--active' : ''}`} onClick={openMedia}>
-          <span className="sidebar__item-icon">M</span>
-          Media
-        </button>
+        <div className="sidebar-nav-card">
+          <div className="sidebar__section-title">Main Menu</div>
+          {navItems.map((item) => {
+            const isActive = activeSection === item.key;
+            return (
+              <button
+                key={item.key}
+                className={`sidebar__item ${isActive ? 'sidebar__item--active' : ''}`}
+                onClick={item.onClick}
+              >
+                <span className="sidebar__item-icon">{item.icon}</span>
+                <span className="sidebar__item-text">
+                  <span className="sidebar__item-label">{item.label}</span>
+                  <span className="sidebar__item-hint">{item.hint}</span>
+                </span>
+                <span className={`sidebar__item-dot ${isActive ? 'sidebar__item-dot--active' : ''}`} />
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="sidebar-playlist">
-        <div className="sidebar__section-title" style={{ paddingTop: 0 }}>
-          Queue
+        <div className="cp-queue-head">
+          <div className="sidebar__section-title" style={{ paddingTop: 0 }}>
+            Queue
+          </div>
+          <button
+            className="btn btn--ghost cp-queue-head-btn"
+            onClick={() => setShowQueueTypeTags((v) => !v)}
+            title={showQueueTypeTags ? 'Hide queue type tags' : 'Show queue type tags'}
+          >
+            {showQueueTypeTags ? 'Hide Tags' : 'Show Tags'}
+          </button>
         </div>
         <div className="cp-queue-list">
           {projectorQueue.length === 0 && (
@@ -80,6 +115,7 @@ function SidebarQueue({
                   ::
                 </span>
                 <span className="cp-queue-index">{index + 1}.</span>
+                {showQueueTypeTags && <span className="cp-queue-type">{getQueueTypeLabel(item)}</span>}
                 {editingQueueId === item.id ? (
                   <input
                     autoFocus
@@ -104,7 +140,7 @@ function SidebarQueue({
                     className="cp-queue-title"
                     title="Click to project; double-click to rename"
                   >
-                    {item.title}
+                    {getDisplayTitle(item.title)}
                   </span>
                 )}
                 {editingQueueId !== item.id && (

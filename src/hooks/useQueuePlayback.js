@@ -12,6 +12,7 @@ export default function useQueuePlayback({
   normalizeYouTubeUrl,
   pushToProjector,
   onQueueItemSelected,
+  onMediaQueueItemPlayed,
 }) {
   const playQueueItem = useCallback(async (index) => {
     if (index < 0 || index >= projectorQueue.length) return;
@@ -23,6 +24,9 @@ export default function useQueuePlayback({
     setActiveQueueIndex(index);
     if (item.section) {
       setActiveSection(item.section);
+    }
+    if (item.section === 'media' && typeof onMediaQueueItemPlayed === 'function') {
+      onMediaQueueItemPlayed(item);
     }
 
     if (item.payload?.type === 'text') {
@@ -64,6 +68,7 @@ export default function useQueuePlayback({
         },
         token: Date.now(),
       });
+      return;
     } else {
       setActivePreloadItem(null);
     }
@@ -92,6 +97,7 @@ export default function useQueuePlayback({
     normalizeYouTubeUrl,
     pushToProjector,
     onQueueItemSelected,
+    onMediaQueueItemPlayed,
   ]);
 
   const playPrev = useCallback(() => {

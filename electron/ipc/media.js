@@ -1,4 +1,5 @@
 const fs = require('fs');
+const fsp = require('fs/promises');
 const path = require('path');
 const { spawn } = require('child_process');
 
@@ -23,7 +24,10 @@ function registerMediaIPC({
     const filters = [];
     switch (options?.type) {
       case 'image':
-        filters.push({ name: 'Image Files', extensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg'] });
+        filters.push({
+          name: 'Image Files',
+          extensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg'],
+        });
         break;
       case 'video':
         filters.push({ name: 'Video Files', extensions: ['mp4', 'webm', 'mkv', 'avi', 'mov'] });
@@ -35,7 +39,26 @@ function registerMediaIPC({
         filters.push({ name: 'PPT Files', extensions: ['pptx', 'ppt'] });
         break;
       default:
-        filters.push({ name: 'All Supported Files', extensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'mp4', 'webm', 'mkv', 'avi', 'mov', 'pdf', 'pptx', 'ppt'] });
+        filters.push({
+          name: 'All Supported Files',
+          extensions: [
+            'jpg',
+            'jpeg',
+            'png',
+            'gif',
+            'bmp',
+            'webp',
+            'svg',
+            'mp4',
+            'webm',
+            'mkv',
+            'avi',
+            'mov',
+            'pdf',
+            'pptx',
+            'ppt',
+          ],
+        });
     }
     const result = await dialog.showOpenDialog(getParentWindow(), {
       properties: ['openFile', 'multiSelections'],
@@ -122,30 +145,46 @@ function registerMediaIPC({
     };
 
     const results = [];
-    const scanDir = (dirPath, fileType) => {
-      if (!fs.existsSync(dirPath)) return;
-      const files = fs.readdirSync(dirPath);
+    // M9: Use async I/O to avoid blocking the main process.
+    const scanDir = async (dirPath, fileType) => {
+      try {
+        await fsp.access(dirPath);
+      } catch {
+        return;
+      }
+      let files;
+      try {
+        files = await fsp.readdir(dirPath);
+      } catch (err) {
+        console.warn('[MediaList] Failed to read directory:', dirPath, err?.message);
+        return;
+      }
       for (const file of files) {
-        const fullPath = path.join(dirPath, file);
-        const stat = fs.statSync(fullPath);
-        if (stat.isFile()) {
-          const originalName = file.replace(/^\d+_/, '');
-          results.push({
-            id: file,
-            name: originalName,
-            type: fileType,
-            path: fullPath,
-            size: stat.size,
-            createdAt: stat.birthtimeMs,
-          });
+        try {
+          const fullPath = path.join(dirPath, file);
+          const stat = await fsp.stat(fullPath);
+          if (stat.isFile()) {
+            const originalName = file.replace(/^\d+_/, '');
+            results.push({
+              id: file,
+              name: originalName,
+              type: fileType,
+              path: fullPath,
+              size: stat.size,
+              createdAt: stat.birthtimeMs,
+            });
+          }
+        } catch (fileErr) {
+          // File may have been deleted between readdir and stat — skip it.
+          continue;
         }
       }
     };
 
     if (type && dirs[type]) {
-      scanDir(dirs[type], type);
+      await scanDir(dirs[type], type);
     } else {
-      Object.entries(dirs).forEach(([t, d]) => scanDir(d, t));
+      await Promise.all(Object.entries(dirs).map(([t, d]) => scanDir(d, t)));
     }
 
     return results.sort((a, b) => b.createdAt - a.createdAt);
@@ -169,18 +208,27 @@ function registerMediaIPC({
   ipcMain.handle('get-media-dir', () => mediaDir);
 
   ipcMain.handle('convert-ppt', async (_event, pptPath) => {
+    // H1: Validate pptPath is within media directory to prevent path traversal.
+    const resolvedPptPath = resolveAbsolutePath(pptPath);
+    if (!resolvedPptPath || !isPathWithinRoot(mediaDir, resolvedPptPath)) {
+      return { success: false, error: 'PPT path is not allowed.' };
+    }
     let stat;
     try {
-      stat = fs.statSync(pptPath);
+      stat = fs.statSync(resolvedPptPath);
     } catch (err) {
       return { success: false, error: 'PPT file does not exist.' };
     }
     const crypto = require('crypto');
-    const hashId = crypto.createHash('md5').update(`${pptPath}_${stat.mtimeMs}`).digest('hex');
+    const hashId = crypto
+      .createHash('md5')
+      .update(`${resolvedPptPath}_${stat.mtimeMs}`)
+      .digest('hex');
     const outputDir = path.join(mediaPptDir, `slides_${hashId}`);
 
     if (fs.existsSync(outputDir)) {
-      const existingSlides = fs.readdirSync(outputDir)
+      const existingSlides = fs
+        .readdirSync(outputDir)
         .filter((f) => /\.(png|jpg|jpeg)$/i.test(f))
         .sort((a, b) => {
           const numA = parseInt(a.match(/\d+/) || [0], 10);
@@ -219,7 +267,7 @@ function registerMediaIPC({
         '-File',
         scriptPath,
         '-PptPath',
-        pptPath,
+        resolvedPptPath,
         '-OutputDir',
         outputDir,
       ];
@@ -229,14 +277,23 @@ function registerMediaIPC({
       let timedOut = false;
       const timer = setTimeout(() => {
         timedOut = true;
-        try { child.kill(); } catch (_) {}
+        try {
+          child.kill();
+        } catch (_) {}
       }, pptConvertTimeoutMs);
 
-      child.stdout.on('data', (d) => { stdout += d.toString(); });
-      child.stderr.on('data', (d) => { stderr += d.toString(); });
+      child.stdout.on('data', (d) => {
+        stdout += d.toString();
+      });
+      child.stderr.on('data', (d) => {
+        stderr += d.toString();
+      });
       child.on('error', (err) => {
         clearTimeout(timer);
-        resolve({ success: false, error: err?.message || 'Failed to start PowerShell for PPT conversion.' });
+        resolve({
+          success: false,
+          error: err?.message || 'Failed to start PowerShell for PPT conversion.',
+        });
       });
       child.on('close', (code) => {
         clearTimeout(timer);
@@ -251,7 +308,8 @@ function registerMediaIPC({
           return;
         }
 
-        const slides = fs.readdirSync(outputDir)
+        const slides = fs
+          .readdirSync(outputDir)
           .filter((f) => /\.(png|jpg|jpeg)$/i.test(f))
           .sort((a, b) => {
             const numA = parseInt(a.match(/\d+/) || [0], 10);

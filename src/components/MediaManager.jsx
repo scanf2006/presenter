@@ -1,6 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import PdfThumbnail from './PdfThumbnail';
 import { getYouTubeVideoIdFromUrl, normalizeYouTubeWatchUrl } from '../utils/youtube';
+import {
+  getSelectableThumbCardStyle,
+  getSelectableThumbIndexStyle,
+  getSelectableThumbSelectedTagStyle,
+} from '../utils/thumbnail';
 
 function MediaManager({
   onProjectMedia,
@@ -22,6 +27,7 @@ function MediaManager({
   const [pdfLoading, setPdfLoading] = useState(false);
   const [activePdf, setActivePdf] = useState(null);
   const [currentPdfPage, setCurrentPdfPage] = useState(1);
+  const [selectedMediaKey, setSelectedMediaKey] = useState('');
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const dropRef = useRef(null);
 
@@ -37,9 +43,27 @@ function MediaManager({
 
     setMediaFiles([
       { id: 'demo1', name: 'background.jpg', type: 'image', size: 1024000, createdAt: Date.now() },
-      { id: 'demo2', name: 'worship-video.mp4', type: 'video', size: 52428800, createdAt: Date.now() - 1000 },
-      { id: 'demo3', name: 'service-program.pdf', type: 'pdf', size: 2048000, createdAt: Date.now() - 2000 },
-      { id: 'demo4', name: 'worship.pptx', type: 'ppt', size: 8192000, createdAt: Date.now() - 3000 },
+      {
+        id: 'demo2',
+        name: 'worship-video.mp4',
+        type: 'video',
+        size: 52428800,
+        createdAt: Date.now() - 1000,
+      },
+      {
+        id: 'demo3',
+        name: 'service-program.pdf',
+        type: 'pdf',
+        size: 2048000,
+        createdAt: Date.now() - 2000,
+      },
+      {
+        id: 'demo4',
+        name: 'worship.pptx',
+        type: 'ppt',
+        size: 8192000,
+        createdAt: Date.now() - 3000,
+      },
     ]);
   }, [isElectron, activeFilter]);
 
@@ -47,127 +71,167 @@ function MediaManager({
     loadMediaFiles();
   }, [loadMediaFiles]);
 
-  const handleSelectFiles = useCallback(async (type) => {
-    if (!isElectron) return;
-    const filePaths = await window.churchDisplay.selectFiles({ type });
-    if (!Array.isArray(filePaths) || filePaths.length === 0) return;
+  const handleSelectFiles = useCallback(
+    async (type) => {
+      if (!isElectron) return;
+      const filePaths = await window.churchDisplay.selectFiles({ type });
+      if (!Array.isArray(filePaths) || filePaths.length === 0) return;
 
-    setImporting(true);
-    await window.churchDisplay.importFiles(filePaths);
-    await loadMediaFiles();
-    setImporting(false);
-  }, [isElectron, loadMediaFiles]);
+      setImporting(true);
+      await window.churchDisplay.importFiles(filePaths);
+      await loadMediaFiles();
+      setImporting(false);
+    },
+    [isElectron, loadMediaFiles]
+  );
 
-  const handleDragEnter = (e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(true); };
-  const handleDragLeave = (e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false); };
-  const handleDragOver = (e) => { e.preventDefault(); e.stopPropagation(); };
-
-  const handleDrop = useCallback(async (e) => {
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+  const handleDragLeave = (e) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
+  };
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
 
-    if (!isElectron) return;
+  const handleDrop = useCallback(
+    async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragging(false);
 
-    const files = Array.from(e.dataTransfer.files || []);
-    if (files.length === 0) return;
+      if (!isElectron) return;
 
-    const filePaths = files.map((f) => f.path).filter(Boolean);
-    if (filePaths.length === 0) return;
+      const files = Array.from(e.dataTransfer.files || []);
+      if (files.length === 0) return;
 
-    setImporting(true);
-    await window.churchDisplay.importFiles(filePaths);
-    await loadMediaFiles();
-    setImporting(false);
-  }, [isElectron, loadMediaFiles]);
+      const filePaths = files.map((f) => f.path).filter(Boolean);
+      if (filePaths.length === 0) return;
 
-  const handleDelete = useCallback(async (file) => {
-    if (!isElectron) return;
-    await window.churchDisplay.deleteMedia(file.path);
-    await loadMediaFiles();
-  }, [isElectron, loadMediaFiles]);
+      setImporting(true);
+      await window.churchDisplay.importFiles(filePaths);
+      await loadMediaFiles();
+      setImporting(false);
+    },
+    [isElectron, loadMediaFiles]
+  );
 
-  const handleLoadPdfGrid = useCallback(async (file) => {
-    setPdfLoading(true);
-    setActivePdf(null);
-    setPptSlides(null);
-    setCurrentPdfPage(1);
+  const handleDelete = useCallback(
+    async (file) => {
+      if (!isElectron) return;
+      await window.churchDisplay.deleteMedia(file.path);
+      await loadMediaFiles();
+    },
+    [isElectron, loadMediaFiles]
+  );
 
-    try {
-      const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.min.mjs');
-      const workerUrl = new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).toString();
-      pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
-
-      const fileUrl = `local-media://${encodeURIComponent(file.path)}`;
-      const response = await fetch(fileUrl);
-      if (!response.ok) throw new Error(`Network load failed: ${response.status}`);
-      const dataBuffer = await response.arrayBuffer();
-
-      const loadingTask = pdfjsLib.getDocument({ data: dataBuffer });
-      const pdfDocument = await loadingTask.promise;
-
-      setActivePdf({
-        path: file.path,
-        name: file.name,
-        pdfDocument,
-        numPages: pdfDocument.numPages,
+  const handleLoadPdfGrid = useCallback(
+    async (file) => {
+      setPdfLoading(true);
+      // M7: Destroy previous PDF document before loading new one.
+      setActivePdf((prev) => {
+        if (prev?.pdfDocument) prev.pdfDocument.destroy().catch(() => {});
+        return null;
       });
+      setPptSlides(null);
+      setCurrentPdfPage(1);
 
-      if (!file.deferProject) {
-        onProjectMedia({
-          type: 'pdf',
+      try {
+        const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.min.mjs');
+        const workerUrl = new URL(
+          'pdfjs-dist/legacy/build/pdf.worker.min.mjs',
+          import.meta.url
+        ).toString();
+        pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+
+        const fileUrl = `local-media://${encodeURIComponent(file.path)}`;
+        const response = await fetch(fileUrl);
+        if (!response.ok) throw new Error(`Network load failed: ${response.status}`);
+        const dataBuffer = await response.arrayBuffer();
+
+        const loadingTask = pdfjsLib.getDocument({ data: dataBuffer });
+        const pdfDocument = await loadingTask.promise;
+
+        setActivePdf({
           path: file.path,
           name: file.name,
-          page: 1,
+          pdfDocument,
+          numPages: pdfDocument.numPages,
         });
+
+        if (!file.deferProject) {
+          onProjectMedia({
+            type: 'pdf',
+            path: file.path,
+            name: file.name,
+            page: 1,
+          });
+        }
+      } catch (err) {
+        console.error('[MediaManager] PDF load failed:', err);
+        alert(`Failed to load PDF thumbnails: ${err.message}`);
+      } finally {
+        setPdfLoading(false);
       }
-    } catch (err) {
-      console.error('[MediaManager] PDF load failed:', err);
-      alert(`Failed to load PDF thumbnails: ${err.message}`);
-    } finally {
-      setPdfLoading(false);
-    }
-  }, [onProjectMedia]);
+    },
+    [onProjectMedia]
+  );
 
-  const handleConvertPpt = useCallback(async (file) => {
-    if (!isElectron) return;
-    setPptConverting(true);
-    const result = await window.churchDisplay.convertPpt(file.path);
-    setPptConverting(false);
+  const handleConvertPpt = useCallback(
+    async (file) => {
+      if (!isElectron) return;
+      setPptConverting(true);
+      const result = await window.churchDisplay.convertPpt(file.path);
+      setPptConverting(false);
 
-    if (result.success && result.slides.length > 0) {
-      setPptSlides(result.slides);
-      setCurrentSlideIndex(-1);
-      return;
-    }
+      if (result.success && result.slides.length > 0) {
+        setPptSlides(result.slides);
+        setCurrentSlideIndex(-1);
+        return;
+      }
 
-    if (result.error === 'TIMEOUT') {
-      alert('PPT conversion timed out (over 2 minutes). Please close PowerPoint popups and retry.');
-    } else {
-      alert(`PPT conversion failed:\n${result.error || 'Unknown error'}\n\nPlease verify PPT format and Office availability.`);
-    }
-  }, [isElectron, onProjectMedia]);
-
-  const handleProjectMedia = useCallback((file) => {
-    if (backgroundPickerTarget) {
-      if (file.type === 'image' || file.type === 'video') {
-        onPickBackground?.({ type: file.type, path: file.path, name: file.name });
+      if (result.error === 'TIMEOUT') {
+        alert(
+          'PPT conversion timed out (over 2 minutes). Please close PowerPoint popups and retry.'
+        );
       } else {
-        alert('Background only supports image or video');
+        alert(
+          `PPT conversion failed:\n${result.error || 'Unknown error'}\n\nPlease verify PPT format and Office availability.`
+        );
       }
-      return;
-    }
+    },
+    [isElectron, onProjectMedia]
+  );
 
-    if (file.type === 'image') {
-      onProjectMedia({ type: 'image', path: file.path, name: file.name });
-    } else if (file.type === 'video') {
-      onProjectMedia({ type: 'video', path: file.path, name: file.name });
-    } else if (file.type === 'pdf') {
-      handleLoadPdfGrid(file);
-    } else if (file.type === 'ppt') {
-      handleConvertPpt(file);
-    }
-  }, [backgroundPickerTarget, onPickBackground, onProjectMedia, handleLoadPdfGrid, handleConvertPpt]);
+  const handleProjectMedia = useCallback(
+    (file) => {
+      if (backgroundPickerTarget) {
+        if (file.type === 'image' || file.type === 'video') {
+          onPickBackground?.({ type: file.type, path: file.path, name: file.name });
+        } else {
+          alert('Background only supports image or video');
+        }
+        return;
+      }
+
+      if (file.type === 'image') {
+        onProjectMedia({ type: 'image', path: file.path, name: file.name });
+      } else if (file.type === 'video') {
+        onProjectMedia({ type: 'video', path: file.path, name: file.name });
+      } else if (file.type === 'pdf') {
+        handleLoadPdfGrid(file);
+      } else if (file.type === 'ppt') {
+        handleConvertPpt(file);
+      }
+    },
+    [backgroundPickerTarget, onPickBackground, onProjectMedia, handleLoadPdfGrid, handleConvertPpt]
+  );
 
   const parseYouTubeId = useCallback((url) => {
     const id = getYouTubeVideoIdFromUrl(url);
@@ -229,6 +293,10 @@ function MediaManager({
     setPptConverting(false);
     setPdfLoading(false);
     setPptSlides(null);
+    // M7: Destroy PDF document before clearing reference.
+    if (activePdf?.pdfDocument) {
+      activePdf.pdfDocument.destroy().catch(() => {});
+    }
     setActivePdf(null);
     setCurrentSlideIndex(-1);
     setCurrentPdfPage(1);
@@ -243,21 +311,31 @@ function MediaManager({
 
   const getTypeIcon = (type) => {
     switch (type) {
-      case 'image': return 'IMG';
-      case 'video': return 'VID';
-      case 'pdf': return 'PDF';
-      case 'ppt': return 'PPT';
-      default: return 'FILE';
+      case 'image':
+        return 'IMG';
+      case 'video':
+        return 'VID';
+      case 'pdf':
+        return 'PDF';
+      case 'ppt':
+        return 'PPT';
+      default:
+        return 'FILE';
     }
   };
 
   const getTypeLabel = (type) => {
     switch (type) {
-      case 'image': return 'Images';
-      case 'video': return 'Videos';
-      case 'pdf': return 'PDF';
-      case 'ppt': return 'PPT';
-      default: return 'Files';
+      case 'image':
+        return 'Images';
+      case 'video':
+        return 'Videos';
+      case 'pdf':
+        return 'PDF';
+      case 'ppt':
+        return 'PPT';
+      default:
+        return 'Files';
     }
   };
 
@@ -304,20 +382,24 @@ function MediaManager({
       {!isViewingDetail && (
         <>
           {backgroundPickerTarget && (
-            <div style={{
-              marginBottom: '12px',
-              padding: '10px 12px',
-              borderRadius: '8px',
-              border: '1px solid rgba(99,102,241,0.35)',
-              background: 'rgba(99,102,241,0.12)',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: '12px',
-              fontSize: '12px',
-            }}>
+            <div
+              style={{
+                marginBottom: '12px',
+                padding: '10px 12px',
+                borderRadius: '8px',
+                border: '1px solid rgba(99,102,241,0.35)',
+                background: 'rgba(99,102,241,0.12)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '12px',
+                fontSize: '12px',
+              }}
+            >
               <span>Background picker mode: click an image/video to apply and return.</span>
-              <button className="btn btn--ghost" onClick={() => onCancelBackgroundPick?.()}>Cancel</button>
+              <button className="btn btn--ghost" onClick={() => onCancelBackgroundPick?.()}>
+                Cancel
+              </button>
             </div>
           )}
 
@@ -338,8 +420,12 @@ function MediaManager({
                 outline: 'none',
               }}
             />
-            <button className="btn btn--primary" onClick={handleProjectYouTube}>Play</button>
-            <button className="btn btn--ghost" onClick={handleQueueYouTube}>Queue</button>
+            <button className="btn btn--primary" onClick={handleProjectYouTube}>
+              Play
+            </button>
+            <button className="btn btn--ghost" onClick={handleQueueYouTube}>
+              Queue
+            </button>
           </div>
 
           <div className="media-filter-bar">
@@ -359,10 +445,18 @@ function MediaManager({
             <button className="btn btn--primary" onClick={() => handleSelectFiles()}>
               Import Files
             </button>
-            <button className="btn btn--ghost" onClick={() => handleSelectFiles('image')}>Image</button>
-            <button className="btn btn--ghost" onClick={() => handleSelectFiles('video')}>Video</button>
-            <button className="btn btn--ghost" onClick={() => handleSelectFiles('pdf')}>PDF</button>
-            <button className="btn btn--ghost" onClick={() => handleSelectFiles('ppt')}>PPT</button>
+            <button className="btn btn--ghost" onClick={() => handleSelectFiles('image')}>
+              Image
+            </button>
+            <button className="btn btn--ghost" onClick={() => handleSelectFiles('video')}>
+              Video
+            </button>
+            <button className="btn btn--ghost" onClick={() => handleSelectFiles('pdf')}>
+              PDF
+            </button>
+            <button className="btn btn--ghost" onClick={() => handleSelectFiles('ppt')}>
+              PPT
+            </button>
           </div>
 
           <div
@@ -404,14 +498,59 @@ function MediaManager({
       )}
 
       {activePdf && (
-        <div className="media-slide-selector" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+        <div
+          className="media-slide-selector"
+          style={{
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            borderRadius: '8px',
+            padding: '16px',
+            marginBottom: '16px',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '16px',
+            }}
+          >
             <h3 style={{ fontSize: '15px', fontWeight: 'bold' }}>
-              PDF {activePdf.name} - Thumbnails <span style={{ color: 'var(--color-text-secondary)', fontSize: '13px', fontWeight: 'normal' }}>({currentPdfPage} / {activePdf.numPages})</span>
+              PDF {activePdf.name} - Thumbnails{' '}
+              <span
+                style={{
+                  color: 'var(--color-text-secondary)',
+                  fontSize: '13px',
+                  fontWeight: 'normal',
+                }}
+              >
+                ({currentPdfPage} / {activePdf.numPages})
+              </span>
             </h3>
-            <button className="btn btn--ghost" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => setActivePdf(null)}>Close</button>
+            <button
+              className="btn btn--ghost"
+              style={{ padding: '4px 8px', fontSize: '12px' }}
+              onClick={() => {
+                setActivePdf((prev) => {
+                  if (prev?.pdfDocument) prev.pdfDocument.destroy().catch(() => {});
+                  return null;
+                });
+              }}
+            >
+              Close
+            </button>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '12px', maxHeight: '400px', overflowY: 'auto', paddingRight: '6px' }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
+              gap: '12px',
+              maxHeight: '400px',
+              overflowY: 'auto',
+              paddingRight: '6px',
+            }}
+          >
             {Array.from({ length: activePdf.numPages }).map((_, i) => {
               const pageNumber = i + 1;
               return (
@@ -422,7 +561,12 @@ function MediaManager({
                   isSelected={currentPdfPage === pageNumber}
                   onClick={() => {
                     setCurrentPdfPage(pageNumber);
-                    onProjectMedia({ type: 'pdf', path: activePdf.path, name: activePdf.name, page: pageNumber });
+                    onProjectMedia({
+                      type: 'pdf',
+                      path: activePdf.path,
+                      name: activePdf.name,
+                      page: pageNumber,
+                    });
                   }}
                 />
               );
@@ -432,57 +576,82 @@ function MediaManager({
       )}
 
       {pptSlides && (
-        <div className="media-slide-selector" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+        <div
+          className="media-slide-selector"
+          style={{
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
+            borderRadius: '8px',
+            padding: '16px',
+            marginBottom: '16px',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '16px',
+            }}
+          >
             <h3 style={{ fontSize: '15px', fontWeight: 'bold' }}>
-              PPT Slides <span style={{ color: 'var(--color-text-secondary)', fontSize: '13px', fontWeight: 'normal' }}>({currentSlideIndex >= 0 ? currentSlideIndex + 1 : '-'} / {pptSlides.length})</span>
+              PPT Slides{' '}
+              <span
+                style={{
+                  color: 'var(--color-text-secondary)',
+                  fontSize: '13px',
+                  fontWeight: 'normal',
+                }}
+              >
+                ({currentSlideIndex >= 0 ? currentSlideIndex + 1 : '-'} / {pptSlides.length})
+              </span>
             </h3>
-            <button className="btn btn--ghost" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => setPptSlides(null)}>Close</button>
+            <button
+              className="btn btn--ghost"
+              style={{ padding: '4px 8px', fontSize: '12px' }}
+              onClick={() => setPptSlides(null)}
+            >
+              Close
+            </button>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px', maxHeight: '400px', overflowY: 'auto', paddingRight: '6px' }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+              gap: '12px',
+              maxHeight: '400px',
+              overflowY: 'auto',
+              paddingRight: '6px',
+            }}
+          >
             {pptSlides.map((slide, index) => (
               <div
                 key={slide.path}
                 onClick={() => {
                   setCurrentSlideIndex(index);
-                  onProjectMedia({ type: 'image', path: slide.path, name: `PPT - Page ${index + 1}`, fitMode: 'contain' });
+                  onProjectMedia({
+                    type: 'image',
+                    path: slide.path,
+                    name: `PPT - Page ${index + 1}`,
+                    fitMode: 'contain',
+                  });
                 }}
-                style={{
-                  cursor: 'pointer',
-                  border: currentSlideIndex === index ? '3px solid #ff4d4f' : '2px solid transparent',
-                  borderRadius: '6px',
-                  overflow: 'hidden',
-                  position: 'relative',
-                  backgroundColor: '#000',
-                  boxShadow: currentSlideIndex === index
-                    ? '0 0 0 2px rgba(255,77,79,0.28), 0 4px 16px rgba(255,77,79,0.35)'
-                    : '0 2px 8px rgba(0,0,0,0.2)',
-                  transform: currentSlideIndex === index ? 'scale(1.01)' : 'scale(1)',
-                  transition: 'all 0.16s ease',
-                }}
+                style={getSelectableThumbCardStyle(currentSlideIndex === index)}
               >
                 {currentSlideIndex === index && (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: 6,
-                      left: 6,
-                      zIndex: 2,
-                      background: 'rgba(255,77,79,0.92)',
-                      color: '#fff',
-                      fontSize: '10px',
-                      fontWeight: 700,
-                      letterSpacing: '0.4px',
-                      padding: '2px 7px',
-                      borderRadius: '999px',
-                      border: '1px solid rgba(255,255,255,0.75)',
-                    }}
-                  >
-                    SELECTED
-                  </div>
+                  <div style={getSelectableThumbSelectedTagStyle()}>SEL</div>
                 )}
-                <img src={`local-media://${encodeURIComponent(slide.path)}`} alt={`Slide ${index + 1}`} style={{ width: '100%', display: 'block', aspectRatio: '16/9', objectFit: 'contain' }} />
-                <div style={{ position: 'absolute', bottom: 0, right: 0, background: currentSlideIndex === index ? 'var(--color-primary)' : 'rgba(0,0,0,0.7)', color: '#fff', fontSize: '12px', fontWeight: 'bold', padding: '2px 8px', borderTopLeftRadius: '6px' }}>
+                <img
+                  src={`local-media://${encodeURIComponent(slide.path)}`}
+                  alt={`Slide ${index + 1}`}
+                  style={{
+                    width: '100%',
+                    display: 'block',
+                    aspectRatio: '16/9',
+                    objectFit: 'contain',
+                  }}
+                />
+                <div style={getSelectableThumbIndexStyle(currentSlideIndex === index)}>
                   {index + 1}
                 </div>
               </div>
@@ -493,121 +662,213 @@ function MediaManager({
 
       {!isViewingDetail && (
         <>
-          <h3 style={{ fontSize: '15px', fontWeight: 'bold', marginTop: '24px', marginBottom: '16px' }}>Media Library</h3>
+          <h3
+            style={{
+              fontSize: '15px',
+              fontWeight: 'bold',
+              marginTop: '24px',
+              marginBottom: '16px',
+            }}
+          >
+            Media Library
+          </h3>
 
           {displayFiles.length === 0 ? (
             <div className="empty-state" style={{ padding: '40px 0' }}>
               <div className="empty-state__icon">FILE</div>
               <div className="empty-state__title">No media files</div>
-              <div className="empty-state__desc">Click "Import Files" or drag files into the drop zone above.</div>
+              <div className="empty-state__desc">
+                Click "Import Files" or drag files into the drop zone above.
+              </div>
             </div>
           ) : (
             groupedFiles.map((group) => (
               <div key={group.type} style={{ marginBottom: '16px' }}>
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: '10px',
-                  padding: '8px 10px',
-                  borderRadius: '8px',
-                  border: '1px solid var(--color-border)',
-                  background: 'rgba(99,102,241,0.08)',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                }}>
-                  <span>{getTypeIcon(group.type)} {getTypeLabel(group.type)}</span>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '10px',
+                    padding: '8px 10px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--color-border)',
+                    background: 'rgba(99,102,241,0.08)',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                  }}
+                >
+                  <span>
+                    {getTypeIcon(group.type)} {getTypeLabel(group.type)}
+                  </span>
                   <span style={{ color: 'var(--color-text-secondary)' }}>{group.files.length}</span>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '16px' }}>
-                  {group.files.map((file) => (
-                    <div
-                      key={file.id}
-                      style={{
-                        position: 'relative',
-                        background: 'var(--color-surface)',
-                        border: '1px solid var(--color-border)',
-                        borderRadius: '8px',
-                        overflow: 'hidden',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.transform = 'translateY(-2px)';
-                        e.currentTarget.style.borderColor = 'var(--color-primary)';
-                        e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.4)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = 'none';
-                        e.currentTarget.style.borderColor = 'var(--color-border)';
-                        e.currentTarget.style.boxShadow = 'none';
-                      }}
-                      onClick={() => handleProjectMedia(file)}
-                      title={`Project now: ${file.name}`}
-                    >
-                      <div style={{ height: '110px', backgroundColor: '#0a0a0a', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-                        {file.type === 'image' ? (
-                          <img src={`local-media://${encodeURIComponent(file.path)}`} alt={file.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        ) : file.type === 'video' ? (
-                          <video src={`local-media://${encodeURIComponent(file.path)}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        ) : (
-                          <div style={{ fontSize: '22px', fontWeight: 700, color: '#fff' }}>{getTypeIcon(file.type)}</div>
-                        )}
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (window.confirm(`Delete ${file.name}?`)) handleDelete(file);
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+                    gap: '16px',
+                  }}
+                >
+                  {group.files.map((file) => {
+                    const mediaKey = String(file.path || file.id || file.name || '');
+                    const isSelected = mediaKey !== '' && selectedMediaKey === mediaKey;
+                    return (
+                      <div
+                        key={file.id}
+                        style={{
+                          ...getSelectableThumbCardStyle(isSelected),
+                          position: 'relative',
+                          background: 'var(--color-surface)',
+                          borderRadius: '8px',
+                          overflow: 'hidden',
+                          display: 'flex',
+                          flexDirection: 'column',
+                        }}
+                        onClick={() => {
+                          setSelectedMediaKey(mediaKey);
+                          handleProjectMedia(file);
+                        }}
+                        title={`Project now: ${file.name}`}
+                      >
+                        <div
+                          style={{
+                            height: '110px',
+                            backgroundColor: '#0a0a0a',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            position: 'relative',
                           }}
-                          style={{ position: 'absolute', top: '6px', right: '6px', background: 'rgba(0,0,0,0.7)', border: 'none', borderRadius: '4px', color: '#ff4d4f', padding: '4px 6px', cursor: 'pointer', zIndex: 10, fontSize: '11px' }}
-                          title="Delete file"
                         >
-                          Del
-                        </button>
+                          {isSelected && (
+                            <div style={getSelectableThumbSelectedTagStyle()}>SEL</div>
+                          )}
+                          {file.type === 'image' ? (
+                            <img
+                              src={`local-media://${encodeURIComponent(file.path)}`}
+                              alt={file.name}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                          ) : file.type === 'video' ? (
+                            <video
+                              src={`local-media://${encodeURIComponent(file.path)}`}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                          ) : (
+                            <div style={{ fontSize: '22px', fontWeight: 700, color: '#fff' }}>
+                              {getTypeIcon(file.type)}
+                            </div>
+                          )}
 
-                        <div style={{ position: 'absolute', bottom: '6px', left: '6px', background: 'rgba(0,0,0,0.7)', borderRadius: '4px', padding: '2px 6px', fontSize: '11px', color: '#fff', fontWeight: 'bold' }}>
-                          {getTypeIcon(file.type)}
-                        </div>
-                      </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (window.confirm(`Delete ${file.name}?`)) handleDelete(file);
+                            }}
+                            style={{
+                              position: 'absolute',
+                              top: '6px',
+                              right: '6px',
+                              background: 'rgba(0,0,0,0.7)',
+                              border: 'none',
+                              borderRadius: '4px',
+                              color: '#ff4d4f',
+                              padding: '4px 6px',
+                              cursor: 'pointer',
+                              zIndex: 10,
+                              fontSize: '11px',
+                            }}
+                            title="Delete file"
+                          >
+                            Del
+                          </button>
 
-                      <div style={{ padding: '10px' }}>
-                        <div style={{ fontSize: '13px', fontWeight: '500', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--color-text-primary)' }}>
-                          {file.name}
+                          <div
+                            style={{
+                              position: 'absolute',
+                              bottom: '6px',
+                              left: '6px',
+                              background: 'rgba(0,0,0,0.7)',
+                              borderRadius: '4px',
+                              padding: '2px 6px',
+                              fontSize: '11px',
+                              color: '#fff',
+                              fontWeight: 'bold',
+                            }}
+                          >
+                            {getTypeIcon(file.type)}
+                          </div>
                         </div>
-                        <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginTop: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span>{formatSize(file.size)}</span>
-                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                            <span
-                              style={{ color: 'var(--color-primary)', cursor: 'pointer', padding: '2px 6px', background: 'rgba(99,102,241,0.1)', borderRadius: '4px' }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (onAddPlaylist) {
-                                  onAddPlaylist({
-                                    type: file.type,
-                                    name: file.name,
-                                    payload: {
+
+                        <div style={{ padding: '10px' }}>
+                          <div
+                            style={{
+                              fontSize: '13px',
+                              fontWeight: '500',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              color: 'var(--color-text-primary)',
+                            }}
+                          >
+                            {file.name}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: '11px',
+                              color: 'var(--color-text-secondary)',
+                              marginTop: '4px',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                            }}
+                          >
+                            <span>{formatSize(file.size)}</span>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                              <span
+                                style={{
+                                  color: 'var(--color-primary)',
+                                  cursor: 'pointer',
+                                  padding: '2px 6px',
+                                  background: 'rgba(99,102,241,0.1)',
+                                  borderRadius: '4px',
+                                }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (onAddPlaylist) {
+                                    onAddPlaylist({
                                       type: file.type,
-                                      path: file.path,
                                       name: file.name,
-                                    },
-                                  });
-                                }
-                              }}
-                              title="Add to queue"
-                            >
-                              +
-                            </span>
-                            <span style={{ color: 'var(--color-primary)' }} title="Project now" onClick={(e) => { e.stopPropagation(); handleProjectMedia(file); }}>
-                              Play
-                            </span>
+                                      payload: {
+                                        type: file.type,
+                                        path: file.path,
+                                        name: file.name,
+                                      },
+                                    });
+                                  }
+                                }}
+                                title="Add to queue"
+                              >
+                                +
+                              </span>
+                              <span
+                                style={{ color: 'var(--color-primary)' }}
+                                title="Project now"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleProjectMedia(file);
+                                }}
+                              >
+                                Play
+                              </span>
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ))

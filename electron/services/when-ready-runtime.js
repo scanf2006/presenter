@@ -39,6 +39,10 @@ async function runWhenReadyRuntime({
 }) {
   sessionHooks.setupYouTubeRequestHeaders();
   sessionHooks.setupMediaPermissionHandlers();
+  // H5: Apply Content Security Policy to all sessions.
+  if (typeof sessionHooks.setupContentSecurityPolicy === 'function') {
+    sessionHooks.setupContentSecurityPolicy();
+  }
   hydrateUserDataFromBundledSeed(app, userDataSeedMarker, logger);
 
   const startupRuntime = initializeStartupRuntime({

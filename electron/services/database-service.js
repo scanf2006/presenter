@@ -7,16 +7,52 @@ function createDatabaseStore() {
   let songsDb = null;
 
   return {
-    setBibleDbCuvs(db) { bibleDbCuvs = db; },
-    setBibleDbKjv(db) { bibleDbKjv = db; },
-    setSongsDb(db) { songsDb = db; },
-    getBibleDb(version) { return version === 'kjv' ? bibleDbKjv : bibleDbCuvs; },
-    getSongsDb() { return songsDb; },
+    setBibleDbCuvs(db) {
+      bibleDbCuvs = db;
+    },
+    setBibleDbKjv(db) {
+      bibleDbKjv = db;
+    },
+    setSongsDb(db) {
+      songsDb = db;
+    },
+    getBibleDb(version) {
+      return version === 'kjv' ? bibleDbKjv : bibleDbCuvs;
+    },
+    getSongsDb() {
+      return songsDb;
+    },
     saveSongsDb(userDataDir) {
       if (!songsDb) return;
-      const data = songsDb.export();
-      const songsPath = path.join(userDataDir, 'songs.db');
-      fs.writeFileSync(songsPath, Buffer.from(data));
+      // L6: Wrap in try/catch to prevent unhandled write errors.
+      try {
+        const data = songsDb.export();
+        const songsPath = path.join(userDataDir, 'songs.db');
+        fs.writeFileSync(songsPath, Buffer.from(data));
+      } catch (err) {
+        console.error('[SongsDB] Failed to save songs database:', err?.message || err);
+      }
+    },
+    // M8: Close all open SQLite databases on application exit.
+    closeAll() {
+      try {
+        if (bibleDbCuvs) {
+          bibleDbCuvs.close();
+          bibleDbCuvs = null;
+        }
+      } catch (_) {}
+      try {
+        if (bibleDbKjv) {
+          bibleDbKjv.close();
+          bibleDbKjv = null;
+        }
+      } catch (_) {}
+      try {
+        if (songsDb) {
+          songsDb.close();
+          songsDb = null;
+        }
+      } catch (_) {}
     },
   };
 }

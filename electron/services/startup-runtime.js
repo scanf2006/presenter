@@ -12,18 +12,21 @@ function initializeStartupRuntime({
   bgDebug.setUserDataDir(userDataDir);
 
   const appSettingsPath = path.join(userDataDir, 'app-settings.json');
-  const appSettingsStore = createAppSettingsStore(appSettingsPath);
+  const appSettingsStore = createAppSettingsStore(appSettingsPath, app.getVersion());
   bgDebug.append('app-ready', { userData: userDataDir });
 
   const runtimePaths = buildRuntimePaths(userDataDir);
-  ensureMediaDirs([
-    runtimePaths.mediaDir,
-    runtimePaths.mediaImagesDir,
-    runtimePaths.mediaVideosDir,
-    runtimePaths.mediaPdfDir,
-    runtimePaths.mediaPptDir,
-    runtimePaths.mediaYouTubeCacheDir,
-  ], logger);
+  ensureMediaDirs(
+    [
+      runtimePaths.mediaDir,
+      runtimePaths.mediaImagesDir,
+      runtimePaths.mediaVideosDir,
+      runtimePaths.mediaPdfDir,
+      runtimePaths.mediaPptDir,
+      runtimePaths.mediaYouTubeCacheDir,
+    ],
+    logger
+  );
 
   return {
     userDataDir,

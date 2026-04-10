@@ -5,7 +5,7 @@
     "type": "image",
     "payload": {
       "type": "image",
-      "path": "C:\\Users\\admin\\AppData\\Roaming\\churchdisplay-pro\\media\\images\\1774831579413_start.png",
+      "path": "media/images/1774831579413_start.png",
       "name": "start.png"
     },
     "section": "media",
@@ -17,7 +17,7 @@
     "type": "ppt",
     "payload": {
       "type": "ppt",
-      "path": "C:\\Users\\admin\\AppData\\Roaming\\churchdisplay-pro\\media\\ppt\\1775275220156_教会敬拜流程 AUTO主题.pptx",
+      "path": "media/ppt/1775275220156_教会敬拜流程 AUTO主题.pptx",
       "name": "教会敬拜流程 AUTO主题.pptx"
     },
     "section": "media",
@@ -33,7 +33,7 @@
       "songTitle": "因為你是聖潔",
       "background": {
         "type": "video",
-        "path": "C:\\Users\\admin\\AppData\\Roaming\\churchdisplay-pro\\media\\videos\\1775335660225_e955453d-edb3-4d56-a013-180a4dfa818e.mp4"
+        "path": "media/videos/1775335660225_e955453d-edb3-4d56-a013-180a4dfa818e.mp4"
       }
     },
     "section": "songs",
@@ -49,7 +49,7 @@
       "songTitle": "Yeshua",
       "background": {
         "type": "video",
-        "path": "C:\\Users\\admin\\AppData\\Roaming\\churchdisplay-pro\\media\\videos\\1775335660154_6b2e9888-e904-4583-b110-08850f9de8cd.mp4"
+        "path": "media/videos/1775335660154_6b2e9888-e904-4583-b110-08850f9de8cd.mp4"
       }
     },
     "section": "songs",
@@ -61,7 +61,7 @@
     "type": "ppt",
     "payload": {
       "type": "ppt",
-      "path": "C:\\Users\\admin\\AppData\\Roaming\\churchdisplay-pro\\media\\ppt\\1775341029656_我是復活,我是生命.pptx",
+      "path": "media/ppt/1775341029656_我是復活,我是生命.pptx",
       "name": "我是復活,我是生命.pptx"
     },
     "section": "media",
@@ -78,7 +78,7 @@
       "fontSize": "large",
       "background": {
         "type": "image",
-        "path": "C:\\Users\\admin\\AppData\\Roaming\\churchdisplay-pro\\media\\images\\1775335648741_1922.jpg",
+        "path": "media/images/1775335648741_1922.jpg",
         "name": "1922.jpg"
       }
     },
@@ -91,7 +91,7 @@
     "type": "video",
     "payload": {
       "type": "video",
-      "path": "C:\\Users\\admin\\AppData\\Roaming\\churchdisplay-pro\\media\\videos\\1775332342927_【中英雙語字幕】三一頌 Doxology（G調）【于力工牧师聖詩】.mp4",
+      "path": "media/videos/1775332342927_【中英雙語字幕】三一頌 Doxology（G調）【于力工牧师聖詩】.mp4",
       "name": "【中英雙語字幕】三一頌 Doxology（G調）【于力工牧师聖詩】.mp4"
     },
     "section": "media",
