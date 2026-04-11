@@ -5,6 +5,18 @@ function recoverDesktopAfterDisplaySwitch({
   debug = () => {},
   onProjectorCleared = () => {},
 } = {}) {
+  const safe = (win, op) => {
+    try {
+      op();
+    } catch (err) {
+      debug('desktop-recover-warning', {
+        reason,
+        windowId: win?.id,
+        error: err?.message || String(err),
+      });
+    }
+  };
+
   debug('desktop-recover-start', { reason });
   try {
     const wins = BrowserWindow.getAllWindows();
@@ -12,24 +24,32 @@ function recoverDesktopAfterDisplaySwitch({
       if (!win || win.isDestroyed()) continue;
       // Keep control window alive, clear any accidental topmost/fullscreen flags.
       if (controlWindow && win.id === controlWindow.id) {
-        try { win.setAlwaysOnTop(false); } catch (_) {}
-        try { win.setFullScreen(false); } catch (_) {}
+        safe(win, () => win.setAlwaysOnTop(false));
+        safe(win, () => win.setFullScreen(false));
         continue;
       }
       // Non-control windows are considered projection/splash leftovers.
-      try { win.setAlwaysOnTop(false); } catch (_) {}
-      try { win.setFullScreen(false); } catch (_) {}
-      try { win.setKiosk(false); } catch (_) {}
-      try { win.setSkipTaskbar(false); } catch (_) {}
-      try { win.hide(); } catch (_) {}
-      try { win.close(); } catch (_) {}
+      safe(win, () => win.setAlwaysOnTop(false));
+      safe(win, () => win.setFullScreen(false));
+      safe(win, () => win.setKiosk(false));
+      safe(win, () => win.setSkipTaskbar(false));
+      safe(win, () => win.hide());
+      safe(win, () => win.close());
       try {
         if (!win.isDestroyed()) {
           win.destroy();
         }
-      } catch (_) {}
+      } catch (err) {
+        debug('desktop-recover-warning', {
+          reason,
+          windowId: win.id,
+          error: err?.message || String(err),
+        });
+      }
     }
-  } catch (_) {}
+  } catch (err) {
+    debug('desktop-recover-warning', { reason, error: err?.message || String(err) });
+  }
 
   onProjectorCleared();
 

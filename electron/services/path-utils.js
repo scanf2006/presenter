@@ -5,7 +5,8 @@ function resolveAbsolutePath(rawPath) {
   if (typeof rawPath !== 'string' || !rawPath.trim()) return null;
   try {
     return path.resolve(rawPath);
-  } catch (_) {
+  } catch (resolveErr) {
+    console.warn('[PathUtils] resolveAbsolutePath failed:', resolveErr?.message || resolveErr);
     return null;
   }
 }
@@ -20,10 +21,14 @@ function isPathWithinRoot(rootDir, targetPath) {
   if (!root || !target) return false;
   try {
     if (fs.existsSync(root)) root = fs.realpathSync.native(root);
-  } catch (_) {}
+  } catch (rootErr) {
+    console.warn('[PathUtils] root realpath failed:', rootErr?.message || rootErr);
+  }
   try {
     if (fs.existsSync(target)) target = fs.realpathSync.native(target);
-  } catch (_) {}
+  } catch (targetErr) {
+    console.warn('[PathUtils] target realpath failed:', targetErr?.message || targetErr);
+  }
   const rel = path.relative(root, target);
   if (!rel) return true;
   const outside = rel.startsWith('..') || path.isAbsolute(rel);

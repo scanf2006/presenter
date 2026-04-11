@@ -3,6 +3,8 @@ import React from 'react';
 function TopBar({
   appVersion,
   projectorActive,
+  trialLabel,
+  trialExpired,
   onOpenLegal,
   onClear,
   onBlackout,
@@ -24,6 +26,18 @@ function TopBar({
           <span className={`status-dot ${projectorActive ? 'status-dot--active' : 'status-dot--inactive'}`} />
           {projectorActive ? 'Projecting' : 'Idle'}
         </div>
+        {!!trialLabel && (
+          <div
+            className="cp-status-inline"
+            style={{
+              color: trialExpired ? '#ff8080' : '#f6d365',
+              borderColor: trialExpired ? 'rgba(255,128,128,0.35)' : 'rgba(246,211,101,0.35)',
+            }}
+            title="Trial status"
+          >
+            {trialLabel}
+          </div>
+        )}
         <button className="btn btn--ghost cp-btn-license" onClick={onOpenLegal}>
           License
         </button>

@@ -1,22 +1,55 @@
 const fs = require('fs');
 const path = require('path');
-const { verifyLicenseToken, createReadableLicenseSummary } = require('../license');
+const {
+  verifyLicenseToken,
+  createReadableLicenseSummary,
+  createEulaAcceptanceProof,
+} = require('../license');
 
-function createAppSettingsStore(settingsPath, appVersion = null) {
+function createAppSettingsStore(settingsPath, appVersion = null, getDeviceId = null) {
   function readAppSettings() {
-    if (!settingsPath) return { licenseKey: '', acceptedEulaAt: null };
+    if (!settingsPath) {
+      return {
+        licenseKey: '',
+        acceptedEulaAt: null,
+        acceptedEulaProof: '',
+        trialStartedAtMs: null,
+        trialLastSeenAtMs: null,
+        trialClockTampered: false,
+      };
+    }
     try {
       if (!fs.existsSync(settingsPath)) {
-        return { licenseKey: '', acceptedEulaAt: null };
+        return {
+          licenseKey: '',
+          acceptedEulaAt: null,
+          acceptedEulaProof: '',
+          trialStartedAtMs: null,
+          trialLastSeenAtMs: null,
+          trialClockTampered: false,
+        };
       }
       const raw = fs.readFileSync(settingsPath, 'utf8');
       const parsed = JSON.parse(raw);
+      const toNullableNumber = (value) =>
+        Number.isFinite(value) && value > 0 ? Number(value) : null;
       return {
         licenseKey: typeof parsed?.licenseKey === 'string' ? parsed.licenseKey : '',
         acceptedEulaAt: typeof parsed?.acceptedEulaAt === 'string' ? parsed.acceptedEulaAt : null,
+        acceptedEulaProof: typeof parsed?.acceptedEulaProof === 'string' ? parsed.acceptedEulaProof : '',
+        trialStartedAtMs: toNullableNumber(parsed?.trialStartedAtMs),
+        trialLastSeenAtMs: toNullableNumber(parsed?.trialLastSeenAtMs),
+        trialClockTampered: parsed?.trialClockTampered === true,
       };
     } catch (_err) {
-      return { licenseKey: '', acceptedEulaAt: null };
+      return {
+        licenseKey: '',
+        acceptedEulaAt: null,
+        acceptedEulaProof: '',
+        trialStartedAtMs: null,
+        trialLastSeenAtMs: null,
+        trialClockTampered: false,
+      };
     }
   }
 
@@ -34,24 +67,38 @@ function createAppSettingsStore(settingsPath, appVersion = null) {
 
   function getLicenseStatus() {
     const settings = readAppSettings();
+    const deviceId = typeof getDeviceId === 'function' ? getDeviceId() : null;
+    const expectedEulaProof =
+      settings.acceptedEulaAt && deviceId
+        ? createEulaAcceptanceProof(settings.acceptedEulaAt, deviceId)
+        : '';
+    const hasAcceptedEula =
+      !!settings.acceptedEulaAt &&
+      !!settings.acceptedEulaProof &&
+      !!expectedEulaProof &&
+      settings.acceptedEulaProof === expectedEulaProof;
+    const eulaTampered = !!settings.acceptedEulaAt && !hasAcceptedEula;
+
     if (!settings.licenseKey) {
       return {
         isLicensed: false,
         summary: 'Unlicensed',
         license: null,
-        hasAcceptedEula: !!settings.acceptedEulaAt,
+        hasAcceptedEula,
         acceptedEulaAt: settings.acceptedEulaAt,
+        eulaTampered,
       };
     }
 
-    const verified = verifyLicenseToken(settings.licenseKey, new Date(), appVersion);
+    const verified = verifyLicenseToken(settings.licenseKey, new Date(), appVersion, deviceId);
     if (!verified.ok) {
       return {
         isLicensed: false,
         summary: `Invalid license (${verified.error})`,
         license: null,
-        hasAcceptedEula: !!settings.acceptedEulaAt,
+        hasAcceptedEula,
         acceptedEulaAt: settings.acceptedEulaAt,
+        eulaTampered,
         error: verified.error,
       };
     }
@@ -60,8 +107,9 @@ function createAppSettingsStore(settingsPath, appVersion = null) {
       isLicensed: true,
       summary: createReadableLicenseSummary(verified),
       license: verified.payload,
-      hasAcceptedEula: !!settings.acceptedEulaAt,
+      hasAcceptedEula,
       acceptedEulaAt: settings.acceptedEulaAt,
+      eulaTampered,
     };
   }
 

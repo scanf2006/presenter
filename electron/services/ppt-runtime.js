@@ -24,7 +24,9 @@ function resolveRuntimePptConvertScriptPath({
       fs.writeFileSync(runtimeScript, fs.readFileSync(bundled));
       return runtimeScript;
     }
-  } catch (_) {}
+  } catch (extractErr) {
+    console.warn('[PPT] failed to extract runtime script from asar:', extractErr?.message || extractErr);
+  }
 
   return direct;
 }

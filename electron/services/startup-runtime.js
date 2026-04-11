@@ -3,6 +3,7 @@ const path = require('path');
 function initializeStartupRuntime({
   app,
   createAppSettingsStore,
+  getDeviceId,
   buildRuntimePaths,
   ensureMediaDirs,
   bgDebug,
@@ -12,7 +13,7 @@ function initializeStartupRuntime({
   bgDebug.setUserDataDir(userDataDir);
 
   const appSettingsPath = path.join(userDataDir, 'app-settings.json');
-  const appSettingsStore = createAppSettingsStore(appSettingsPath, app.getVersion());
+  const appSettingsStore = createAppSettingsStore(appSettingsPath, app.getVersion(), getDeviceId);
   bgDebug.append('app-ready', { userData: userDataDir });
 
   const runtimePaths = buildRuntimePaths(userDataDir);

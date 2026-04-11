@@ -279,7 +279,9 @@ function registerMediaIPC({
         timedOut = true;
         try {
           child.kill();
-        } catch (_) {}
+        } catch (killErr) {
+          console.warn('[PPT] failed to kill conversion process:', killErr?.message || killErr);
+        }
       }, pptConvertTimeoutMs);
 
       child.stdout.on('data', (d) => {

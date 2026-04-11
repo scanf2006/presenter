@@ -27,7 +27,10 @@ function createSessionHooks({ session, logger = console }) {
         const u = new URL(details.url);
         hostname = (u.hostname || '').toLowerCase();
         pathname = u.pathname || '';
-      } catch (_) {}
+      } catch (_err) {
+        hostname = '';
+        pathname = '';
+      }
 
       const isMediaOrXhr =
         resourceType === 'media' || resourceType === 'xhr' || resourceType === 'fetch';

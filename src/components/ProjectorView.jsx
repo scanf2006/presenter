@@ -1,4 +1,6 @@
-﻿import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+/* eslint-disable react-hooks/set-state-in-effect */
+/* eslint-disable react-hooks/exhaustive-deps */
 
 function ProjectorView() {
   const [content, setContent] = useState(null);
@@ -34,7 +36,7 @@ function ProjectorView() {
   const cameraPaneVideoRef = useRef(null);
   const cameraPaneStreamRef = useRef(null);
   const [cameraPaneStatus, setCameraPaneStatus] = useState('idle');
-  const [cameraTestNow, setCameraTestNow] = useState(Date.now());
+  const [cameraTestNow, setCameraTestNow] = useState(0);
 
   const isElectron = typeof window.churchDisplay !== 'undefined';
 
@@ -187,7 +189,7 @@ function ProjectorView() {
         console.error('[ProjectorView] video play failed:', err);
       });
     return () => {
-      if (unmuteTimer != null) clearTimeout(unmuteTimer);
+      if (unmuteTimer !== null) clearTimeout(unmuteTimer);
     };
   }, [content]);
 

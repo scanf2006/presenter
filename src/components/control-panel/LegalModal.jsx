@@ -4,6 +4,7 @@ function LegalModal({
   show,
   onClose,
   licenseStatus,
+  licenseDeviceId,
   licenseInput,
   setLicenseInput,
   handleActivateLicense,
@@ -13,6 +14,32 @@ function LegalModal({
   licenseActionMsg,
   eulaText,
 }) {
+  const handleCopyDeviceId = async () => {
+    if (!licenseDeviceId) return;
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(licenseDeviceId);
+        return;
+      }
+    } catch (_err) {
+      // fall back to execCommand path below
+    }
+
+    const temp = document.createElement('textarea');
+    temp.value = licenseDeviceId;
+    temp.style.position = 'fixed';
+    temp.style.opacity = '0';
+    document.body.appendChild(temp);
+    temp.focus();
+    temp.select();
+    try {
+      document.execCommand('copy');
+    } finally {
+      document.body.removeChild(temp);
+    }
+  };
+  const eulaAccepted = !!licenseStatus?.hasAcceptedEula;
+
   if (!show) return null;
 
   return (
@@ -30,6 +57,25 @@ function LegalModal({
         </div>
         <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: '12px' }}>
           EULA: {licenseStatus.hasAcceptedEula ? `Accepted (${licenseStatus.acceptedEulaAt || ''})` : 'Not accepted'}
+        </div>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px' }}>
+          <input
+            type="text"
+            value={licenseDeviceId || ''}
+            readOnly
+            style={{
+              flex: 1,
+              padding: '8px 10px',
+              borderRadius: '6px',
+              border: '1px solid rgba(255,255,255,0.2)',
+              background: '#0d0d16',
+              color: '#9ad6ff',
+              fontSize: '12px',
+            }}
+          />
+          <button className="btn btn--ghost" onClick={handleCopyDeviceId} disabled={!licenseDeviceId}>
+            Copy Device ID
+          </button>
         </div>
         <div style={{ fontSize: '12px', color: '#f6d365', marginBottom: '12px' }}>
           Copyright Notice: {'\u7248\u6743\u6240\u6709\u5f52 Aiden \u6240\u6709\uff1bChurchDisplay Pro \u591a\u4f26\u591a\u795e\u53ec\u4f1a\u6d3b\u77f3\u5802\u7248\u4e3a\u8d60\u4e0e\u7248\uff08non-transferable gifted edition\uff09\u3002'}
@@ -51,7 +97,12 @@ function LegalModal({
               fontSize: '12px',
             }}
           />
-          <button className="btn btn--primary" onClick={handleActivateLicense}>
+          <button
+            className="btn btn--primary"
+            onClick={handleActivateLicense}
+            disabled={!eulaAccepted}
+            title={!eulaAccepted ? 'Please accept EULA before activation.' : ''}
+          >
             Activate
           </button>
           <button className="btn btn--ghost" onClick={handleClearLicense}>
@@ -61,6 +112,11 @@ function LegalModal({
             Accept EULA
           </button>
         </div>
+        {!eulaAccepted && (
+          <div style={{ color: '#f6d365', fontSize: '12px', marginBottom: '6px' }}>
+            Please click "Accept EULA" before activation.
+          </div>
+        )}
 
         {licenseActionError && <div style={{ color: '#ff8080', fontSize: '12px', marginBottom: '6px' }}>{licenseActionError}</div>}
         {licenseActionMsg && <div style={{ color: '#8af5a4', fontSize: '12px', marginBottom: '6px' }}>{licenseActionMsg}</div>}

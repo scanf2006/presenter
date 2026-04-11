@@ -4,19 +4,60 @@ function registerProjectorEventIPC({
   getProjectorWindow,
   sendToProjectorShell,
   openYouTubeWatchInProjector,
+  getControlWindow,
+  ensureProjectionAccess,
+  getTrialStatus,
   getLatestProjectorScene,
   setLatestProjectorScene,
 }) {
+  function notifyTrialWarning(payload) {
+    const controlWindow = typeof getControlWindow === 'function' ? getControlWindow() : null;
+    if (controlWindow && !controlWindow.isDestroyed()) {
+      controlWindow.webContents.send('trial-warning', payload);
+    }
+  }
+
+  function gateProjection(eventTag) {
+    if (typeof ensureProjectionAccess !== 'function') return { allowed: true };
+    const access = ensureProjectionAccess();
+    if (access.allowed) return access;
+
+    const trial = typeof getTrialStatus === 'function' ? getTrialStatus() : null;
+    appendBgDebug('trial-blocked', {
+      event: eventTag,
+      reason: access.reason || 'trial_expired',
+      message: access.message,
+    });
+    notifyTrialWarning({
+      code: access.reason || 'trial_expired',
+      message: access.message || 'Trial expired. Please activate license.',
+      trial,
+    });
+
+    sendToProjectorShell({
+      type: 'text',
+      text: 'Trial expired. Please activate license.',
+      fontSize: 'medium',
+      textColor: '#ff8080',
+      timestamp: Date.now(),
+    });
+
+    return access;
+  }
+
   ipcMain.on('send-to-projector', (_event, data) => {
+    const projectorWindow = getProjectorWindow();
+    if (!projectorWindow || projectorWindow.isDestroyed()) return;
+
+    const access = gateProjection('send-to-projector');
+    if (!access.allowed) return;
+
     appendBgDebug('send-to-projector', {
       type: data?.type,
       hasBackground: !!data?.background,
       backgroundType: data?.background?.type,
       backgroundPath: data?.background?.path,
     });
-
-    const projectorWindow = getProjectorWindow();
-    if (!projectorWindow || projectorWindow.isDestroyed()) return;
 
     if (data?.type === 'youtube') {
       const youtubeUrl = data?.url || (data?.videoId ? `https://www.youtube.com/watch?v=${encodeURIComponent(data.videoId)}` : '');
@@ -36,15 +77,18 @@ function registerProjectorEventIPC({
   });
 
   ipcMain.on('send-to-projector-background', (_event, data) => {
+    const projectorWindow = getProjectorWindow();
+    if (!projectorWindow || projectorWindow.isDestroyed()) return;
+
+    const access = gateProjection('send-to-projector-background');
+    if (!access.allowed) return;
+
     appendBgDebug('send-to-projector-background', {
       hasBackground: !!data,
       backgroundType: data?.type,
       backgroundPath: data?.path,
     });
-    const projectorWindow = getProjectorWindow();
-    if (projectorWindow && !projectorWindow.isDestroyed()) {
-      projectorWindow.webContents.send('projector-background', data);
-    }
+    projectorWindow.webContents.send('projector-background', data);
   });
 
   ipcMain.on('projector-transition', (_event, transitionData) => {

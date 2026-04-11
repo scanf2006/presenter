@@ -77,7 +77,9 @@ function PreviewPanel(props) {
     try {
       const savedVisible = window.localStorage.getItem('churchdisplay.ui.previewStatusVisible.v2');
       const savedCompact = window.localStorage.getItem('churchdisplay.ui.previewStatusCompact.v2');
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (savedVisible === '1') setShowPreviewStatusStrip(true);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (savedCompact === '1') setCompactPreviewStatusStrip(true);
     } catch (_) {
       // ignore restore failures

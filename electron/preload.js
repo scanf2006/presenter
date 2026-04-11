@@ -56,10 +56,12 @@ const api = {
 
   // License / legal
   licenseGetStatus: () => ipcRenderer.invoke('license-get-status'),
+  licenseGetDeviceId: () => ipcRenderer.invoke('license-get-device-id'),
   licenseActivate: (licenseKey) => ipcRenderer.invoke('license-activate', licenseKey),
   licenseClear: () => ipcRenderer.invoke('license-clear'),
   legalGetDocument: (docType) => ipcRenderer.invoke('legal-get-document', docType),
   legalAcceptEula: () => ipcRenderer.invoke('legal-accept-eula'),
+  onTrialWarning: (callback) => onWithCleanup('trial-warning', (_e, data) => callback(data)),
 
   // PPT
   convertPpt: (pptPath) => ipcRenderer.invoke('convert-ppt', pptPath),

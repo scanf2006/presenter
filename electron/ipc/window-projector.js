@@ -6,7 +6,16 @@ function registerWindowProjectorIPC({
   requestCloseControlWindow,
   getControlWindow,
   getProjectorWindow,
+  ensureProjectionAccess,
+  getTrialStatus,
 }) {
+  function notifyTrialWarning(payload) {
+    const controlWindow = getControlWindow();
+    if (controlWindow && !controlWindow.isDestroyed()) {
+      controlWindow.webContents.send('trial-warning', payload);
+    }
+  }
+
   ipcMain.handle('get-displays', () => {
     try {
       return screenManager.getDisplaysInfo();
@@ -18,6 +27,20 @@ function registerWindowProjectorIPC({
 
   ipcMain.handle('start-projector', (_event, displayId) => {
     try {
+      if (typeof ensureProjectionAccess === 'function') {
+        const access = ensureProjectionAccess();
+        if (!access.allowed) {
+          notifyTrialWarning({
+            code: access.reason || 'trial_expired',
+            message: access.message || 'Trial expired. Please activate license.',
+            trial: typeof getTrialStatus === 'function' ? getTrialStatus() : null,
+          });
+          return {
+            success: false,
+            error: access.message || 'Trial expired. Please activate license to continue projection.',
+          };
+        }
+      }
       let targetDisplay = null;
       if (displayId) {
         targetDisplay = screenManager.getAllDisplays().find((d) => d.id === displayId);

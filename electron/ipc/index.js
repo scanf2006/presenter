@@ -26,7 +26,10 @@ function registerAllIPC(config) {
     downloadUrlToFileWithRetry,
     downloadWithYtDlp,
     verifyLicenseToken,
+    getDeviceId,
     getLicenseStatus,
+    getTrialStatus,
+    ensureProjectionAccess,
     writeAppSettings,
     readLegalDocument,
     dialog,
@@ -54,6 +57,8 @@ function registerAllIPC(config) {
     requestCloseControlWindow,
     getControlWindow,
     getProjectorWindow,
+    ensureProjectionAccess,
+    getTrialStatus,
   });
 
   registerProjectorEventIPC({
@@ -62,6 +67,9 @@ function registerAllIPC(config) {
     getProjectorWindow,
     sendToProjectorShell,
     openYouTubeWatchInProjector,
+    getControlWindow,
+    ensureProjectionAccess,
+    getTrialStatus,
     getLatestProjectorScene,
     setLatestProjectorScene,
   });
@@ -79,7 +87,9 @@ function registerAllIPC(config) {
   registerLicenseIPC({
     ipcMain,
     verifyLicenseToken,
+    getDeviceId,
     getLicenseStatus,
+    getTrialStatus,
     writeAppSettings,
     readLegalDocument,
     appVersion: app ? app.getVersion() : null,

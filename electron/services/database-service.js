@@ -40,19 +40,25 @@ function createDatabaseStore() {
           bibleDbCuvs.close();
           bibleDbCuvs = null;
         }
-      } catch (_) {}
+      } catch (err) {
+        console.warn('[BibleDB] close CUVS failed:', err?.message || err);
+      }
       try {
         if (bibleDbKjv) {
           bibleDbKjv.close();
           bibleDbKjv = null;
         }
-      } catch (_) {}
+      } catch (err) {
+        console.warn('[BibleDB] close KJV failed:', err?.message || err);
+      }
       try {
         if (songsDb) {
           songsDb.close();
           songsDb = null;
         }
-      } catch (_) {}
+      } catch (err) {
+        console.warn('[SongsDB] close failed:', err?.message || err);
+      }
     },
   };
 }
@@ -101,10 +107,14 @@ async function initBibleAndSongsDatabases({
   )`);
   try {
     songsDb.run(`ALTER TABLE songs ADD COLUMN background_type TEXT DEFAULT ''`);
-  } catch (_) {}
+  } catch (err) {
+    console.warn('[SongsDB] add background_type column skipped:', err?.message || err);
+  }
   try {
     songsDb.run(`ALTER TABLE songs ADD COLUMN background_path TEXT DEFAULT ''`);
-  } catch (_) {}
+  } catch (err) {
+    console.warn('[SongsDB] add background_path column skipped:', err?.message || err);
+  }
   logger.log('[SongsDB] Songs database initialized');
 }
 
