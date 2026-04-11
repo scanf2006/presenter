@@ -26,6 +26,7 @@ function buildWindowRuntimeDeps({
   bindProjectorWindowEvents,
   getProjectorScene,
   notifyProjectorActive,
+  setupNavigationRestrictions,
 }) {
   const controlWindowDeps = {
     BrowserWindow,
@@ -47,6 +48,7 @@ function buildWindowRuntimeDeps({
     onClosed: onControlWindowClosed,
     splashMinVisibleMs,
     logger,
+    setupNavigationRestrictions,
   };
 
   const projectorWindowDeps = {
@@ -64,6 +66,7 @@ function buildWindowRuntimeDeps({
     getProjectorScene,
     notifyProjectorActive,
     logger,
+    setupNavigationRestrictions,
   };
 
   return {

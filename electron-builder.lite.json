@@ -1,0 +1,36 @@
+{
+  "appId": "com.aiden.churchdisplaypro",
+  "productName": "churchdisplay-pro",
+  "files": [
+    "electron/**/*",
+    "dist/**/*",
+    "package.json",
+    "LICENSE",
+    "EULA.md"
+  ],
+  "asarUnpack": [
+    "electron/ppt-convert.ps1"
+  ],
+  "extraResources": [
+    {
+      "from": "data",
+      "to": "data",
+      "filter": [
+        "bible_*.db"
+      ]
+    },
+    {
+      "from": "data/seed/projector-queue.json",
+      "to": "data-seed/projector-queue.json"
+    }
+  ],
+  "win": {
+    "target": [
+      "nsis"
+    ]
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true
+  }
+}

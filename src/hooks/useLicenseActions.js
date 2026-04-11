@@ -57,6 +57,8 @@ export default function useLicenseActions({
       setLicenseActionMsg('');
       return;
     }
+    // M14-R2: Read licenseStatus via functional update to avoid stale closure.
+    // We only need hasAcceptedEula here which doesn't change mid-call.
     if (!licenseStatus?.hasAcceptedEula) {
       setLicenseActionError('Please accept EULA before activation.');
       setLicenseActionMsg('');
@@ -65,7 +67,7 @@ export default function useLicenseActions({
     try {
       const result = await window.churchDisplay.licenseActivate(licenseInput.trim());
       if (result?.success) {
-        setLicenseStatus(result.status || licenseStatus);
+        setLicenseStatus((prev) => result.status || prev);
         setLicenseActionMsg('License activated.');
         setLicenseActionError('');
       } else {
@@ -79,7 +81,7 @@ export default function useLicenseActions({
   }, [
     isElectron,
     licenseInput,
-    licenseStatus,
+    licenseStatus?.hasAcceptedEula,
     setLicenseStatus,
     setLicenseActionMsg,
     setLicenseActionError,
@@ -94,7 +96,8 @@ export default function useLicenseActions({
     try {
       const result = await window.churchDisplay.licenseClear();
       if (result?.success) {
-        setLicenseStatus(result.status || licenseStatus);
+        // M14-R2: Use functional update to avoid stale closure.
+        setLicenseStatus((prev) => result.status || prev);
         setLicenseActionMsg('Local license cleared.');
         setLicenseActionError('');
       } else {
@@ -105,13 +108,7 @@ export default function useLicenseActions({
       setLicenseActionError(err.message || 'Failed to clear license.');
       setLicenseActionMsg('');
     }
-  }, [
-    isElectron,
-    licenseStatus,
-    setLicenseStatus,
-    setLicenseActionMsg,
-    setLicenseActionError,
-  ]);
+  }, [isElectron, setLicenseStatus, setLicenseActionMsg, setLicenseActionError]);
 
   const acceptEula = useCallback(async () => {
     if (!isElectron || typeof window.churchDisplay?.legalAcceptEula !== 'function') {
@@ -122,7 +119,8 @@ export default function useLicenseActions({
     try {
       const result = await window.churchDisplay.legalAcceptEula();
       if (result?.success) {
-        setLicenseStatus(result.status || licenseStatus);
+        // M14-R2: Use functional update to avoid stale closure.
+        setLicenseStatus((prev) => result.status || prev);
         setLicenseActionMsg('EULA acceptance recorded.');
         setLicenseActionError('');
       } else {
@@ -133,13 +131,7 @@ export default function useLicenseActions({
       setLicenseActionError(err.message || 'Operation failed.');
       setLicenseActionMsg('');
     }
-  }, [
-    isElectron,
-    licenseStatus,
-    setLicenseStatus,
-    setLicenseActionMsg,
-    setLicenseActionError,
-  ]);
+  }, [isElectron, setLicenseStatus, setLicenseActionMsg, setLicenseActionError]);
 
   return {
     openLegal,

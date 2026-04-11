@@ -201,7 +201,7 @@ function registerMediaIPC({
       }
       return { success: true };
     } catch (err) {
-      return { success: false, error: err.message };
+      return { success: false, error: 'Failed to delete file.' };
     }
   });
 
@@ -255,7 +255,7 @@ function registerMediaIPC({
 
     const scriptPath = getRuntimePptConvertScriptPath();
     if (!fs.existsSync(scriptPath)) {
-      return { success: false, error: `ppt-convert.ps1 not found at runtime: ${scriptPath}` };
+      return { success: false, error: `ppt-convert.ps1 not found at runtime.` };
     }
 
     return new Promise((resolve) => {

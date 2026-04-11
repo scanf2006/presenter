@@ -18,6 +18,7 @@ function createAndWireControlWindow({
   splashMinVisibleMs,
   onClosed,
   logger = console,
+  setupNavigationRestrictions,
 }) {
   const primaryDisplay = screenManager.getPrimaryDisplay();
   const controlWindow = createControlWindowInstance({
@@ -30,6 +31,11 @@ function createAndWireControlWindow({
     devUrl,
     indexPath,
   });
+
+  // M2-R2: Restrict navigation on control window.
+  if (typeof setupNavigationRestrictions === 'function') {
+    setupNavigationRestrictions(controlWindow);
+  }
 
   controlCloseController.reset();
   bindControlWindowEvents({

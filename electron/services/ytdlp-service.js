@@ -1,10 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-function createYtDlpService({
-  YTDlpWrap,
-  debug = () => {},
-} = {}) {
+function createYtDlpService({ YTDlpWrap, debug = () => {} } = {}) {
   let ytdlpInstance = null;
   let ytdlpBinPath = '';
 
@@ -47,22 +44,38 @@ function createYtDlpService({
     fs.mkdirSync(outDir, { recursive: true });
 
     // Prefer progressive mp4 to avoid ffmpeg dependency.
-    await yt.execPromise([
-      '--no-playlist',
-      '--no-warnings',
-      '--no-part',
-      '--concurrent-fragments',
-      '1',
-      '--retries',
-      '3',
-      '--fragment-retries',
-      '3',
-      '-f',
-      'b[ext=mp4]/b',
-      '--output',
-      outName,
-      url,
-    ], { cwd: outDir });
+    // M7-R2: Add a 5-minute timeout to prevent zombie child processes.
+    const YTDLP_TIMEOUT_MS = 5 * 60 * 1000;
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => abortController.abort(), YTDLP_TIMEOUT_MS);
+    try {
+      await yt.execPromise(
+        [
+          '--no-playlist',
+          '--no-warnings',
+          '--no-part',
+          '--concurrent-fragments',
+          '1',
+          '--retries',
+          '3',
+          '--fragment-retries',
+          '3',
+          '-f',
+          'b[ext=mp4]/b',
+          '--output',
+          outName,
+          url,
+        ],
+        { cwd: outDir, signal: abortController.signal }
+      );
+    } catch (err) {
+      if (abortController.signal.aborted) {
+        throw new Error('yt-dlp download timed out after 5 minutes');
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!fs.existsSync(outputPath) || fs.statSync(outputPath).size < 1024 * 100) {
       throw new Error('yt-dlp output file missing or too small');

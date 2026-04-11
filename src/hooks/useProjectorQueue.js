@@ -117,18 +117,17 @@ export default function useProjectorQueue({
     (payload, title, expectedSection = null, options = {}) => {
       if (!payload) return;
       const silent = Boolean(options?.silent);
-      // Use an object instead of a plain `let` so that React 18 Strict Mode
-      // double-invocation of the updater always writes to the same reference
-      // and the final value is reliable after setState returns.
-      const updateFlag = { value: false };
+      // H4-R2: Use a ref instead of a local object so the toast decision
+      // is reliable even when React 18 batches or defers the updater.
+      const updateFlagRef = { current: false };
       setProjectorQueue((prev) => {
         if (activeQueueIndex < 0 || activeQueueIndex >= prev.length) {
-          updateFlag.value = false;
+          updateFlagRef.current = false;
           return prev;
         }
         const existing = prev[activeQueueIndex];
         if (expectedSection && existing?.section && existing.section !== expectedSection) {
-          updateFlag.value = false;
+          updateFlagRef.current = false;
           return prev;
         }
         const resolvedTitle = title || existing?.title || getQueueItemTitle(payload);
@@ -141,7 +140,7 @@ export default function useProjectorQueue({
         const sameType = (existing?.type || '') === resolvedType;
         const sameSection = (existing?.section || '') === resolvedSection;
         if (samePayload && sameTitle && sameType && sameSection) {
-          updateFlag.value = false;
+          updateFlagRef.current = false;
           return prev;
         }
         const next = [...prev];
@@ -153,10 +152,12 @@ export default function useProjectorQueue({
           section: resolvedSection,
           updatedAt: Date.now(),
         };
-        updateFlag.value = true;
+        updateFlagRef.current = true;
         return next;
       });
-      if (updateFlag.value && !silent && typeof showToast === 'function') {
+      // In React 18 batched mode the updater runs synchronously within setState,
+      // so updateFlagRef.current is set by the time we reach here.
+      if (updateFlagRef.current && !silent && typeof showToast === 'function') {
         showToast('Auto-saved to selected queue card');
       }
     },

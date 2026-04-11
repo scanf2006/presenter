@@ -174,20 +174,28 @@ function tryReadWindowsMachineGuid() {
 
 function getLocalDeviceId() {
   const machineGuid = tryReadWindowsMachineGuid();
-  const host = os.hostname() || '';
+  // M4-R2: Removed os.hostname() — hostname is mutable and caused device ID
+  // to change when the user renamed their computer, invalidating the license.
   const platform = `${os.platform()}-${os.arch()}`;
   const cpus = Array.isArray(os.cpus()) && os.cpus().length > 0 ? os.cpus()[0].model : '';
-  const raw = [PRODUCT_CODE, machineGuid, host, platform, cpus].join('|');
+  const raw = [PRODUCT_CODE, machineGuid, platform, cpus].join('|');
   const digest = crypto.createHash('sha256').update(raw).digest('hex').slice(0, 24);
   return `CDPDEV-${digest.toUpperCase()}`;
 }
-
 
 function createEulaAcceptanceProof(acceptedEulaAt, deviceId) {
   if (!acceptedEulaAt || !deviceId) return '';
   return crypto
     .createHash('sha256')
-    .update([PRODUCT_CODE, EULA_PROOF_VERSION, String(deviceId), String(acceptedEulaAt), EULA_PROOF_PEPPER].join('|'))
+    .update(
+      [
+        PRODUCT_CODE,
+        EULA_PROOF_VERSION,
+        String(deviceId),
+        String(acceptedEulaAt),
+        EULA_PROOF_PEPPER,
+      ].join('|')
+    )
     .digest('hex');
 }
 
@@ -210,7 +218,6 @@ module.exports = {
   createReadableLicenseSummary,
   getLocalDeviceId,
   createEulaAcceptanceProof,
-  buildLicenseToken,
-  // L10: buildLicenseToken is for offline tooling only; do not ship in production exports.
+  // H1-R2: buildLicenseToken removed from production exports.
   // Use scripts/generate-license.js to create license tokens.
 };

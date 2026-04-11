@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 /* eslint-disable react-hooks/set-state-in-effect */
 
-export default function useCameraPreview({
-  sceneConfig,
-  setSceneConfig,
-}) {
+export default function useCameraPreview({ sceneConfig, setSceneConfig }) {
   const [cameraDevices, setCameraDevices] = useState([]);
   const [cameraStatus, setCameraStatus] = useState('idle');
   const [previewTestNow, setPreviewTestNow] = useState(0);
@@ -36,6 +33,9 @@ export default function useCameraPreview({
     }
   }, [sceneConfig.cameraDeviceId, setSceneConfig]);
 
+  // C1-R2: Track mount state so we can discard streams acquired after unmount.
+  const mountedRef = useRef(true);
+
   const startCameraPreview = useCallback(async () => {
     if (sceneConfig.enableCameraTestMode) {
       stopCameraPreview();
@@ -55,6 +55,11 @@ export default function useCameraPreview({
         ? { video: { deviceId: { exact: sceneConfig.cameraDeviceId } }, audio: false }
         : { video: true, audio: false };
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      // If component unmounted while awaiting, immediately release the stream.
+      if (!mountedRef.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
       cameraStreamRef.current = stream;
       if (cameraPreviewRef.current) {
         cameraPreviewRef.current.srcObject = stream;
@@ -65,10 +70,16 @@ export default function useCameraPreview({
       setCameraStatus('ok');
       await loadCameraDevices();
     } catch (err) {
+      if (!mountedRef.current) return;
       setCameraStatus('error');
       console.warn('[Camera] preview failed:', err);
     }
-  }, [sceneConfig.cameraDeviceId, sceneConfig.enableCameraTestMode, stopCameraPreview, loadCameraDevices]);
+  }, [
+    sceneConfig.cameraDeviceId,
+    sceneConfig.enableCameraTestMode,
+    stopCameraPreview,
+    loadCameraDevices,
+  ]);
 
   useEffect(() => {
     if (sceneConfig.mode !== 'split_camera') {
@@ -90,6 +101,8 @@ export default function useCameraPreview({
     const handler = () => loadCameraDevices();
     navigator?.mediaDevices?.addEventListener?.('devicechange', handler);
     return () => {
+      // C1-R2: Mark unmounted so in-flight getUserMedia can detect and release.
+      mountedRef.current = false;
       navigator?.mediaDevices?.removeEventListener?.('devicechange', handler);
       stopCameraPreview();
     };

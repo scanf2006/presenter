@@ -58,6 +58,16 @@ function BibleBrowser({
     setIsApplyingQueuePreload(false);
   }, []);
 
+  // H5-R2: Clean up search debounce timer on unmount to prevent stale setState.
+  useEffect(() => {
+    return () => {
+      if (searchTimer.current) {
+        clearTimeout(searchTimer.current);
+        searchTimer.current = null;
+      }
+    };
+  }, []);
+
   // 中文书卷名缩写映射表（用于快速索引搜索）
   const BOOK_ABBR = {
     创: 1,
@@ -436,7 +446,14 @@ function BibleBrowser({
       toVerse: parsed.toVerse,
       token: activePreloadItem.token || Date.now(),
     });
-  }, [activePreloadItem?.token, books, normalizeBookName, parseReference, beginQueuePreload, endQueuePreload]);
+  }, [
+    activePreloadItem?.token,
+    books,
+    normalizeBookName,
+    parseReference,
+    beginQueuePreload,
+    endQueuePreload,
+  ]);
 
   useEffect(() => {
     if (!pendingPreloadSelection) return;
@@ -518,9 +535,7 @@ function BibleBrowser({
 
   return (
     <div className="bible-browser animate-slide-in-up">
-      <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px' }}>
-        Bible
-      </h2>
+      <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px' }}>Bible</h2>
 
       {/* Version switch + search */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
@@ -944,4 +959,3 @@ function BibleBrowser({
 }
 
 export default BibleBrowser;
-
