@@ -22,6 +22,8 @@ function registerBibleSongsIPC({ ipcMain, getBibleDb, getSongsDb, saveSongsDb })
 
   ipcMain.handle('bible-get-verses', (_event, version, bookSN, chapter) => {
     try {
+      // R3-H3: Validate parameters to prevent unexpected SQL behavior.
+      if (!Number.isFinite(bookSN) || !Number.isFinite(chapter)) return [];
       const db = getBibleDb(version);
       if (!db) return [];
       const result = db.exec(
@@ -38,6 +40,8 @@ function registerBibleSongsIPC({ ipcMain, getBibleDb, getSongsDb, saveSongsDb })
 
   ipcMain.handle('bible-search', (_event, version, keyword) => {
     try {
+      // R3-H3: Validate keyword is a non-empty string.
+      if (typeof keyword !== 'string' || !keyword.trim()) return [];
       const db = getBibleDb(version);
       if (!db) return [];
       const result = db.exec(
@@ -87,6 +91,14 @@ function registerBibleSongsIPC({ ipcMain, getBibleDb, getSongsDb, saveSongsDb })
   });
 
   ipcMain.handle('songs-save', (_event, song) => {
+    // R3-C2: Validate song input to prevent crash on null/undefined/non-object.
+    if (!song || typeof song !== 'object') return { success: false, error: 'Invalid song data.' };
+    if (typeof song.title !== 'string' || !song.title.trim()) {
+      return { success: false, error: 'Song title is required.' };
+    }
+    if (typeof song.lyrics !== 'string') {
+      return { success: false, error: 'Song lyrics must be a string.' };
+    }
     const songsDb = getSongsDb();
     if (!songsDb) return { success: false };
     try {
@@ -122,6 +134,10 @@ function registerBibleSongsIPC({ ipcMain, getBibleDb, getSongsDb, saveSongsDb })
   });
 
   ipcMain.handle('songs-delete', (_event, songId) => {
+    // R3-H2: Validate songId type to prevent unexpected SQL behavior.
+    if (!Number.isFinite(songId) && typeof songId !== 'string') {
+      return { success: false, error: 'Invalid song ID.' };
+    }
     const songsDb = getSongsDb();
     if (!songsDb) return { success: false };
     try {

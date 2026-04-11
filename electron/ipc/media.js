@@ -110,21 +110,23 @@ function registerMediaIPC({
       }
 
       try {
-        const stat = fs.statSync(resolvedSource);
+        // R3-H4: Use async I/O to avoid blocking the main process.
+        const stat = await fsp.stat(resolvedSource);
         if (!stat.isFile()) {
           approvedImportPaths.delete(approvedKey);
           continue;
         }
-        fs.mkdirSync(targetDir, { recursive: true });
+        await fsp.mkdir(targetDir, { recursive: true });
         const destPath = path.join(targetDir, fileName);
-        fs.copyFileSync(resolvedSource, destPath);
+        await fsp.copyFile(resolvedSource, destPath);
 
+        const destStat = await fsp.stat(destPath);
         imported.push({
           id: fileName,
           name: path.basename(resolvedSource),
           type: fileType,
           path: destPath,
-          size: fs.statSync(destPath).size,
+          size: destStat.size,
           createdAt: Date.now(),
         });
       } catch (err) {
@@ -196,8 +198,13 @@ function registerMediaIPC({
       if (!resolved || !isPathWithinRoot(mediaDir, resolved)) {
         return { success: false, error: 'Path not allowed.' };
       }
-      if (fs.existsSync(resolved)) {
-        fs.unlinkSync(resolved);
+      // R3-H5: Use async I/O to avoid blocking the main process.
+      try {
+        await fsp.access(resolved);
+        await fsp.unlink(resolved);
+      } catch (accessErr) {
+        // File already deleted or doesn't exist — treat as success.
+        if (accessErr?.code !== 'ENOENT') throw accessErr;
       }
       return { success: true };
     } catch (err) {
@@ -231,8 +238,8 @@ function registerMediaIPC({
         .readdirSync(outputDir)
         .filter((f) => /\.(png|jpg|jpeg)$/i.test(f))
         .sort((a, b) => {
-          const numA = parseInt(a.match(/\d+/) || [0], 10);
-          const numB = parseInt(b.match(/\d+/) || [0], 10);
+          const numA = parseInt((a.match(/\d+/) || ['0'])[0], 10);
+          const numB = parseInt((b.match(/\d+/) || ['0'])[0], 10);
           return numA - numB;
         })
         .map((f, index) => ({
@@ -272,8 +279,12 @@ function registerMediaIPC({
         outputDir,
       ];
       const child = spawn('powershell.exe', args, { windowsHide: true });
+      // R3-M: Cap stdout/stderr accumulation to prevent memory exhaustion.
+      const MAX_OUTPUT = 64 * 1024;
       let stdout = '';
       let stderr = '';
+      let stdoutCapped = false;
+      let stderrCapped = false;
       let timedOut = false;
       const timer = setTimeout(() => {
         timedOut = true;
@@ -285,10 +296,22 @@ function registerMediaIPC({
       }, pptConvertTimeoutMs);
 
       child.stdout.on('data', (d) => {
-        stdout += d.toString();
+        if (!stdoutCapped) {
+          stdout += d.toString();
+          if (stdout.length > MAX_OUTPUT) {
+            stdout = stdout.slice(0, MAX_OUTPUT);
+            stdoutCapped = true;
+          }
+        }
       });
       child.stderr.on('data', (d) => {
-        stderr += d.toString();
+        if (!stderrCapped) {
+          stderr += d.toString();
+          if (stderr.length > MAX_OUTPUT) {
+            stderr = stderr.slice(0, MAX_OUTPUT);
+            stderrCapped = true;
+          }
+        }
       });
       child.on('error', (err) => {
         clearTimeout(timer);
@@ -314,8 +337,8 @@ function registerMediaIPC({
           .readdirSync(outputDir)
           .filter((f) => /\.(png|jpg|jpeg)$/i.test(f))
           .sort((a, b) => {
-            const numA = parseInt(a.match(/\d+/) || [0], 10);
-            const numB = parseInt(b.match(/\d+/) || [0], 10);
+            const numA = parseInt((a.match(/\d+/) || ['0'])[0], 10);
+            const numB = parseInt((b.match(/\d+/) || ['0'])[0], 10);
             return numA - numB;
           })
           .map((f, index) => ({

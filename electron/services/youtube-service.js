@@ -30,6 +30,9 @@ function normalizeYouTubeWatchUrl(rawUrl) {
 }
 
 function createYouTubeResolver({ playDl, ytdl }) {
+  // R3-M: Timeout for YouTube resolution to prevent indefinite hangs.
+  const RESOLVE_TIMEOUT_MS = 30000;
+
   return async function resolveYouTubeStream(rawUrl) {
     const raw = typeof rawUrl === 'string' ? rawUrl.trim() : '';
     if (!raw) {
@@ -38,10 +41,17 @@ function createYouTubeResolver({ playDl, ytdl }) {
 
     let lastError = '';
 
+    // Helper: race a promise against a timeout.
+    const withTimeout = (promise, ms) =>
+      Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Request timed out')), ms)),
+      ]);
+
     // Resolver #1: play-dl (primary).
     if (playDl) {
       try {
-        const info2 = await playDl.video_info(raw);
+        const info2 = await withTimeout(playDl.video_info(raw), RESOLVE_TIMEOUT_MS);
         const formats = Array.isArray(info2?.format) ? info2.format : [];
         const progressive = formats.filter((fmt) => {
           const mime = String(fmt?.mimeType || '').toLowerCase();
@@ -67,19 +77,26 @@ function createYouTubeResolver({ playDl, ytdl }) {
     // Resolver #2: ytdl-core (fallback).
     if (ytdl && ytdl.validateURL(raw)) {
       try {
-        const info = await ytdl.getInfo(raw, {
-          requestOptions: {
-            headers: {
-              referer: 'https://www.youtube.com/',
-              origin: 'https://www.youtube.com',
-              'user-agent':
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+        const info = await withTimeout(
+          ytdl.getInfo(raw, {
+            requestOptions: {
+              headers: {
+                referer: 'https://www.youtube.com/',
+                origin: 'https://www.youtube.com',
+                'user-agent':
+                  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+              },
             },
-          },
-        });
+          }),
+          RESOLVE_TIMEOUT_MS
+        );
 
-        const candidates = info.formats.filter((fmt) => !!fmt.url && fmt.hasVideo && fmt.hasAudio && !fmt.isHLS);
-        const mp4Candidates = candidates.filter((fmt) => (fmt.container || '').toLowerCase() === 'mp4');
+        const candidates = info.formats.filter(
+          (fmt) => !!fmt.url && fmt.hasVideo && fmt.hasAudio && !fmt.isHLS
+        );
+        const mp4Candidates = candidates.filter(
+          (fmt) => (fmt.container || '').toLowerCase() === 'mp4'
+        );
         const ranked = (mp4Candidates.length > 0 ? mp4Candidates : candidates).sort((a, b) => {
           const ah = Number(a.height || 0);
           const bh = Number(b.height || 0);
@@ -100,7 +117,7 @@ function createYouTubeResolver({ playDl, ytdl }) {
       } catch (err) {
         lastError = lastError
           ? `${lastError}; ${err?.message || 'ytdl resolver failed'}`
-          : (err?.message || 'ytdl resolver failed');
+          : err?.message || 'ytdl resolver failed';
       }
     }
 

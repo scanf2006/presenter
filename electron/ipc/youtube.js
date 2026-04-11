@@ -43,7 +43,20 @@ function registerYouTubeIPC({
 
   ipcMain.handle('youtube-resolve', async (_event, inputUrl) => {
     try {
-      return await resolveYouTubeStream(inputUrl);
+      // R3-H1: Validate URL is a YouTube URL to prevent SSRF.
+      const raw = typeof inputUrl === 'string' ? inputUrl.trim() : '';
+      if (!raw) return { success: false, error: 'YouTube URL is required.' };
+      try {
+        const parsed = new URL(raw);
+        const host = parsed.hostname.toLowerCase();
+        const allowed = ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com', 'youtu.be'];
+        if (!allowed.some((h) => host === h)) {
+          return { success: false, error: 'Only YouTube URLs are supported.' };
+        }
+      } catch (_) {
+        return { success: false, error: 'Invalid URL format.' };
+      }
+      return await resolveYouTubeStream(raw);
     } catch (err) {
       return { success: false, error: err?.message || 'Failed to resolve YouTube stream.' };
     }

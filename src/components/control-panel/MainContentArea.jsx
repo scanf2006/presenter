@@ -57,10 +57,14 @@ function MainContentArea(props) {
 
   return (
     <div className="main-content">
-      <div className="animate-slide-in-up" style={{ display: activeSection === 'displays' ? 'block' : 'none' }}>
+      <div
+        className="animate-slide-in-up"
+        style={{ display: activeSection === 'displays' ? 'block' : 'none' }}
+      >
         <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>Displays</h2>
         <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '24px' }}>
-          Select an external display to start projection. Content will be fullscreen on the selected screen.
+          Select an external display to start projection. Content will be fullscreen on the selected
+          screen.
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {displays.map((display) => (
@@ -73,18 +77,28 @@ function MainContentArea(props) {
               <div className="display-card__info">
                 <div className="display-card__name">{display.label || `Display ${display.id}`}</div>
                 <div className="display-card__resolution">
-                  {display.size.width} x {display.size.height}
+                  {display.size?.width ?? '?'} x {display.size?.height ?? '?'}
                   {display.bounds && ` | Position (${display.bounds.x}, ${display.bounds.y})`}
                 </div>
               </div>
-              {display.isPrimary && <span className="display-card__badge display-card__badge--primary">Primary</span>}
-              {projectorDisplayId === display.id && <span className="display-card__badge display-card__badge--projecting">Projecting</span>}
+              {display.isPrimary && (
+                <span className="display-card__badge display-card__badge--primary">Primary</span>
+              )}
+              {projectorDisplayId === display.id && (
+                <span className="display-card__badge display-card__badge--projecting">
+                  Projecting
+                </span>
+              )}
             </div>
           ))}
         </div>
 
         {projectorActive && (
-          <button className="btn btn--danger btn--lg" style={{ marginTop: '24px', width: '100%' }} onClick={handleStopProjector}>
+          <button
+            className="btn btn--danger btn--lg"
+            style={{ marginTop: '24px', width: '100%' }}
+            onClick={handleStopProjector}
+          >
             Stop Projector
           </button>
         )}
@@ -106,8 +120,13 @@ function MainContentArea(props) {
         )}
       </div>
 
-      <div className="text-editor animate-slide-in-up" style={{ display: activeSection === 'text' ? 'block' : 'none' }}>
-        <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px' }}>Free Text Projection</h2>
+      <div
+        className="text-editor animate-slide-in-up"
+        style={{ display: activeSection === 'text' ? 'block' : 'none' }}
+      >
+        <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px' }}>
+          Free Text Projection
+        </h2>
         <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '16px' }}>
           Type any text and click "Send to Projector".
         </p>
@@ -126,12 +145,38 @@ function MainContentArea(props) {
           }}
         >
           {textBackground?.type === 'image' && textBackground?.path && (
-            <img src={getPreviewMediaUrl(textBackground.path)} alt="text-bg" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: 1 }} />
+            <img
+              src={getPreviewMediaUrl(textBackground.path)}
+              alt="text-bg"
+              style={{
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                zIndex: 1,
+              }}
+            />
           )}
           {textBackground?.type === 'video' && textBackground?.path && (
-            <video src={getPreviewMediaUrl(textBackground.path)} autoPlay loop muted style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', zIndex: 1 }} />
+            <video
+              src={getPreviewMediaUrl(textBackground.path)}
+              autoPlay
+              loop
+              muted
+              style={{
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                zIndex: 1,
+              }}
+            />
           )}
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0, 0, 0, 0.22)', zIndex: 2 }} />
+          <div
+            style={{ position: 'absolute', inset: 0, background: 'rgba(0, 0, 0, 0.22)', zIndex: 2 }}
+          />
           {textSnapGuide.vertical && (
             <div
               style={{
@@ -259,7 +304,9 @@ function MainContentArea(props) {
             </button>
           )}
           <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-            {textBackground ? `Selected: ${textBackground.name || textBackground.path}` : 'No background selected'}
+            {textBackground
+              ? `Selected: ${textBackground.name || textBackground.path}`
+              : 'No background selected'}
           </span>
         </div>
 
@@ -293,7 +340,17 @@ function MainContentArea(props) {
                 min={TEXT_EDITOR.SIZE_INPUT_MIN_PX}
                 max={TEXT_EDITOR.SIZE_INPUT_MAX_PX}
                 value={textSizePx}
-                onChange={(e) => setTextSizePx(Math.max(TEXT_EDITOR.SIZE_INPUT_MIN_PX, Math.min(TEXT_EDITOR.SIZE_INPUT_MAX_PX, Number(e.target.value || TEXT_EDITOR.DEFAULT_SIZE_PX))))}
+                onChange={(e) =>
+                  setTextSizePx(
+                    Math.max(
+                      TEXT_EDITOR.SIZE_INPUT_MIN_PX,
+                      Math.min(
+                        TEXT_EDITOR.SIZE_INPUT_MAX_PX,
+                        Number(e.target.value || TEXT_EDITOR.DEFAULT_SIZE_PX)
+                      )
+                    )
+                  )
+                }
                 className="cp-input-md"
                 title="Text Size (px)"
               />
@@ -324,15 +381,27 @@ function MainContentArea(props) {
                   className="text-color-input"
                   title="Text Color"
                 />
-                <span className="text-color-value">{String(textColor || '#ffffff').toUpperCase()}</span>
+                <span className="text-color-value">
+                  {String(textColor || '#ffffff').toUpperCase()}
+                </span>
               </div>
             </label>
           </div>
         </div>
-        <button className="btn btn--success btn--lg" style={{ width: '100%' }} onClick={() => handleSendToProjector()} disabled={!textContent.trim()}>
+        <button
+          className="btn btn--success btn--lg"
+          style={{ width: '100%' }}
+          onClick={() => handleSendToProjector()}
+          disabled={!textContent.trim()}
+        >
           Send to Projector
         </button>
-        <button className="btn btn--ghost" style={{ width: '100%' }} onClick={handleAddTextToQueue} disabled={!textContent.trim()}>
+        <button
+          className="btn btn--ghost"
+          style={{ width: '100%' }}
+          onClick={handleAddTextToQueue}
+          disabled={!textContent.trim()}
+        >
           + Add to Queue
         </button>
       </div>

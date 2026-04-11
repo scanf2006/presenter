@@ -12,11 +12,13 @@ function ensureMediaDirs(dirs, logger = console) {
 }
 
 function sanitizeMediaFileName(input) {
-  return String(input || '')
+  const sanitized = String(input || '')
     .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 120);
+  // R3-M: Return a safe fallback if sanitization produces an empty string.
+  return sanitized || 'untitled';
 }
 
 module.exports = {

@@ -271,7 +271,8 @@ function ControlPanel() {
     }
   }, [sceneConfig.mode, sceneConfig, currentSlide, isElectron]);
 
-  const previewAspectRatio = (() => {
+  // R3-M: Memoize to avoid recalculating on every render.
+  const previewAspectRatio = useMemo(() => {
     const w = activeProjectorDisplay?.bounds?.width || activeProjectorDisplay?.size?.width;
     const h = activeProjectorDisplay?.bounds?.height || activeProjectorDisplay?.size?.height;
     if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) {
@@ -282,7 +283,12 @@ function ControlPanel() {
       }
     }
     return PREVIEW.ASPECT_RATIO_16_9;
-  })();
+  }, [
+    activeProjectorDisplay?.bounds?.width,
+    activeProjectorDisplay?.bounds?.height,
+    activeProjectorDisplay?.size?.width,
+    activeProjectorDisplay?.size?.height,
+  ]);
 
   useEffect(() => {
     const hydrateLicenseStatus = async () => {
