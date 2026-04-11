@@ -85,15 +85,18 @@ function createSessionHooks({ session, logger = console }) {
     try {
       const ses = session.defaultSession;
       if (!ses || !ses.webRequest) return;
+      // In dev mode Vite injects inline scripts for React Fast Refresh preamble,
+      // so 'unsafe-inline' is required for script-src. Production builds only use
+      // external script files, so inline scripts can be blocked.
+      const devMode = !require('electron').app.isPackaged;
+      const scriptSrc = devMode ? "script-src 'self' 'unsafe-inline'; " : "script-src 'self'; ";
       ses.webRequest.onHeadersReceived((details, callback) => {
         callback({
           responseHeaders: {
             ...details.responseHeaders,
             'Content-Security-Policy': [
-              // M1-R2: Removed 'unsafe-inline' from script-src.
-              // Vite builds produce only external script files, so inline scripts are unnecessary.
               "default-src 'self' local-media:; " +
-                "script-src 'self'; " +
+                scriptSrc +
                 "style-src 'self' 'unsafe-inline'; " +
                 "img-src 'self' local-media: data: https://i.ytimg.com https://*.ytimg.com; " +
                 "media-src 'self' local-media: https://*.googlevideo.com blob:; " +
