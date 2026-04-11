@@ -16,46 +16,52 @@ export default function useProjectorPreviewDispatch({
     previewTimersRef.current = [];
   }, []);
 
-  const applyPreviewTransition = useCallback((nextSlide) => {
-    clearPreviewTimers();
+  const applyPreviewTransition = useCallback(
+    (nextSlide) => {
+      clearPreviewTimers();
 
-    if (!transitionEnabled) {
-      setPreviewSlide(nextSlide);
-      setPreviewMaskVisible(false);
-      return;
-    }
-
-    setPreviewMaskVisible(true);
-    const fadeOutTimer = setTimeout(() => {
-      const delayTimer = setTimeout(() => {
+      if (!transitionEnabled) {
         setPreviewSlide(nextSlide);
-        const fadeInTimer = setTimeout(() => {
-          setPreviewMaskVisible(false);
-        }, transitionDurationMs);
-        previewTimersRef.current.push(fadeInTimer);
-      }, transitionDelayMs);
-      previewTimersRef.current.push(delayTimer);
-    }, transitionDurationMs);
-    previewTimersRef.current.push(fadeOutTimer);
-  }, [transitionEnabled, transitionDelayMs, transitionDurationMs, clearPreviewTimers]);
+        setPreviewMaskVisible(false);
+        return;
+      }
+
+      setPreviewMaskVisible(true);
+      const fadeOutTimer = setTimeout(() => {
+        const delayTimer = setTimeout(() => {
+          setPreviewSlide(nextSlide);
+          const fadeInTimer = setTimeout(() => {
+            setPreviewMaskVisible(false);
+          }, transitionDurationMs);
+          previewTimersRef.current.push(fadeInTimer);
+        }, transitionDelayMs);
+        previewTimersRef.current.push(delayTimer);
+      }, transitionDurationMs);
+      previewTimersRef.current.push(fadeOutTimer);
+    },
+    [transitionEnabled, transitionDelayMs, transitionDurationMs, clearPreviewTimers]
+  );
 
   useEffect(() => () => clearPreviewTimers(), [clearPreviewTimers]);
 
-  const pushToProjector = useCallback((data) => {
-    setCurrentSlide(data);
-    applyPreviewTransition(data);
-    if (isElectron) {
-      window.churchDisplay.sendToProjector(data);
-      if (typeof window.churchDisplay.sendToProjectorBackground === 'function') {
-        window.churchDisplay.sendToProjectorBackground(data?.background || null);
+  const pushToProjector = useCallback(
+    (data) => {
+      setCurrentSlide(data);
+      applyPreviewTransition(data);
+      if (isElectron && window.churchDisplay) {
+        window.churchDisplay.sendToProjector(data);
+        if (typeof window.churchDisplay.sendToProjectorBackground === 'function') {
+          window.churchDisplay.sendToProjectorBackground(data?.background || null);
+        }
       }
-    }
-  }, [isElectron, applyPreviewTransition]);
+    },
+    [isElectron, applyPreviewTransition]
+  );
 
   const blackout = useCallback(() => {
     setCurrentSlide(null);
     applyPreviewTransition(null);
-    if (isElectron) {
+    if (isElectron && window.churchDisplay) {
       window.churchDisplay.blackout();
     }
   }, [isElectron, applyPreviewTransition]);

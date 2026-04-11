@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 /* eslint-disable react-hooks/set-state-in-effect */
 import { SCENE, TRANSITION } from '../constants/ui';
 
@@ -15,38 +15,51 @@ const DEFAULT_SCENE_CONFIG = {
   enableCameraTestMode: false,
 };
 
-export default function useProjectionSettings({
-  isElectron,
-}) {
+export default function useProjectionSettings({ isElectron }) {
   const [transitionEnabled, setTransitionEnabled] = useState(true);
   const [transitionDelayMs, setTransitionDelayMs] = useState(TRANSITION.DEFAULT_DELAY_MS);
   const [transitionDurationMs, setTransitionDurationMs] = useState(TRANSITION.DEFAULT_DURATION_MS);
   const [sceneConfig, setSceneConfig] = useState(DEFAULT_SCENE_CONFIG);
+  // R3-M: Guard to prevent persist effects from sending default values before hydration.
+  const transitionHydrated = useRef(false);
+  const sceneHydrated = useRef(false);
 
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(TRANSITION_STORAGE_KEY);
-      if (!raw) return;
+      if (!raw) {
+        transitionHydrated.current = true;
+        return;
+      }
       const parsed = JSON.parse(raw);
       if (typeof parsed?.enabled === 'boolean') setTransitionEnabled(parsed.enabled);
       if (Number.isFinite(parsed?.delayMs)) {
-        setTransitionDelayMs(Math.max(TRANSITION.MIN_MS, Math.min(TRANSITION.MAX_MS, parsed.delayMs)));
+        setTransitionDelayMs(
+          Math.max(TRANSITION.MIN_MS, Math.min(TRANSITION.MAX_MS, parsed.delayMs))
+        );
       }
       if (Number.isFinite(parsed?.durationMs)) {
-        setTransitionDurationMs(Math.max(TRANSITION.MIN_MS, Math.min(TRANSITION.MAX_MS, parsed.durationMs)));
+        setTransitionDurationMs(
+          Math.max(TRANSITION.MIN_MS, Math.min(TRANSITION.MAX_MS, parsed.durationMs))
+        );
       }
     } catch (err) {
       console.warn('[Transition] restore failed:', err);
     }
+    transitionHydrated.current = true;
   }, []);
 
   useEffect(() => {
+    if (!transitionHydrated.current) return;
     try {
-      window.localStorage.setItem(TRANSITION_STORAGE_KEY, JSON.stringify({
-        enabled: transitionEnabled,
-        delayMs: transitionDelayMs,
-        durationMs: transitionDurationMs,
-      }));
+      window.localStorage.setItem(
+        TRANSITION_STORAGE_KEY,
+        JSON.stringify({
+          enabled: transitionEnabled,
+          delayMs: transitionDelayMs,
+          durationMs: transitionDurationMs,
+        })
+      );
     } catch (err) {
       console.warn('[Transition] persist failed:', err);
     }
@@ -63,32 +76,46 @@ export default function useProjectionSettings({
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(SCENE_STORAGE_KEY);
-      if (!raw) return;
+      if (!raw) {
+        sceneHydrated.current = true;
+        return;
+      }
       const parsed = JSON.parse(raw);
       setSceneConfig((prev) => ({
         ...prev,
         mode: SCENE.DEFAULT_MODE,
         splitDirection: parsed?.splitDirection || prev.splitDirection,
-        cameraDeviceId: typeof parsed?.cameraDeviceId === 'string' ? parsed.cameraDeviceId : prev.cameraDeviceId,
+        cameraDeviceId:
+          typeof parsed?.cameraDeviceId === 'string' ? parsed.cameraDeviceId : prev.cameraDeviceId,
         cameraPanePercent: Number.isFinite(parsed?.cameraPanePercent)
-          ? Math.max(SCENE.CAMERA_PANE_MIN_PERCENT, Math.min(SCENE.CAMERA_PANE_MAX_PERCENT, Number(parsed.cameraPanePercent)))
+          ? Math.max(
+              SCENE.CAMERA_PANE_MIN_PERCENT,
+              Math.min(SCENE.CAMERA_PANE_MAX_PERCENT, Number(parsed.cameraPanePercent))
+            )
           : prev.cameraPanePercent,
         cameraMuted: parsed?.cameraMuted !== false,
         cameraCenterCropPercent: Number.isFinite(parsed?.cameraCenterCropPercent)
-          ? Math.max(SCENE.CAMERA_CROP_MIN_PERCENT, Math.min(SCENE.CAMERA_CROP_MAX_PERCENT, Number(parsed.cameraCenterCropPercent)))
+          ? Math.max(
+              SCENE.CAMERA_CROP_MIN_PERCENT,
+              Math.min(SCENE.CAMERA_CROP_MAX_PERCENT, Number(parsed.cameraCenterCropPercent))
+            )
           : prev.cameraCenterCropPercent,
         enableCameraTestMode: parsed?.enableCameraTestMode === true,
       }));
     } catch (err) {
       console.warn('[Scene] restore failed:', err);
     }
+    sceneHydrated.current = true;
   }, []);
 
   useEffect(() => {
-    setSceneConfig((prev) => (prev.mode === SCENE.DEFAULT_MODE ? prev : { ...prev, mode: SCENE.DEFAULT_MODE }));
+    setSceneConfig((prev) =>
+      prev.mode === SCENE.DEFAULT_MODE ? prev : { ...prev, mode: SCENE.DEFAULT_MODE }
+    );
   }, []);
 
   useEffect(() => {
+    if (!sceneHydrated.current) return;
     try {
       const persistScene = {
         ...sceneConfig,

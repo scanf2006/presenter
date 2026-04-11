@@ -60,7 +60,11 @@ function registerProjectorEventIPC({
     });
 
     if (data?.type === 'youtube') {
-      const youtubeUrl = data?.url || (data?.videoId ? `https://www.youtube.com/watch?v=${encodeURIComponent(data.videoId)}` : '');
+      const youtubeUrl =
+        data?.url ||
+        (data?.videoId
+          ? `https://www.youtube.com/watch?v=${encodeURIComponent(data.videoId)}`
+          : '');
       const opened = openYouTubeWatchInProjector(youtubeUrl);
       if (!opened) {
         sendToProjectorShell({
@@ -99,10 +103,27 @@ function registerProjectorEventIPC({
   });
 
   ipcMain.on('projector-scene', (_event, sceneData) => {
+    // R3-C1: Allow-list properties to prevent prototype pollution from renderer.
+    const safe = sceneData && typeof sceneData === 'object' ? sceneData : {};
+    const picked = {};
+    const ALLOWED_KEYS = [
+      'mode',
+      'splitDirection',
+      'cameraDeviceId',
+      'cameraPanePercent',
+      'cameraMuted',
+      'cameraCenterCropPercent',
+      'enableCameraTestMode',
+    ];
+    for (const key of ALLOWED_KEYS) {
+      if (Object.prototype.hasOwnProperty.call(safe, key)) {
+        picked[key] = safe[key];
+      }
+    }
     const nextScene = {
       ...getLatestProjectorScene(),
-      ...(sceneData || {}),
-      mode: sceneData?.mode === 'split_camera' ? 'split_camera' : 'normal',
+      ...picked,
+      mode: picked.mode === 'split_camera' ? 'split_camera' : 'normal',
     };
     setLatestProjectorScene(nextScene);
     appendBgDebug('projector-scene', {

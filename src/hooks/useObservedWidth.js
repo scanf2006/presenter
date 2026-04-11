@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react';
 
 export default function useObservedWidth(ref, deps = []) {
   const [width, setWidth] = useState(0);
+  // R3-M: Stringify deps to avoid spreading dynamic array into useEffect deps.
+  const depsKey = JSON.stringify(deps);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -17,7 +19,7 @@ export default function useObservedWidth(ref, deps = []) {
     const observer = new ResizeObserver(() => applySize());
     observer.observe(el);
     return () => observer.disconnect();
-  }, [ref, ...deps]);
+  }, [ref, depsKey]);
 
   return width;
 }

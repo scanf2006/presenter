@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 /* eslint-disable react-hooks/set-state-in-effect */
 /* eslint-disable react-hooks/exhaustive-deps */
 
@@ -82,7 +82,8 @@ function SongManager({
   }, [loadSongs]);
 
   // ������ʶ���
-  const parseLyrics = (lyrics) => {
+  // R3-M: Memoize parseLyrics to avoid recreating on every render.
+  const parseLyrics = useCallback((lyrics) => {
     if (!lyrics) return [];
 
     // compatibility: historical data may store literal "\n"
@@ -160,7 +161,7 @@ function SongManager({
     }
 
     return sections;
-  };
+  }, []);
 
   // �������
   const handleSave = useCallback(async () => {
@@ -176,8 +177,12 @@ function SongManager({
       backgroundType: songBackground?.type || '',
       backgroundPath: songBackground?.path || '',
     };
-    if (isElectron) {
-      await window.churchDisplay.songsSave(song);
+    try {
+      if (isElectron) {
+        await window.churchDisplay.songsSave(song);
+      }
+    } catch (err) {
+      console.warn('[SongManager] save failed:', err?.message || err);
     }
     setEditingSong(null);
     setFormTitle('');
@@ -191,8 +196,12 @@ function SongManager({
   const handleDelete = useCallback(
     async (songId) => {
       if (!window.confirm('Delete this song?')) return;
-      if (isElectron) {
-        await window.churchDisplay.songsDelete(songId);
+      try {
+        if (isElectron) {
+          await window.churchDisplay.songsDelete(songId);
+        }
+      } catch (err) {
+        console.warn('[SongManager] delete failed:', err?.message || err);
       }
       if (selectedSong?.id === songId) setSelectedSong(null);
       await loadSongs();
@@ -390,15 +399,19 @@ function SongManager({
       };
       setSelectedSong(nextSong);
       setSongs((prev) => prev.map((s) => (s.id === nextSong.id ? nextSong : s)));
-      if (isElectron) {
-        await window.churchDisplay.songsSave({
-          id: nextSong.id,
-          title: nextSong.title || '',
-          author: nextSong.author || '',
-          lyrics: nextSong.lyrics || '',
-          backgroundType: nextSong.backgroundType,
-          backgroundPath: nextSong.backgroundPath,
-        });
+      try {
+        if (isElectron) {
+          await window.churchDisplay.songsSave({
+            id: nextSong.id,
+            title: nextSong.title || '',
+            author: nextSong.author || '',
+            lyrics: nextSong.lyrics || '',
+            backgroundType: nextSong.backgroundType,
+            backgroundPath: nextSong.backgroundPath,
+          });
+        }
+      } catch (err) {
+        console.warn('[SongManager] persist background failed:', err?.message || err);
       }
       if (typeof onUpdateActiveQueueItem === 'function') {
         const queuePayload = {
@@ -447,6 +460,10 @@ function SongManager({
     const file = event.target.files[0];
     if (!file) return;
     const reader = new FileReader();
+    // R3-L: Handle FileReader errors.
+    reader.onerror = () => {
+      console.warn('[SongManager] Failed to read file:', reader.error);
+    };
     reader.onload = () => {
       const buffer = reader.result;
       const bytes = new Uint8Array(buffer);
@@ -477,8 +494,13 @@ function SongManager({
   }, []);
 
   // ���˸���
-  const filteredSongs = songs.filter(
-    (s) => !searchQuery || s.title.toLowerCase().includes(searchQuery.toLowerCase())
+  // R3-M: Memoize filtered songs to avoid re-filtering on every render.
+  const filteredSongs = useMemo(
+    () =>
+      songs.filter(
+        (s) => !searchQuery || s.title.toLowerCase().includes(searchQuery.toLowerCase())
+      ),
+    [songs, searchQuery]
   );
 
   // �༭ģʽ
