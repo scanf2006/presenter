@@ -1,4 +1,6 @@
-﻿import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+/* eslint-disable react-hooks/set-state-in-effect */
+/* eslint-disable react-hooks/exhaustive-deps */
 
 import {
   getSelectableThumbCardStyle,
@@ -9,7 +11,7 @@ import {
 const TEXT_FONT_OPTIONS = ['Noto Sans SC', 'Microsoft YaHei', 'Arial', 'Times New Roman', 'SimHei'];
 
 /**
- * 诗歌歌词管理组件
+ * ʫ���ʹ������
  * Supports song management, section editing, projection and lyrics import.
  */
 function SongManager({
@@ -21,24 +23,24 @@ function SongManager({
   externalBackground,
   forceShowSongListToken,
 }) {
-  // 歌曲列表
+  // �����б�
   const [songs, setSongs] = useState([]);
   // current editing song
   const [editingSong, setEditingSong] = useState(null);
   // current selected song (view mode)
   const [selectedSong, setSelectedSong] = useState(null);
-  // 编辑表单
+  // �༭���
   const [formTitle, setFormTitle] = useState('');
   const [formAuthor, setFormAuthor] = useState('');
   const [formLyrics, setFormLyrics] = useState('');
-  // 投屏字号
+  // Ͷ���ֺ�
   const [fontSize, setFontSize] = useState('large');
   const [fontSizePx, setFontSizePx] = useState(72);
   const [fontFamily, setFontFamily] = useState('Noto Sans SC');
   const [textColor, setTextColor] = useState('#ffffff');
   const [songBackground, setSongBackground] = useState(null);
   const [selectedSectionIndex, setSelectedSectionIndex] = useState(-1);
-  // 搜索
+  // ����
   const [searchQuery, setSearchQuery] = useState('');
   const lastProjectedSectionRef = useRef(null);
   const lastAppliedExternalPickRef = useRef(null);
@@ -46,7 +48,7 @@ function SongManager({
   const isElectron = typeof window.churchDisplay !== 'undefined';
   const fileInputRef = useRef(null);
 
-  // 加载歌曲列表
+  // ���ظ����б�
   const loadSongs = useCallback(async () => {
     if (isElectron) {
       const list = await window.churchDisplay.songsList();
@@ -56,18 +58,18 @@ function SongManager({
       setSongs([
         {
           id: 1,
-          title: '奇异恩典',
+          title: '�������',
           author: 'John Newton',
           lyrics:
-            '[V1]\n奇异恩典 何等甘甜\n我罪已得赦免\n前我失丧 今被寻回\n瞎眼今得看见\n\n[V2]\n如此恩典 使我敬畏\n使我心得安慰\n初信之时 即蒙恩惠\n真是何等宝贵\n\n[C]\n赞美主，赞美主\n奇异恩典 何等甘甜',
+            '[V1]\n������� �εȸ���\n�����ѵ�����\nǰ��ʧɥ ��Ѱ��\nϹ�۽�ÿ���\n\n[V2]\n��˶��� ʹ�Ҿ�η\nʹ���ĵð�ο\n����֮ʱ ���ɶ���\n���Ǻεȱ���\n\n[C]\n��������������\n������� �εȸ���',
           backgroundType: '',
           backgroundPath: '',
         },
         {
           id: 2,
-          title: '感谢神',
+          title: '��л��',
           author: '',
-          lyrics: '[V1]\n感谢神 赐我救赎主\n感谢神 丰富预备\n感谢神 过去的同在\n感谢神 主在我旁',
+          lyrics: '[V1]\n��л�� ���Ҿ�����\n��л�� �ḻԤ��\n��л�� ��ȥ��ͬ��\n��л�� ��������',
           backgroundType: '',
           backgroundPath: '',
         },
@@ -79,7 +81,7 @@ function SongManager({
     loadSongs();
   }, [loadSongs]);
 
-  // 解析歌词段落
+  // ������ʶ���
   const parseLyrics = (lyrics) => {
     if (!lyrics) return [];
 
@@ -160,7 +162,7 @@ function SongManager({
     return sections;
   };
 
-  // 保存歌曲
+  // �������
   const handleSave = useCallback(async () => {
     if (!formTitle.trim() || !formLyrics.trim()) {
       alert('Please enter song title and lyrics');
@@ -185,7 +187,7 @@ function SongManager({
     await loadSongs();
   }, [editingSong, formTitle, formAuthor, formLyrics, songBackground, isElectron, loadSongs]);
 
-  // 删除歌曲
+  // ɾ������
   const handleDelete = useCallback(
     async (songId) => {
       if (!window.confirm('Delete this song?')) return;
@@ -216,7 +218,7 @@ function SongManager({
     setSelectedSong(null);
   };
 
-  // 新建歌曲
+  // �½�����
   const handleNew = () => {
     setEditingSong({ id: null });
     setFormTitle('');
@@ -474,12 +476,12 @@ function SongManager({
     event.target.value = '';
   }, []);
 
-  // 过滤歌曲
+  // ���˸���
   const filteredSongs = songs.filter(
     (s) => !searchQuery || s.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // 编辑模式
+  // �༭ģʽ
   if (editingSong) {
     return (
       <div className="song-manager animate-slide-in-up">
@@ -577,7 +579,7 @@ function SongManager({
     );
   }
 
-  // 查看歌曲段落（投屏模式）
+  // �鿴�������䣨Ͷ��ģʽ��
   if (selectedSong) {
     const sections = parseLyrics(selectedSong.lyrics);
     return (
@@ -596,7 +598,7 @@ function SongManager({
               onClick={() => setSelectedSong(null)}
               style={{ padding: '4px 8px', fontSize: '12px' }}
             >
-              ← Back
+              �� Back
             </button>
             <h2 style={{ fontSize: '18px', fontWeight: '600' }}>{selectedSong.title}</h2>
           </div>
@@ -710,7 +712,7 @@ function SongManager({
           Slide-style section cards (in order). Click a card to project.
         </p>
 
-        {/* 段落卡片（PPT 风格） */}
+        {/* ���俨Ƭ��PPT ��� */}
         <div
           style={{
             display: 'grid',
@@ -790,7 +792,7 @@ function SongManager({
     );
   }
 
-  // 歌曲列表视图
+  // �����б���ͼ
   return (
     <div className="song-manager animate-slide-in-up">
       <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px' }}>Songs</h2>
@@ -831,7 +833,7 @@ function SongManager({
         />
       </div>
 
-      {/* 歌曲列表 */}
+      {/* �����б� */}
       {filteredSongs.length === 0 ? (
         <div
           style={{ textAlign: 'center', padding: '40px 0', color: 'var(--color-text-secondary)' }}

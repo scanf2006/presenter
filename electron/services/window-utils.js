@@ -2,10 +2,14 @@ function forceWindowZoom100(win) {
   if (!win || win.isDestroyed()) return;
   try {
     win.webContents.setZoomFactor(1);
-  } catch (_) {}
+  } catch (zoomErr) {
+    console.warn('[WindowUtils] setZoomFactor failed:', zoomErr?.message || zoomErr);
+  }
   try {
     win.webContents.setVisualZoomLevelLimits(1, 1);
-  } catch (_) {}
+  } catch (limitErr) {
+    console.warn('[WindowUtils] setVisualZoomLevelLimits failed:', limitErr?.message || limitErr);
+  }
 }
 
 function confirmExitDialog(dialog, win) {

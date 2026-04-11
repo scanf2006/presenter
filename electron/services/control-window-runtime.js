@@ -13,7 +13,9 @@ function bindControlWindowEvents({
   const revealByTimer = setTimeout(() => {
     try {
       splashController.revealControlWindow(controlWindow);
-    } catch (_) {}
+    } catch (revealErr) {
+      logger.warn('[ControlWindow] reveal by timer failed:', revealErr?.message || revealErr);
+    }
   }, revealTimeoutMs);
 
   controlWindow.webContents.on('did-finish-load', () => {
@@ -24,7 +26,9 @@ function bindControlWindowEvents({
     logger.error('[ControlWindow] did-fail-load', { errorCode, errorDescription, validatedURL });
     try {
       splashController.revealControlWindow(controlWindow);
-    } catch (_) {}
+    } catch (revealErr) {
+      logger.warn('[ControlWindow] reveal on did-fail-load failed:', revealErr?.message || revealErr);
+    }
   });
 
   controlWindow.once('ready-to-show', () => {

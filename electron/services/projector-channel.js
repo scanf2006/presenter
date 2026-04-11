@@ -22,7 +22,9 @@ function createProjectorChannel({
     projectorExternalMode = true;
     try {
       projectorWindow.webContents.setUserAgent(projectorUserAgent);
-    } catch (_) {}
+    } catch (err) {
+      console.warn('[ProjectorChannel] setUserAgent failed:', err?.message || err);
+    }
     projectorWindow.loadURL(watchUrl);
     return true;
   }
@@ -34,11 +36,11 @@ function createProjectorChannel({
       projectorPendingPayload = data;
       projectorWindow.webContents.once('did-finish-load', () => {
         projectorExternalMode = false;
-        try { projectorWindow.webContents.setUserAgent(''); } catch (_) {}
+        try { projectorWindow.webContents.setUserAgent(''); } catch (err) { console.warn('[ProjectorChannel] reset userAgent failed:', err?.message || err); }
         const payload = projectorPendingPayload;
         projectorPendingPayload = null;
         if (payload && projectorWindow && !projectorWindow.isDestroyed()) {
-          try { projectorWindow.webContents.setAudioMuted(false); } catch (_) {}
+          try { projectorWindow.webContents.setAudioMuted(false); } catch (err) { console.warn('[ProjectorChannel] unmute after shell load failed:', err?.message || err); }
           projectorWindow.webContents.send('projector-content', payload);
         }
       });
@@ -46,7 +48,7 @@ function createProjectorChannel({
       return;
     }
 
-    try { projectorWindow.webContents.setAudioMuted(false); } catch (_) {}
+    try { projectorWindow.webContents.setAudioMuted(false); } catch (err) { console.warn('[ProjectorChannel] unmute before send failed:', err?.message || err); }
     projectorWindow.webContents.send('projector-content', data);
   }
 

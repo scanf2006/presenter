@@ -41,9 +41,13 @@ function bindProjectorWindowEvents({
         forceWindowZoom100(projectorWindow);
         projectorWindow?.webContents?.setAudioMuted(false);
         projectorWindow?.webContents?.send('projector-scene', getProjectorScene());
-      } catch (_) {}
+      } catch (err) {
+        console.warn('[ProjectorWindow] did-finish-load post setup failed:', err?.message || err);
+      }
     });
-  } catch (_) {}
+  } catch (err) {
+    console.warn('[ProjectorWindow] initial audio setup failed:', err?.message || err);
+  }
 }
 
 module.exports = {

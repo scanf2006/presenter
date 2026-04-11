@@ -4,6 +4,7 @@ async function runWhenReadyRuntime({
   app,
   userDataSeedMarker,
   createAppSettingsStore,
+  getDeviceId,
   buildRuntimePaths,
   ensureMediaDirs,
   bgDebug,
@@ -48,6 +49,7 @@ async function runWhenReadyRuntime({
   const startupRuntime = initializeStartupRuntime({
     app,
     createAppSettingsStore,
+    getDeviceId,
     buildRuntimePaths,
     ensureMediaDirs,
     bgDebug,

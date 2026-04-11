@@ -7,6 +7,7 @@ export default function useLicenseActions({
   setLicenseActionMsg,
   setEulaText,
   setLicenseStatus,
+  setLicenseDeviceId,
   licenseStatus,
   licenseInput,
 }) {
@@ -25,6 +26,12 @@ export default function useLicenseActions({
         const eula = await window.churchDisplay.legalGetDocument('eula');
         if (eula?.success && typeof eula.text === 'string') setEulaText(eula.text);
       }
+      if (isElectron && typeof window.churchDisplay?.licenseGetDeviceId === 'function') {
+        const device = await window.churchDisplay.licenseGetDeviceId();
+        if (device?.success && typeof device.deviceId === 'string') {
+          setLicenseDeviceId(device.deviceId);
+        }
+      }
       await refreshLicenseStatus();
     } catch (err) {
       console.warn('[Legal] load failed:', err);
@@ -35,6 +42,7 @@ export default function useLicenseActions({
     setLicenseActionError,
     setLicenseActionMsg,
     setEulaText,
+    setLicenseDeviceId,
     refreshLicenseStatus,
   ]);
 
@@ -46,6 +54,11 @@ export default function useLicenseActions({
     }
     if (!licenseInput.trim()) {
       setLicenseActionError('Please enter a license key.');
+      setLicenseActionMsg('');
+      return;
+    }
+    if (!licenseStatus?.hasAcceptedEula) {
+      setLicenseActionError('Please accept EULA before activation.');
       setLicenseActionMsg('');
       return;
     }

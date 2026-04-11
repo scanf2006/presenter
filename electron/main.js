@@ -12,8 +12,8 @@ process.on('uncaughtException', (err) => {
       'ChurchDisplay Pro - Unexpected Error',
       `An unexpected error occurred:\n\n${err?.message || String(err)}\n\nThe application will now exit.`
     );
-  } catch (_) {
-    // dialog may not be available yet
+  } catch (dialogErr) {
+    console.warn('[Startup] unable to show fatal error dialog:', dialogErr?.message || dialogErr);
   }
   app.exit(1);
 });
@@ -90,10 +90,11 @@ const {
 const { initializeStartupRuntime } = require('./services/startup-runtime');
 const { createAppSettingsStore, readLegalDocument } = require('./services/app-settings');
 const { createDatabaseStore, initBibleAndSongsDatabases } = require('./services/database-service');
+const { createTrialGuard } = require('./services/trial-guard');
 const { registerBibleSongsIPC } = require('./ipc/bible-songs');
 const { registerAllIPC } = require('./ipc');
 const { ytdl, playDl, YTDlpWrap } = loadOptionalMediaModules();
-const { verifyLicenseToken } = require('./license');
+const { verifyLicenseToken, getLocalDeviceId } = require('./license');
 const screenManager = new ScreenManager(screen);
 const resolveYouTubeStream = createYouTubeResolver({ playDl, ytdl });
 configureAppBootstrap({ app, protocol });
@@ -120,6 +121,26 @@ const {
   YTDlpWrap,
   getAppSettingsStore: () => appSettingsStore,
   confirmExitDialog,
+});
+const trialGuard = createTrialGuard({
+  getLicenseStatus: () => licenseRuntime.getCurrentLicenseStatus(),
+  readTrialState: () => {
+    const store = appSettingsStore;
+    if (!store || typeof store.readAppSettings !== 'function') return null;
+    const settings = store.readAppSettings();
+    return {
+      trialStartedAtMs: settings?.trialStartedAtMs ?? null,
+      trialLastSeenAtMs: settings?.trialLastSeenAtMs ?? null,
+      trialClockTampered: settings?.trialClockTampered === true,
+    };
+  },
+  writeTrialState: (trialPatch) => {
+    const store = appSettingsStore;
+    if (!store || typeof store.writeAppSettings !== 'function') {
+      return { success: false, error: 'Settings store unavailable.' };
+    }
+    return store.writeAppSettings(trialPatch);
+  },
 });
 const { projectorChannel, splashController } = createMainUiRuntime({
   normalizeYouTubeWatchUrl,
@@ -213,7 +234,9 @@ const setupIPC = createMainSetupIpc({
   downloadService,
   ytdlpService,
   verifyLicenseToken,
+  getDeviceId: getLocalDeviceId,
   licenseRuntime,
+  trialGuard,
   readLegalDocument,
   dialog,
   resolveAbsolutePath,
@@ -242,6 +265,7 @@ app
         app,
         userDataSeedMarker: USERDATA_SEED_MARKER,
         createAppSettingsStore,
+        getDeviceId: getLocalDeviceId,
         buildRuntimePaths,
         ensureMediaDirs,
         bgDebug,
@@ -286,7 +310,9 @@ app
         'ChurchDisplay Pro - Startup Error',
         `Failed to start the application:\n\n${err?.message || String(err)}`
       );
-    } catch (_) {}
+    } catch (dialogErr) {
+      console.warn('[Startup] failed to show startup error dialog:', dialogErr?.message || dialogErr);
+    }
     app.quit();
   });
 

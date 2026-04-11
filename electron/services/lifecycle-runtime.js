@@ -19,14 +19,18 @@ function setupLifecycleRuntime({
       if (typeof onBeforeQuitExtra === 'function') {
         try {
           onBeforeQuitExtra();
-        } catch (_) {}
+        } catch (err) {
+          console.warn('[Lifecycle] onBeforeQuitExtra failed:', err?.message || err);
+        }
       }
       try {
         const controlWindow = controlWindowRef();
         if (controlWindow && !controlWindow.isDestroyed()) {
           controlWindow.destroy();
         }
-      } catch (_) {}
+      } catch (err) {
+        console.warn('[Lifecycle] control window destroy failed:', err?.message || err);
+      }
     },
     onActivate: () => {
       const controlWindow = controlWindowRef();

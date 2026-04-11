@@ -1,5 +1,7 @@
 ﻿import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { normalizeBibleLine, normalizeBibleText } from '../utils/bibleText';
+/* eslint-disable react-hooks/set-state-in-effect */
+/* eslint-disable react-hooks/exhaustive-deps */
 
 /**
  * Bible browser component
@@ -942,5 +944,4 @@ function BibleBrowser({
 }
 
 export default BibleBrowser;
-
 

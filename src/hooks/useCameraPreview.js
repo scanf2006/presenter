@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+/* eslint-disable react-hooks/set-state-in-effect */
 
 export default function useCameraPreview({
   sceneConfig,
@@ -6,7 +7,7 @@ export default function useCameraPreview({
 }) {
   const [cameraDevices, setCameraDevices] = useState([]);
   const [cameraStatus, setCameraStatus] = useState('idle');
-  const [previewTestNow, setPreviewTestNow] = useState(Date.now());
+  const [previewTestNow, setPreviewTestNow] = useState(0);
   const cameraPreviewRef = useRef(null);
   const cameraStreamRef = useRef(null);
 

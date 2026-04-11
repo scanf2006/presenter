@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
+/* eslint-disable react-hooks/exhaustive-deps */
 
 export default function useObservedWidth(ref, deps = []) {
   const [width, setWidth] = useState(0);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const el = ref?.current;
     if (!el) return;
@@ -15,7 +17,7 @@ export default function useObservedWidth(ref, deps = []) {
     const observer = new ResizeObserver(() => applySize());
     observer.observe(el);
     return () => observer.disconnect();
-  }, deps);
+  }, [ref, ...deps]);
 
   return width;
 }

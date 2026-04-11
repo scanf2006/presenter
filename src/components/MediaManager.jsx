@@ -7,6 +7,8 @@ import {
   getSelectableThumbSelectedTagStyle,
 } from '../utils/thumbnail';
 
+const MEDIA_TYPE_ORDER = ['image', 'video', 'pdf', 'ppt'];
+
 function MediaManager({
   onProjectMedia,
   onAddPlaylist,
@@ -206,7 +208,7 @@ function MediaManager({
         );
       }
     },
-    [isElectron, onProjectMedia]
+    [isElectron]
   );
 
   const handleProjectMedia = useCallback(
@@ -301,7 +303,7 @@ function MediaManager({
     setCurrentSlideIndex(-1);
     setCurrentPdfPage(1);
     setActiveFilter('all');
-  }, [forceShowMediaHomeToken]);
+  }, [forceShowMediaHomeToken, activePdf?.pdfDocument]);
 
   const formatSize = (bytes) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -347,12 +349,11 @@ function MediaManager({
     { key: 'ppt', label: 'PPT', icon: 'PPT' },
   ];
 
-  const mediaTypeOrder = ['image', 'video', 'pdf', 'ppt'];
   const displayFiles = useMemo(() => {
     if (!Array.isArray(mediaFiles)) return [];
     return [...mediaFiles].sort((a, b) => {
-      const ia = mediaTypeOrder.indexOf(a?.type);
-      const ib = mediaTypeOrder.indexOf(b?.type);
+      const ia = MEDIA_TYPE_ORDER.indexOf(a?.type);
+      const ib = MEDIA_TYPE_ORDER.indexOf(b?.type);
       if (ia !== ib) return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
       return String(a?.name || '').localeCompare(String(b?.name || ''));
     });
@@ -365,7 +366,7 @@ function MediaManager({
       if (!groups.has(t)) groups.set(t, []);
       groups.get(t).push(file);
     }
-    return mediaTypeOrder
+    return MEDIA_TYPE_ORDER
       .filter((t) => groups.has(t))
       .map((t) => ({ type: t, files: groups.get(t) }));
   }, [displayFiles]);

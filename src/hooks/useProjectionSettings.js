@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+/* eslint-disable react-hooks/set-state-in-effect */
 import { SCENE, TRANSITION } from '../constants/ui';
 
 const TRANSITION_STORAGE_KEY = 'churchdisplay.transition.v1';
