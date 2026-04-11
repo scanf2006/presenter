@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+﻿import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 /* eslint-disable react-hooks/set-state-in-effect */
 /* eslint-disable react-hooks/exhaustive-deps */
 
@@ -11,7 +11,7 @@ import {
 const TEXT_FONT_OPTIONS = ['Noto Sans SC', 'Microsoft YaHei', 'Arial', 'Times New Roman', 'SimHei'];
 
 /**
- * ʫ���ʹ������
+ * 诗歌歌词管理组件
  * Supports song management, section editing, projection and lyrics import.
  */
 function SongManager({
@@ -21,34 +21,36 @@ function SongManager({
   activePreloadItem,
   onOpenBackgroundPicker,
   externalBackground,
+  backgroundPickContext,
   forceShowSongListToken,
 }) {
-  // �����б�
+  // 歌曲列表
   const [songs, setSongs] = useState([]);
   // current editing song
   const [editingSong, setEditingSong] = useState(null);
   // current selected song (view mode)
   const [selectedSong, setSelectedSong] = useState(null);
-  // �༭���
+  // 编辑表单
   const [formTitle, setFormTitle] = useState('');
   const [formAuthor, setFormAuthor] = useState('');
   const [formLyrics, setFormLyrics] = useState('');
-  // Ͷ���ֺ�
+  // 投屏字号
   const [fontSize, setFontSize] = useState('large');
   const [fontSizePx, setFontSizePx] = useState(72);
   const [fontFamily, setFontFamily] = useState('Noto Sans SC');
   const [textColor, setTextColor] = useState('#ffffff');
   const [songBackground, setSongBackground] = useState(null);
   const [selectedSectionIndex, setSelectedSectionIndex] = useState(-1);
-  // ����
+  // 搜索
   const [searchQuery, setSearchQuery] = useState('');
   const lastProjectedSectionRef = useRef(null);
   const lastAppliedExternalPickRef = useRef(null);
+  const lastHandledPreloadRef = useRef(null);
 
   const isElectron = typeof window.churchDisplay !== 'undefined';
   const fileInputRef = useRef(null);
 
-  // ���ظ����б�
+  // 加载歌曲列表
   const loadSongs = useCallback(async () => {
     if (isElectron) {
       const list = await window.churchDisplay.songsList();
@@ -58,18 +60,18 @@ function SongManager({
       setSongs([
         {
           id: 1,
-          title: '�������',
+          title: '奇异恩典',
           author: 'John Newton',
           lyrics:
-            '[V1]\n������� �εȸ���\n�����ѵ�����\nǰ��ʧɥ ��Ѱ��\nϹ�۽�ÿ���\n\n[V2]\n��˶��� ʹ�Ҿ�η\nʹ���ĵð�ο\n����֮ʱ ���ɶ���\n���Ǻεȱ���\n\n[C]\n��������������\n������� �εȸ���',
+            '[V1]\n奇异恩典 何等甘甜\n我罪已得赦免\n前我失丧 今被寻回\n瞎眼今得看见\n\n[V2]\n如此恩典 使我敬畏\n使我心得安慰\n初信之时 即蒙恩惠\n真是何等宝贵\n\n[C]\n赞美主，赞美主\n奇异恩典 何等甘甜',
           backgroundType: '',
           backgroundPath: '',
         },
         {
           id: 2,
-          title: '��л��',
+          title: '感谢神',
           author: '',
-          lyrics: '[V1]\n��л�� ���Ҿ�����\n��л�� �ḻԤ��\n��л�� ��ȥ��ͬ��\n��л�� ��������',
+          lyrics: '[V1]\n感谢神 赐我救赎主\n感谢神 丰富预备\n感谢神 过去的同在\n感谢神 主在我旁',
           backgroundType: '',
           backgroundPath: '',
         },
@@ -81,7 +83,7 @@ function SongManager({
     loadSongs();
   }, [loadSongs]);
 
-  // ������ʶ���
+  // 解析歌词段落
   // R3-M: Memoize parseLyrics to avoid recreating on every render.
   const parseLyrics = useCallback((lyrics) => {
     if (!lyrics) return [];
@@ -163,7 +165,7 @@ function SongManager({
     return sections;
   }, []);
 
-  // �������
+  // 保存歌曲
   const handleSave = useCallback(async () => {
     if (!formTitle.trim() || !formLyrics.trim()) {
       alert('Please enter song title and lyrics');
@@ -185,6 +187,8 @@ function SongManager({
       console.warn('[SongManager] save failed:', err?.message || err);
     }
     setEditingSong(null);
+    setSelectedSong(null);
+    setSelectedSectionIndex(-1);
     setFormTitle('');
     setFormAuthor('');
     setFormLyrics('');
@@ -192,7 +196,7 @@ function SongManager({
     await loadSongs();
   }, [editingSong, formTitle, formAuthor, formLyrics, songBackground, isElectron, loadSongs]);
 
-  // ɾ������
+  // 删除歌曲
   const handleDelete = useCallback(
     async (songId) => {
       if (!window.confirm('Delete this song?')) return;
@@ -227,7 +231,7 @@ function SongManager({
     setSelectedSong(null);
   };
 
-  // �½�����
+  // 新建歌曲
   const handleNew = () => {
     setEditingSong({ id: null });
     setFormTitle('');
@@ -341,6 +345,10 @@ function SongManager({
     if (!activePreloadItem || activePreloadItem.type !== 'song') return;
     const targetSongId = activePreloadItem.payload?.songId;
     if (!targetSongId) return;
+    // Avoid re-opening the same song after save/delete triggers a songs or editingSong change.
+    const preloadKey = `${targetSongId}|${activePreloadItem.payload?.token || ''}`;
+    if (lastHandledPreloadRef.current === preloadKey) return;
+    lastHandledPreloadRef.current = preloadKey;
     const target = songs.find((s) => s.id === targetSongId);
     if (target) {
       openSongWithoutAutoProject(target);
@@ -426,6 +434,50 @@ function SongManager({
     [selectedSong, isElectron, onUpdateActiveQueueItem]
   );
 
+  const persistBackgroundForSong = useCallback(
+    async (song, bg) => {
+      if (!song) return;
+      const nextSong = {
+        ...song,
+        backgroundType: bg?.type || '',
+        backgroundPath: bg?.path || '',
+      };
+
+      setSelectedSong(nextSong);
+      setSongBackground(bg || null);
+      setSongs((prev) => prev.map((s) => (s.id === nextSong.id ? nextSong : s)));
+
+      try {
+        if (isElectron) {
+          await window.churchDisplay.songsSave({
+            id: nextSong.id,
+            title: nextSong.title || '',
+            author: nextSong.author || '',
+            lyrics: nextSong.lyrics || '',
+            backgroundType: nextSong.backgroundType,
+            backgroundPath: nextSong.backgroundPath,
+          });
+        }
+      } catch (err) {
+        console.warn('[SongManager] persist background failed:', err?.message || err);
+      }
+
+      if (typeof onUpdateActiveQueueItem === 'function') {
+        onUpdateActiveQueueItem(
+          {
+            type: 'song',
+            songId: nextSong.id,
+            songTitle: nextSong.title,
+            background: bg ? { type: bg.type, path: bg.path } : null,
+          },
+          nextSong.title,
+          'songs'
+        );
+      }
+    },
+    [isElectron, onUpdateActiveQueueItem]
+  );
+
   useEffect(() => {
     if (!externalBackground) return;
     const externalPickKey = String(
@@ -437,6 +489,9 @@ function SongManager({
 
     setSongBackground(externalBackground);
 
+    const pickerSong =
+      externalBackground?.pickerContext?.song || backgroundPickContext?.song || null;
+
     // In selected-song view, picking a new background should replace and persist immediately.
     if (!editingSong && selectedSong) {
       const unchanged =
@@ -445,13 +500,25 @@ function SongManager({
       if (!unchanged) {
         persistSelectedSongBackground(externalBackground);
       }
+    } else if (!editingSong && pickerSong?.id) {
+      const unchanged =
+        (pickerSong.backgroundType || '') === (externalBackground.type || '') &&
+        (pickerSong.backgroundPath || '') === (externalBackground.path || '');
+      if (!unchanged) {
+        persistBackgroundForSong(pickerSong, externalBackground);
+      } else {
+        setSelectedSong(pickerSong);
+      }
     }
   }, [
     externalBackground?.pickToken,
+    externalBackground?.pickerContext?.song,
     externalBackground?.path,
     externalBackground?.type,
+    backgroundPickContext?.song,
     editingSong,
     selectedSong?.id,
+    persistBackgroundForSong,
     persistSelectedSongBackground,
   ]);
 
@@ -485,6 +552,8 @@ function SongManager({
 
       const title = file.name.replace(/\.(txt|lrc)$/i, '');
       setEditingSong({ id: null });
+      setSelectedSong(null);
+      setSelectedSectionIndex(-1);
       setFormTitle(title);
       setFormAuthor('');
       setFormLyrics(content);
@@ -493,7 +562,7 @@ function SongManager({
     event.target.value = '';
   }, []);
 
-  // ���˸���
+  // 过滤歌曲
   // R3-M: Memoize filtered songs to avoid re-filtering on every render.
   const filteredSongs = useMemo(
     () =>
@@ -503,7 +572,7 @@ function SongManager({
     [songs, searchQuery]
   );
 
-  // �༭ģʽ
+  // 编辑模式
   if (editingSong) {
     return (
       <div className="song-manager animate-slide-in-up">
@@ -588,7 +657,12 @@ function SongManager({
               Pick Background from Media
             </button>
             {songBackground && (
-              <button className="btn btn--ghost" onClick={() => setSongBackground(null)}>
+              <button
+                className="btn btn--ghost"
+                onClick={() => {
+                  setSongBackground(null);
+                }}
+              >
                 Clear Background
               </button>
             )}
@@ -601,7 +675,7 @@ function SongManager({
     );
   }
 
-  // �鿴�������䣨Ͷ��ģʽ��
+  // 查看歌曲段落（投屏模式）
   if (selectedSong) {
     const sections = parseLyrics(selectedSong.lyrics);
     return (
@@ -620,7 +694,7 @@ function SongManager({
               onClick={() => setSelectedSong(null)}
               style={{ padding: '4px 8px', fontSize: '12px' }}
             >
-              �� Back
+              ← Back
             </button>
             <h2 style={{ fontSize: '18px', fontWeight: '600' }}>{selectedSong.title}</h2>
           </div>
@@ -642,11 +716,19 @@ function SongManager({
         )}
 
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px' }}>
-          <button className="btn btn--ghost" onClick={() => onOpenBackgroundPicker?.()}>
+          <button
+            className="btn btn--ghost"
+            onClick={() =>
+              onOpenBackgroundPicker?.({
+                mode: 'selected-song',
+                song: selectedSong,
+              })
+            }
+          >
             Pick Background from Media
           </button>
           {songBackground && (
-            <button className="btn btn--ghost" onClick={() => setSongBackground(null)}>
+            <button className="btn btn--ghost" onClick={() => persistSelectedSongBackground(null)}>
               Clear Background
             </button>
           )}
@@ -734,7 +816,7 @@ function SongManager({
           Slide-style section cards (in order). Click a card to project.
         </p>
 
-        {/* ���俨Ƭ��PPT ��� */}
+        {/* 歌词段落卡片（PPT 风格） */}
         <div
           style={{
             display: 'grid',
@@ -814,7 +896,7 @@ function SongManager({
     );
   }
 
-  // �����б���ͼ
+  // 歌曲列表视图
   return (
     <div className="song-manager animate-slide-in-up">
       <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px' }}>Songs</h2>
@@ -855,7 +937,7 @@ function SongManager({
         />
       </div>
 
-      {/* �����б� */}
+      {/* 歌曲列表 */}
       {filteredSongs.length === 0 ? (
         <div
           style={{ textAlign: 'center', padding: '40px 0', color: 'var(--color-text-secondary)' }}
