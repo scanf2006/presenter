@@ -38,13 +38,35 @@ function isPathWithinRoot(rootDir, targetPath) {
 function isLikelyMediaFilePath(filePath) {
   if (typeof filePath !== 'string') return false;
   const ext = path.extname(filePath).toLowerCase();
-  return ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg', '.mp4', '.webm', '.mkv', '.avi', '.mov', '.pdf', '.ppt', '.pptx'].includes(ext);
+  return [
+    '.jpg',
+    '.jpeg',
+    '.png',
+    '.gif',
+    '.bmp',
+    '.webp',
+    '.svg',
+    '.mp4',
+    '.webm',
+    '.mkv',
+    '.avi',
+    '.mov',
+    '.pdf',
+    '.ppt',
+    '.pptx',
+  ].includes(ext);
 }
 
+// H2-R2: Use case-insensitive comparison on Windows to prevent bypass.
 function normalizeWithin(baseDir, filePath) {
   const resolvedBase = path.resolve(baseDir);
   const resolvedPath = path.resolve(filePath);
-  return resolvedPath.startsWith(resolvedBase + path.sep) ? resolvedPath : null;
+  const normalizedBase = process.platform === 'win32' ? resolvedBase.toLowerCase() : resolvedBase;
+  const normalizedPath = process.platform === 'win32' ? resolvedPath.toLowerCase() : resolvedPath;
+  const sep = path.sep;
+  return normalizedPath.startsWith(normalizedBase + sep) || normalizedPath === normalizedBase
+    ? resolvedPath
+    : null;
 }
 
 module.exports = {

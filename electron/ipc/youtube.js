@@ -112,7 +112,7 @@ function registerYouTubeIPC({
         url: raw,
         error: err?.message || 'Download failed.',
       });
-      return { success: false, error: err?.message || 'Download failed.' };
+      return { success: false, error: 'Download failed.' };
     }
   });
 }

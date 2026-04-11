@@ -64,6 +64,12 @@ function createDownloadService({ networkTimeoutMs = 120000, debug = () => {} } =
           }
           const tmpPath = `${outputPath}.download`;
           const ws = fs.createWriteStream(tmpPath);
+          // M9-R2: Handle errors on the response stream to prevent unhandled exceptions.
+          res.on('error', (err) => {
+            ws.destroy();
+            cleanupTmp();
+            reject(err);
+          });
           res.pipe(ws);
           ws.on('finish', () => {
             ws.close(() => {

@@ -90,8 +90,10 @@ function createSessionHooks({ session, logger = console }) {
           responseHeaders: {
             ...details.responseHeaders,
             'Content-Security-Policy': [
+              // M1-R2: Removed 'unsafe-inline' from script-src.
+              // Vite builds produce only external script files, so inline scripts are unnecessary.
               "default-src 'self' local-media:; " +
-                "script-src 'self' 'unsafe-inline'; " +
+                "script-src 'self'; " +
                 "style-src 'self' 'unsafe-inline'; " +
                 "img-src 'self' local-media: data: https://i.ytimg.com https://*.ytimg.com; " +
                 "media-src 'self' local-media: https://*.googlevideo.com blob:; " +
@@ -107,10 +109,31 @@ function createSessionHooks({ session, logger = console }) {
     }
   }
 
+  // M2-R2: Restrict navigation to prevent the app from being redirected to external sites.
+  function setupNavigationRestrictions(windowInstance) {
+    if (!windowInstance || windowInstance.isDestroyed()) return;
+    const wc = windowInstance.webContents;
+    wc.on('will-navigate', (event, url) => {
+      const allowed =
+        url.startsWith('file://') ||
+        url.startsWith('http://localhost') ||
+        url.startsWith('https://www.youtube.com/embed/');
+      if (!allowed) {
+        logger.warn('[Navigation] Blocked navigation to:', url);
+        event.preventDefault();
+      }
+    });
+    wc.setWindowOpenHandler(({ url }) => {
+      logger.warn('[Navigation] Blocked window.open to:', url);
+      return { action: 'deny' };
+    });
+  }
+
   return {
     setupYouTubeRequestHeaders,
     setupMediaPermissionHandlers,
     setupContentSecurityPolicy,
+    setupNavigationRestrictions,
   };
 }
 

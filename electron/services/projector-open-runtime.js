@@ -26,12 +26,18 @@ function createAndWireProjectorWindow({
   notifyProjectorActive,
   onProjectorClosed,
   logger = console,
+  setupNavigationRestrictions,
 }) {
   const projectorWindow = createProjectorWindowInstance({
     BrowserWindow,
     display,
     preloadPath,
   });
+
+  // M2-R2: Restrict navigation on projector window.
+  if (typeof setupNavigationRestrictions === 'function') {
+    setupNavigationRestrictions(projectorWindow);
+  }
 
   projectorChannel.resetForWindow(projectorWindow);
 
@@ -44,7 +50,9 @@ function createAndWireProjectorWindow({
   });
 
   notifyProjectorActive(controlWindowRef, display);
-  logger.log(`[ScreenManager] Projector window opened on display ${display.id} (${display.bounds.width}x${display.bounds.height})`);
+  logger.log(
+    `[ScreenManager] Projector window opened on display ${display.id} (${display.bounds.width}x${display.bounds.height})`
+  );
   return projectorWindow;
 }
 

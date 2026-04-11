@@ -198,6 +198,7 @@ const { controlWindowDeps, projectorWindowDeps } = buildWindowRuntimeDeps({
   bindProjectorWindowEvents,
   getProjectorScene: projectorSceneState.getScene,
   notifyProjectorActive,
+  setupNavigationRestrictions: sessionHooks.setupNavigationRestrictions,
 });
 
 const windowRuntimeManager = createWindowRuntimeManager({
@@ -311,7 +312,10 @@ app
         `Failed to start the application:\n\n${err?.message || String(err)}`
       );
     } catch (dialogErr) {
-      console.warn('[Startup] failed to show startup error dialog:', dialogErr?.message || dialogErr);
+      console.warn(
+        '[Startup] failed to show startup error dialog:',
+        dialogErr?.message || dialogErr
+      );
     }
     app.quit();
   });

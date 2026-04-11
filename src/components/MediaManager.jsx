@@ -290,20 +290,27 @@ function MediaManager({
     if (type === 'pdf') handleLoadPdfGrid(file);
   }, [activePreloadItem, handleConvertPpt, handleLoadPdfGrid]);
 
+  // M10-R2: Use a ref for activePdf to avoid the forceShowMediaHomeToken effect
+  // depending on activePdf?.pdfDocument (which it modifies, causing double-fire).
+  const activePdfRef = useRef(activePdf);
+  useEffect(() => {
+    activePdfRef.current = activePdf;
+  }, [activePdf]);
+
   useEffect(() => {
     if (!forceShowMediaHomeToken) return;
     setPptConverting(false);
     setPdfLoading(false);
     setPptSlides(null);
-    // M7: Destroy PDF document before clearing reference.
-    if (activePdf?.pdfDocument) {
-      activePdf.pdfDocument.destroy().catch(() => {});
+    // M7/M10-R2: Destroy PDF document before clearing reference, using ref.
+    if (activePdfRef.current?.pdfDocument) {
+      activePdfRef.current.pdfDocument.destroy().catch(() => {});
     }
     setActivePdf(null);
     setCurrentSlideIndex(-1);
     setCurrentPdfPage(1);
     setActiveFilter('all');
-  }, [forceShowMediaHomeToken, activePdf?.pdfDocument]);
+  }, [forceShowMediaHomeToken]);
 
   const formatSize = (bytes) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -366,9 +373,10 @@ function MediaManager({
       if (!groups.has(t)) groups.set(t, []);
       groups.get(t).push(file);
     }
-    return MEDIA_TYPE_ORDER
-      .filter((t) => groups.has(t))
-      .map((t) => ({ type: t, files: groups.get(t) }));
+    return MEDIA_TYPE_ORDER.filter((t) => groups.has(t)).map((t) => ({
+      type: t,
+      files: groups.get(t),
+    }));
   }, [displayFiles]);
 
   const isViewingDetail = activePdf || pptSlides || pptConverting || pdfLoading;

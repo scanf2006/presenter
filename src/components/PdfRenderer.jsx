@@ -8,6 +8,16 @@ const PdfRenderer = ({ path, pageNumber = 1, className = '', onLoadSuccess }) =>
   const containerRef = useRef(null);
   const [errorMsg, setErrorMsg] = useState(null);
   const [containerVersion, setContainerVersion] = useState(0);
+  // H6-R2: Store onLoadSuccess in a ref so the PDF-loading effect
+  // doesn't re-run when the parent passes a new callback reference.
+  const onLoadSuccessRef = useRef(onLoadSuccess);
+  useEffect(() => {
+    onLoadSuccessRef.current = onLoadSuccess;
+  }, [onLoadSuccess]);
+
+  // M12-R2: Store the loaded PDF document in a ref so page rendering
+  // can happen independently without reloading the entire document.
+  const pdfDocRef = useRef(null);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -21,11 +31,11 @@ const PdfRenderer = ({ path, pageNumber = 1, className = '', onLoadSuccess }) =>
     return () => observer.disconnect();
   }, []);
 
+  // Effect 1: Load PDF document only when path changes.
   useEffect(() => {
     let isMounted = true;
-    let pdfDocument = null;
 
-    const renderPdf = async () => {
+    const loadPdf = async () => {
       if (!path) return;
 
       try {
@@ -47,14 +57,50 @@ const PdfRenderer = ({ path, pageNumber = 1, className = '', onLoadSuccess }) =>
         const dataBuffer = await response.arrayBuffer();
         const loadingTask = pdfjsLib.getDocument({ data: dataBuffer });
         const pdf = await loadingTask.promise;
-        pdfDocument = pdf;
 
-        if (!isMounted) return;
-        if (onLoadSuccess) onLoadSuccess({ numPages: pdf.numPages });
+        if (!isMounted) {
+          pdf.destroy().catch(() => {});
+          return;
+        }
 
+        // Destroy previous document before storing new one.
+        if (pdfDocRef.current) {
+          pdfDocRef.current.destroy().catch(() => {});
+        }
+        pdfDocRef.current = pdf;
+
+        if (onLoadSuccessRef.current) onLoadSuccessRef.current({ numPages: pdf.numPages });
+
+        // Trigger a page render after loading.
+        setContainerVersion((v) => v + 1);
+      } catch (error) {
+        if (isMounted) setErrorMsg(error?.message || String(error));
+      }
+    };
+
+    loadPdf();
+
+    return () => {
+      isMounted = false;
+      if (pdfDocRef.current) {
+        pdfDocRef.current.destroy().catch(() => {});
+        pdfDocRef.current = null;
+      }
+    };
+  }, [path]);
+
+  // Effect 2: Render the current page when pageNumber or container size changes.
+  useEffect(() => {
+    let cancelled = false;
+
+    const renderPage = async () => {
+      const pdf = pdfDocRef.current;
+      if (!pdf || !canvasRef.current || !containerRef.current) return;
+
+      try {
         const page = await pdf.getPage(Math.min(pageNumber, pdf.numPages));
 
-        if (!isMounted || !canvasRef.current || !containerRef.current) return;
+        if (cancelled || !canvasRef.current || !containerRef.current) return;
 
         const canvas = canvasRef.current;
         const context = canvas.getContext('2d');
@@ -64,10 +110,9 @@ const PdfRenderer = ({ path, pageNumber = 1, className = '', onLoadSuccess }) =>
         const containerWidth = container.clientWidth;
         const containerHeight = container.clientHeight;
 
-        // Layout not ready: try once on next frame instead of forcing 4:3 fallback.
         if (!containerWidth || !containerHeight) {
           requestAnimationFrame(() => {
-            if (isMounted) setContainerVersion((v) => v + 1);
+            if (!cancelled) setContainerVersion((v) => v + 1);
           });
           return;
         }
@@ -93,21 +138,16 @@ const PdfRenderer = ({ path, pageNumber = 1, className = '', onLoadSuccess }) =>
           viewport,
         }).promise;
       } catch (error) {
-        setErrorMsg(error?.message || String(error));
+        if (!cancelled) setErrorMsg(error?.message || String(error));
       }
     };
 
-    renderPdf();
+    renderPage();
 
     return () => {
-      isMounted = false;
-      // M6: Destroy PDF document to release memory.
-      if (pdfDocument) {
-        pdfDocument.destroy().catch(() => {});
-        pdfDocument = null;
-      }
+      cancelled = true;
     };
-  }, [path, pageNumber, containerVersion, onLoadSuccess]);
+  }, [pageNumber, containerVersion]);
 
   return (
     <div

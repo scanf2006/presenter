@@ -1,6 +1,6 @@
 {
   "name": "churchdisplay-pro",
-  "version": "0.3.175",
+  "version": "0.3.177",
   "description": "ChurchDisplay Pro - Worship projection system",
   "main": "electron/main.js",
   "build": {
@@ -17,6 +17,13 @@
       "electron/ppt-convert.ps1"
     ],
     "extraResources": [
+      {
+        "from": "data",
+        "to": "data",
+        "filter": [
+          "bible_*.db"
+        ]
+      },
       {
         "from": "data/seed",
         "to": "data-seed",
@@ -45,18 +52,16 @@
     "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5199 && electron .\"",
     "electron:build": "vite build && electron-builder",
     "electron:build:unsigned": "vite build && electron-builder --win nsis --x64 --config.win.signAndEditExecutable=false",
+    "electron:build:lite:unsigned": "vite build && electron-builder --win nsis --x64 --config electron-builder.lite.json --config.win.signAndEditExecutable=false",
     "license:generate": "node scripts/generate-license.js"
   },
   "dependencies": {
     "@distube/ytdl-core": "^4.16.12",
-    "pinyin-pro": "^3.28.0",
     "play-dl": "^1.9.7",
     "sql.js": "^1.14.1",
     "yt-dlp-wrap": "^2.3.12"
   },
   "devDependencies": {
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^9.1.0",
     "electron": "^33.2.0",

@@ -464,11 +464,14 @@ function ProjectorView() {
               videoEl
                 .play()
                 .then(() => {
-                  setTimeout(() => {
+                  // M11-R2: Track this timer so it can be cleaned up if the element
+                  // is removed before it fires (via the timeoutRef array).
+                  const t = setTimeout(() => {
                     videoEl.muted = false;
                     videoEl.defaultMuted = false;
                     videoEl.volume = 1;
                   }, 120);
+                  timeoutRef.current.push(t);
                 })
                 .catch((err) => {
                   console.error('[ProjectorView] standalone video play failed:', err);

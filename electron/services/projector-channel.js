@@ -5,6 +5,8 @@ function createProjectorChannel({
 } = {}) {
   let projectorExternalMode = false;
   let projectorPendingPayload = null;
+  // M8-R2: Track the pending did-finish-load handler to prevent listener accumulation.
+  let pendingLoadHandler = null;
 
   function resetForWindow(projectorWindow) {
     projectorExternalMode = false;
@@ -34,7 +36,12 @@ function createProjectorChannel({
 
     if (projectorExternalMode) {
       projectorPendingPayload = data;
-      projectorWindow.webContents.once('did-finish-load', () => {
+      // M8-R2: Remove previous listener before adding a new one to prevent accumulation.
+      if (pendingLoadHandler) {
+        try { projectorWindow.webContents.removeListener('did-finish-load', pendingLoadHandler); } catch (_) { /* ignore */ }
+      }
+      pendingLoadHandler = () => {
+        pendingLoadHandler = null;
         projectorExternalMode = false;
         try { projectorWindow.webContents.setUserAgent(''); } catch (err) { console.warn('[ProjectorChannel] reset userAgent failed:', err?.message || err); }
         const payload = projectorPendingPayload;
@@ -43,7 +50,8 @@ function createProjectorChannel({
           try { projectorWindow.webContents.setAudioMuted(false); } catch (err) { console.warn('[ProjectorChannel] unmute after shell load failed:', err?.message || err); }
           projectorWindow.webContents.send('projector-content', payload);
         }
-      });
+      };
+      projectorWindow.webContents.once('did-finish-load', pendingLoadHandler);
       loadProjectorShell(projectorWindow);
       return;
     }
