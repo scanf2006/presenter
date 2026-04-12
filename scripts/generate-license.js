@@ -2,7 +2,9 @@
 /* eslint-disable no-console */
 const fs = require('fs');
 const path = require('path');
-const { buildLicenseToken } = require('../electron/license');
+const crypto = require('crypto');
+
+const PRODUCT_CODE = 'churchdisplay-pro';
 
 function parseArgs(argv) {
   const args = {};
@@ -23,6 +25,31 @@ function parseArgs(argv) {
 
 const args = parseArgs(process.argv);
 
+function toBase64Url(input) {
+  return Buffer.from(input)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+}
+
+function buildLicenseToken(payload, privateKeyPem) {
+  const payloadRaw = JSON.stringify({ ...payload, product: PRODUCT_CODE });
+  const payloadB64 = toBase64Url(payloadRaw);
+  const content = `CDP1.${payloadB64}`;
+  const signer = crypto.createSign('RSA-SHA256');
+  signer.update(content);
+  signer.end();
+  const signature = signer.sign(privateKeyPem);
+  return `CDP1.${payloadB64}.${toBase64Url(signature)}`;
+}
+
+function toIsoAfterDays(days) {
+  const n = Number(days);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return new Date(Date.now() + n * 24 * 60 * 60 * 1000).toISOString();
+}
+
 if (args.help || args.h || args['?']) {
   console.log(
     [
@@ -33,6 +60,7 @@ if (args.help || args.h || args['?']) {
       '  --holder <name>          Required. License holder name.',
       '  --privateKey <path>      Private key PEM path (or use LICENSE_PRIVATE_KEY_PEM env).',
       '  --expiresAt <isoDate>    Optional. Expiry date, e.g. 2027-12-31T23:59:59Z.',
+      '  --days <number>          Optional. Expiry after N days (ignored if --expiresAt is provided).',
       '  --maxVersion <semver>    Optional. Max app version, e.g. 0.3.200.',
       '  --features <csv>         Optional. Comma-separated features.',
       '  --deviceId <id>          Optional. Bind license to a specific device ID.',
@@ -57,11 +85,12 @@ if (!privateKeyPath && !privateKeyInline) {
 const privateKeyPem = privateKeyInline
   ? privateKeyInline
   : fs.readFileSync(path.resolve(privateKeyPath), 'utf8');
+const expiresAt = args.expiresAt || toIsoAfterDays(args.days) || null;
 
 const payload = {
   holder: args.holder,
   issuedAt: new Date().toISOString(),
-  expiresAt: args.expiresAt || null,
+  expiresAt,
   maxVersion: args.maxVersion || null,
   deviceId: args.deviceId || null,
   features: args.features ? args.features.split(',').map((x) => x.trim()).filter(Boolean) : [],
@@ -74,7 +103,7 @@ const template = [
   'node scripts/generate-license.js',
   `--holder "${args.holder}"`,
   args.deviceId ? `--deviceId "${args.deviceId}"` : '--deviceId "CDPDEV-XXXXXXXXXXXXXXX"',
-  args.expiresAt ? `--expiresAt "${args.expiresAt}"` : '',
+  expiresAt ? `--expiresAt "${expiresAt}"` : '',
   args.maxVersion ? `--maxVersion "${args.maxVersion}"` : '',
   args.features ? `--features "${args.features}"` : '',
   `--privateKey "${privateKeyPath || 'D:\\\\path\\\\to\\\\private.pem'}"`,
@@ -85,7 +114,7 @@ const template = [
 console.error('[License Generator] Summary');
 console.error(`  holder: ${args.holder}`);
 console.error(`  deviceId: ${args.deviceId || '(not bound)'}`);
-console.error(`  expiresAt: ${args.expiresAt || '(lifetime)'}`);
+console.error(`  expiresAt: ${expiresAt || '(lifetime)'}`);
 console.error(`  maxVersion: ${args.maxVersion || '(none)'}`);
 console.error(`  features: ${args.features || '(none)'}`);
 console.error('  template:');

@@ -1,19 +1,22 @@
 import React from 'react';
+import { useLicenseContext } from '../../contexts/LicenseContext';
 
-function LegalModal({
-  show,
-  onClose,
-  licenseStatus,
-  licenseDeviceId,
-  licenseInput,
-  setLicenseInput,
-  handleActivateLicense,
-  handleClearLicense,
-  handleAcceptEula,
-  licenseActionError,
-  licenseActionMsg,
-  eulaText,
-}) {
+function LegalModal() {
+  const {
+    showLegalModal,
+    handleCloseLegalModal,
+    licenseStatus,
+    licenseDeviceId,
+    licenseInput,
+    setLicenseInput,
+    handleActivateLicense,
+    handleClearLicense,
+    handleAcceptEula,
+    licenseActionError,
+    licenseActionMsg,
+    eulaText,
+  } = useLicenseContext();
+
   const handleCopyDeviceId = async () => {
     if (!licenseDeviceId) return;
     try {
@@ -40,23 +43,42 @@ function LegalModal({
   };
   const eulaAccepted = !!licenseStatus?.hasAcceptedEula;
 
-  if (!show) return null;
+  if (!showLegalModal) return null;
 
   return (
-    <div className="cp-modal-overlay" onClick={onClose}>
+    <div className="cp-modal-overlay" onClick={handleCloseLegalModal}>
       <div className="cp-modal-card" onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '10px',
+          }}
+        >
           <div style={{ fontSize: '16px', fontWeight: 600 }}>License</div>
-          <button className="btn btn--ghost" onClick={onClose} style={{ padding: '4px 10px' }}>
+          <button
+            className="btn btn--ghost"
+            onClick={handleCloseLegalModal}
+            style={{ padding: '4px 10px' }}
+          >
             Close
           </button>
         </div>
 
-        <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: '10px' }}>
-          Current Status: {licenseStatus.isLicensed ? 'Licensed' : 'Unlicensed'} | {licenseStatus.summary || 'Unlicensed'}
+        <div
+          style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: '10px' }}
+        >
+          Current Status: {licenseStatus.isLicensed ? 'Licensed' : 'Unlicensed'} |{' '}
+          {licenseStatus.summary || 'Unlicensed'}
         </div>
-        <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: '12px' }}>
-          EULA: {licenseStatus.hasAcceptedEula ? `Accepted (${licenseStatus.acceptedEulaAt || ''})` : 'Not accepted'}
+        <div
+          style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: '12px' }}
+        >
+          EULA:{' '}
+          {licenseStatus.hasAcceptedEula
+            ? `Accepted (${licenseStatus.acceptedEulaAt || ''})`
+            : 'Not accepted'}
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px' }}>
           <input
@@ -73,12 +95,19 @@ function LegalModal({
               fontSize: '12px',
             }}
           />
-          <button className="btn btn--ghost" onClick={handleCopyDeviceId} disabled={!licenseDeviceId}>
+          <button
+            className="btn btn--ghost"
+            onClick={handleCopyDeviceId}
+            disabled={!licenseDeviceId}
+          >
             Copy Device ID
           </button>
         </div>
         <div style={{ fontSize: '12px', color: '#f6d365', marginBottom: '12px' }}>
-          Copyright Notice: {'\u7248\u6743\u6240\u6709\u5f52 Aiden \u6240\u6709\uff1bChurchDisplay Pro \u591a\u4f26\u591a\u795e\u53ec\u4f1a\u6d3b\u77f3\u5802\u7248\u4e3a\u8d60\u4e0e\u7248\uff08non-transferable gifted edition\uff09\u3002'}
+          Copyright Notice:{' '}
+          {
+            '\u7248\u6743\u6240\u6709\u5f52 Aiden \u6240\u6709\uff1bChurchDisplay Pro \u591a\u4f26\u591a\u795e\u53ec\u4f1a\u6d3b\u77f3\u5802\u7248\u4e3a\u8d60\u4e0e\u7248\uff08non-transferable gifted edition\uff09\u3002'
+          }
         </div>
 
         <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
@@ -118,8 +147,16 @@ function LegalModal({
           </div>
         )}
 
-        {licenseActionError && <div style={{ color: '#ff8080', fontSize: '12px', marginBottom: '6px' }}>{licenseActionError}</div>}
-        {licenseActionMsg && <div style={{ color: '#8af5a4', fontSize: '12px', marginBottom: '6px' }}>{licenseActionMsg}</div>}
+        {licenseActionError && (
+          <div style={{ color: '#ff8080', fontSize: '12px', marginBottom: '6px' }}>
+            {licenseActionError}
+          </div>
+        )}
+        {licenseActionMsg && (
+          <div style={{ color: '#8af5a4', fontSize: '12px', marginBottom: '6px' }}>
+            {licenseActionMsg}
+          </div>
+        )}
 
         <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
           Recommendation: use code signing, disable devtools in release, and issue keys server-side.

@@ -1,25 +1,16 @@
-﻿import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useEffect, useCallback, useRef, useMemo } from 'react';
 import appPkg from '../../package.json';
-import useProjectorQueue from '../hooks/useProjectorQueue';
-import useQueuePlayback from '../hooks/useQueuePlayback';
-import useProjectionSettings from '../hooks/useProjectionSettings';
-import useWindowProjectorControls from '../hooks/useWindowProjectorControls';
-import useSetupBundleActions from '../hooks/useSetupBundleActions';
-import useLicenseActions from '../hooks/useLicenseActions';
-import useCameraPreview from '../hooks/useCameraPreview';
-import useDisplayProjectorStatus from '../hooks/useDisplayProjectorStatus';
-import useToastMessage from '../hooks/useToastMessage';
-import useObservedWidth from '../hooks/useObservedWidth';
-import useBackgroundPickerFlow from '../hooks/useBackgroundPickerFlow';
-import useTextCanvasTransform from '../hooks/useTextCanvasTransform';
-import usePreviewVideoControls from '../hooks/usePreviewVideoControls';
-import useProjectorPreviewDispatch from '../hooks/useProjectorPreviewDispatch';
-import useSectionNavigation from '../hooks/useSectionNavigation';
+import { AppProvider, useAppContext } from '../contexts/AppContext';
+import { LicenseProvider } from '../contexts/LicenseContext';
+import { ProjectorProvider, useProjectorContext } from '../contexts/ProjectorContext';
+import { QueueProvider, useQueueContext } from '../contexts/QueueContext';
 import useTextEditorState from '../hooks/useTextEditorState';
-import useYouTubeProjection from '../hooks/useYouTubeProjection';
-import useQueueCrudActions from '../hooks/useQueueCrudActions';
+import useTextCanvasTransform from '../hooks/useTextCanvasTransform';
+import useBackgroundPickerFlow from '../hooks/useBackgroundPickerFlow';
+import useSectionNavigation from '../hooks/useSectionNavigation';
 import useActiveTextQueueAutosave from '../hooks/useActiveTextQueueAutosave';
-import { PREVIEW, SCENE, TEXT_EDITOR } from '../constants/ui';
+import useObservedWidth from '../hooks/useObservedWidth';
+import { PREVIEW, TEXT_EDITOR } from '../constants/ui';
 import TopBar from './control-panel/TopBar';
 import SidebarQueue from './control-panel/SidebarQueue';
 import MainContentArea from './control-panel/MainContentArea';
@@ -30,34 +21,36 @@ import ToastOverlay from './control-panel/ToastOverlay';
 const APP_VERSION = appPkg.version;
 
 /**
+ * Inner component that consumes all contexts and provides the remaining
+ * text-editor / background-picker / section-navigation orchestration.
  */
-function ControlPanel() {
-  const [activeSection, setActiveSection] = useState('text');
+function ControlPanelInner({ applyTextPayloadRef }) {
+  const { activeSection, setActiveSection, toast } = useAppContext();
+  const {
+    currentSlide,
+    pushToProjector,
+    normalizeYouTubeUrl,
+    getYouTubeVideoId,
+    resolveYouTubePayload,
+  } = useProjectorContext();
+
+  const {
+    projectorQueue,
+    activeQueueIndex,
+    setActiveQueueIndex,
+    getQueueItemTitle,
+    addOrUpdateQueueItem,
+    addSongQueueItem,
+    addBibleQueueItem,
+    updateSelectedQueueItem,
+    mediaQueueHomeToken,
+  } = useQueueContext();
+
+  // ── Text editor state ──
   const textCanvasRef = useRef(null);
   const textLayerRef = useRef(null);
   const textEditableRef = useRef(null);
-  const [activePreloadItem, setActivePreloadItem] = useState(null);
-  const [mediaQueueHomeToken, setMediaQueueHomeToken] = useState(0);
-  const [showQueueTypeTags, setShowQueueTypeTags] = useState(true);
-  const previewStageRef = useRef(null);
-  const [showLegalModal, setShowLegalModal] = useState(false);
-  const [setupTransferBusy, setSetupTransferBusy] = useState(false);
-  const [trialNowMs, setTrialNowMs] = useState(0);
-  const [licenseStatus, setLicenseStatus] = useState({
-    isLicensed: false,
-    summary: 'Unlicensed',
-    hasAcceptedEula: false,
-    acceptedEulaAt: null,
-    trial: null,
-  });
-  const [licenseInput, setLicenseInput] = useState('');
-  const [licenseDeviceId, setLicenseDeviceId] = useState('');
-  const [licenseActionMsg, setLicenseActionMsg] = useState('');
-  const [licenseActionError, setLicenseActionError] = useState('');
-  const [eulaText, setEulaText] = useState('');
-  const { toast, showToast } = useToastMessage();
 
-  const isElectron = typeof window.churchDisplay !== 'undefined';
   const {
     textContent,
     setTextContent,
@@ -80,15 +73,6 @@ function ControlPanel() {
     applyTextPayloadToEditor,
   } = useTextEditorState();
 
-  const {
-    displays,
-    projectorActive,
-    projectorDisplayId,
-    setProjectorActive,
-    setProjectorDisplayId,
-  } = useDisplayProjectorStatus({ isElectron });
-  const previewSplitEnabled = false;
-  const activeProjectorDisplay = displays.find((d) => d.id === projectorDisplayId) || null;
   const clamp = useCallback((v, min, max) => Math.max(min, Math.min(max, v)), []);
 
   const { startTextDrag, startTextResize, resetTextTransformState } = useTextCanvasTransform({
@@ -101,110 +85,13 @@ function ControlPanel() {
     clamp,
     setTextSnapGuide,
   });
-  const {
-    projectorQueue,
-    activeQueueIndex,
-    setActiveQueueIndex,
-    draggingQueueId,
-    setDraggingQueueId,
-    editingQueueId,
-    editingQueueTitle,
-    setEditingQueueTitle,
-    getQueueItemTitle,
-    addOrUpdateQueueItem,
-    updateActiveQueueItem,
-    moveQueueItem,
-    removeActiveQueueItem,
-    startRenameQueueItem,
-    commitRenameQueueItem,
-    cancelRenameQueueItem,
-    clearQueue,
-  } = useProjectorQueue({
-    isElectron,
-    showToast,
-  });
 
-  const {
-    transitionEnabled,
-    setTransitionEnabled,
-    transitionDelayMs,
-    setTransitionDelayMs,
-    transitionDurationMs,
-    setTransitionDurationMs,
-    sceneConfig,
-    setSceneConfig,
-  } = useProjectionSettings({
-    isElectron,
-  });
-  const previewRightPanePercent = Math.max(
-    SCENE.CAMERA_PANE_MIN_PERCENT,
-    Math.min(
-      SCENE.CAMERA_PANE_MAX_PERCENT,
-      sceneConfig.cameraPanePercent || SCENE.CAMERA_PANE_DEFAULT_PERCENT
-    )
-  );
-  const previewContentPanePercent = 100 - previewRightPanePercent;
-  const previewCameraScale = Math.max(
-    1,
-    Number(sceneConfig.cameraCenterCropPercent || SCENE.CAMERA_CROP_DEFAULT_PERCENT) /
-      SCENE.CAMERA_CROP_DEFAULT_PERCENT
-  );
+  // Keep the ref in sync so QueueProvider can call applyTextPayloadToEditor
+  useEffect(() => {
+    if (applyTextPayloadRef) applyTextPayloadRef.current = applyTextPayloadToEditor;
+  }, [applyTextPayloadRef, applyTextPayloadToEditor]);
 
-  const {
-    currentSlide,
-    previewSlide,
-    previewMaskVisible,
-    pushToProjector,
-    blackout: handleBlackout,
-  } = useProjectorPreviewDispatch({
-    isElectron,
-    transitionEnabled,
-    transitionDelayMs,
-    transitionDurationMs,
-  });
-  const { normalizeYouTubeUrl, getYouTubeVideoId, getYouTubeEmbedUrl, resolveYouTubePayload } =
-    useYouTubeProjection({ isElectron });
-
-  const { cameraDevices, cameraStatus, previewTestNow, cameraPreviewRef } = useCameraPreview({
-    sceneConfig,
-    setSceneConfig,
-  });
-
-  const {
-    startProjector: handleStartProjector,
-    stopProjector: handleStopProjector,
-    minimizeWindow: handleMinimizeWindow,
-    toggleMaximizeWindow: handleToggleMaximizeWindow,
-    closeWindow: handleCloseWindow,
-  } = useWindowProjectorControls({
-    isElectron,
-    setProjectorActive,
-    setProjectorDisplayId,
-  });
-
-  const { exportSetupBundle: handleExportSetupBundle, importSetupBundle: handleImportSetupBundle } =
-    useSetupBundleActions({
-      isElectron,
-      setSetupTransferBusy,
-    });
-
-  const {
-    openLegal: handleOpenLegal,
-    activateLicense: handleActivateLicense,
-    clearLicense: handleClearLicense,
-    acceptEula: handleAcceptEula,
-  } = useLicenseActions({
-    isElectron,
-    setShowLegalModal,
-    setLicenseActionError,
-    setLicenseActionMsg,
-    setEulaText,
-    setLicenseStatus,
-    setLicenseDeviceId,
-    licenseStatus,
-    licenseInput,
-  });
-
+  // ── Background picker ──
   const {
     backgroundPickerTarget,
     songPickedBackground,
@@ -217,136 +104,39 @@ function ControlPanel() {
     setTextBackground,
   });
 
+  // ── Section navigation ──
+  const resetFreeTextEditor = useCallback(() => {
+    resetTextEditorState();
+    resetTextTransformState();
+  }, [resetTextEditorState, resetTextTransformState]);
+
   const {
-    previewVideoRef,
-    previewVideoCurrent,
-    previewVideoDuration,
-    previewVideoPaused,
-    previewVideoMuted,
-    handleLoadedMetadata,
-    handleTimeUpdate,
-    handlePlay,
-    handlePause,
-    handleVolumeChange,
-    togglePauseResume,
-    stopPlayback,
-    toggleMute,
-  } = usePreviewVideoControls();
+    songsListOpenToken,
+    bibleCatalogOpenToken,
+    mediaHomeOpenToken,
+    openDisplays,
+    openText,
+    openSongs,
+    openBible,
+    openMedia,
+  } = useSectionNavigation({
+    setActiveQueueIndex,
+    setActiveSection,
+    resetFreeTextEditor,
+  });
 
-  const previewStageWidth = useObservedWidth(previewStageRef, []);
+  // ── Text canvas dimensions ──
   const textCanvasWidth = useObservedWidth(textCanvasRef, [activeSection]);
+  const textCanvasWidthRatio = Math.max(
+    PREVIEW.MIN_WIDTH_RATIO,
+    (textCanvasWidth || PREVIEW.STAGE_FALLBACK_WIDTH_PX * 2.5) / PREVIEW.STAGE_BASE_WIDTH_PX
+  );
+  const textCanvasDisplayFontPx = Math.max(
+    12,
+    Math.min(TEXT_EDITOR.SIZE_CLAMP_MAX_PX, Math.round(textSizePx * textCanvasWidthRatio))
+  );
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    try {
-      const saved = window.localStorage.getItem('churchdisplay.ui.queueTypeTagsVisible.v2');
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (saved === '0') setShowQueueTypeTags(false);
-    } catch (_) {
-      // ignore restore failures
-    }
-  }, []);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(
-        'churchdisplay.ui.queueTypeTagsVisible.v2',
-        showQueueTypeTags ? '1' : '0'
-      );
-    } catch (_) {
-      // ignore persist failures
-    }
-  }, [showQueueTypeTags]);
-
-  useEffect(() => {
-    if (!isElectron) return;
-    if (sceneConfig.mode !== 'normal') return;
-    if (!currentSlide) return;
-    if (typeof window.churchDisplay?.sendProjectorScene === 'function') {
-      window.churchDisplay.sendProjectorScene(sceneConfig);
-    }
-    window.churchDisplay.sendToProjector(currentSlide);
-    if (typeof window.churchDisplay?.sendToProjectorBackground === 'function') {
-      window.churchDisplay.sendToProjectorBackground(currentSlide?.background || null);
-    }
-  }, [sceneConfig.mode, sceneConfig, currentSlide, isElectron]);
-
-  // R3-M: Memoize to avoid recalculating on every render.
-  const previewAspectRatio = useMemo(() => {
-    const w = activeProjectorDisplay?.bounds?.width || activeProjectorDisplay?.size?.width;
-    const h = activeProjectorDisplay?.bounds?.height || activeProjectorDisplay?.size?.height;
-    if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) {
-      const ratio = w / h;
-      // Keep preview panel visually usable; avoid over-wide "thin strip" preview.
-      if (ratio >= 1.45 && ratio <= 1.9) {
-        return `${w} / ${h}`;
-      }
-    }
-    return PREVIEW.ASPECT_RATIO_16_9;
-  }, [
-    activeProjectorDisplay?.bounds?.width,
-    activeProjectorDisplay?.bounds?.height,
-    activeProjectorDisplay?.size?.width,
-    activeProjectorDisplay?.size?.height,
-  ]);
-
-  useEffect(() => {
-    const hydrateLicenseStatus = async () => {
-      if (!isElectron || typeof window.churchDisplay?.licenseGetStatus !== 'function') return;
-      try {
-        const status = await window.churchDisplay.licenseGetStatus();
-        if (status) setLicenseStatus(status);
-      } catch (err) {
-        console.warn('[License] load status failed:', err);
-      }
-    };
-    hydrateLicenseStatus();
-
-    let timer = null;
-    if (isElectron && typeof window.churchDisplay?.licenseGetStatus === 'function') {
-      timer = window.setInterval(hydrateLicenseStatus, 10000);
-    }
-
-    let offTrialWarning = null;
-    if (isElectron && typeof window.churchDisplay?.onTrialWarning === 'function') {
-      offTrialWarning = window.churchDisplay.onTrialWarning((payload) => {
-        const msg = payload?.message || 'Trial expired. Please activate license.';
-        showToast(msg);
-        setLicenseActionError(msg);
-        if (payload?.trial) {
-          setLicenseStatus((prev) => ({ ...(prev || {}), trial: payload.trial }));
-        }
-      });
-    }
-
-    return () => {
-      if (timer) window.clearInterval(timer);
-      if (typeof offTrialWarning === 'function') offTrialWarning();
-    };
-  }, [isElectron, showToast]);
-
-  useEffect(() => {
-    const ticker = window.setInterval(() => setTrialNowMs(Date.now()), 1000);
-    return () => window.clearInterval(ticker);
-  }, []);
-
-  const trialLabel = useMemo(() => {
-    const trial = licenseStatus?.trial;
-    if (!trial || !trial.enabled) return '';
-    if (trial.expired) return 'Trial expired';
-    const startedAtMs = Number(trial.startedAtMs || 0);
-    const durationMs = Number(trial.durationMs || 0);
-    if (startedAtMs > 0 && durationMs > 0) {
-      const remainingMs = Math.max(0, durationMs - Math.max(0, trialNowMs - startedAtMs));
-      const totalSec = Math.ceil(remainingMs / 1000);
-      const min = Math.floor(totalSec / 60);
-      const sec = totalSec % 60;
-      return `Trial ${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
-    }
-    if (trial.remainingLabel) return `Trial ${trial.remainingLabel}`;
-    return 'Trial mode';
-  }, [licenseStatus?.trial, trialNowMs]);
-
+  // ── Sync contentEditable with textContent state ──
   useEffect(() => {
     const el = textEditableRef.current;
     if (!el) return;
@@ -358,25 +148,7 @@ function ControlPanel() {
     }
   }, [textContent, activeSection]);
 
-  const textCanvasWidthRatio = Math.max(
-    PREVIEW.MIN_WIDTH_RATIO,
-    (textCanvasWidth || PREVIEW.STAGE_FALLBACK_WIDTH_PX * 2.5) / PREVIEW.STAGE_BASE_WIDTH_PX
-  );
-  const textCanvasDisplayFontPx = Math.max(
-    12,
-    Math.min(TEXT_EDITOR.SIZE_CLAMP_MAX_PX, Math.round(textSizePx * textCanvasWidthRatio))
-  );
-  const nextQueueTitle = useMemo(() => {
-    if (projectorQueue.length === 0) return 'No content';
-    const nextIndex =
-      (activeQueueIndex >= 0 ? activeQueueIndex + 1 : 0) >= projectorQueue.length
-        ? projectorQueue.length - 1
-        : activeQueueIndex >= 0
-          ? activeQueueIndex + 1
-          : 0;
-    return projectorQueue[nextIndex]?.title || 'No content';
-  }, [projectorQueue, activeQueueIndex]);
-
+  // ── Send text to projector ──
   const handleSendToProjector = useCallback(
     (content) => {
       const data = buildCurrentTextPayload(content || textContent);
@@ -391,8 +163,12 @@ function ControlPanel() {
     addOrUpdateQueueItem(payload, getQueueItemTitle(payload), 'text');
   }, [textContent, buildCurrentTextPayload, addOrUpdateQueueItem, getQueueItemTitle]);
 
-  // Keep refs in sync via effects to avoid stale-closure: the background-change
-  // effect fires only when textBackground changes, but needs the latest values.
+  const handleClearProjector = useCallback(
+    () => handleSendToProjector(' '),
+    [handleSendToProjector]
+  );
+
+  // ── Background change auto-project ──
   const sendToProjectorRef = useRef(handleSendToProjector);
   const activeSectionRef = useRef(activeSection);
   const textContentRef = useRef(textContent);
@@ -420,26 +196,7 @@ function ControlPanel() {
     }
   }, [textBackground]);
 
-  const resetFreeTextEditor = useCallback(() => {
-    resetTextEditorState();
-    resetTextTransformState();
-  }, [resetTextEditorState, resetTextTransformState]);
-
-  const {
-    songsListOpenToken,
-    bibleCatalogOpenToken,
-    mediaHomeOpenToken,
-    openDisplays,
-    openText,
-    openSongs,
-    openBible,
-    openMedia,
-  } = useSectionNavigation({
-    setActiveQueueIndex,
-    setActiveSection,
-    resetFreeTextEditor,
-  });
-
+  // ── Media projection (YouTube resolve) ──
   const handleProjectMedia = useCallback(
     async (mediaData) => {
       try {
@@ -460,6 +217,7 @@ function ControlPanel() {
     [pushToProjector, normalizeYouTubeUrl, getYouTubeVideoId, resolveYouTubePayload]
   );
 
+  // ── Playlist item handler ──
   const handleAddPlaylistItem = useCallback(
     (item) => {
       const payload = item?.payload || null;
@@ -470,372 +228,116 @@ function ControlPanel() {
     [addOrUpdateQueueItem, getQueueItemTitle]
   );
 
-  const {
-    addSongQueueItem: handleAddSongQueueItem,
-    addBibleQueueItem: handleAddBibleQueueItem,
-    updateSelectedQueueItem: handleUpdateActiveQueueItem,
-    moveQueueItemByIndex: handleMoveQueueItem,
-    removeSelectedQueueItem: handleRemoveActiveQueueItem,
-    startRenameSelectedQueueItem: handleStartRenameQueueItem,
-    commitRenameSelectedQueueItem: handleCommitRenameQueueItem,
-    cancelRenameSelectedQueueItem: handleCancelRenameQueueItem,
-    clearAllQueueItems: handleClearQueue,
-  } = useQueueCrudActions({
-    addOrUpdateQueueItem,
-    getQueueItemTitle,
-    updateActiveQueueItem,
-    moveQueueItem,
-    removeActiveQueueItem,
-    startRenameQueueItem,
-    commitRenameQueueItem,
-    cancelRenameQueueItem,
-    clearQueue,
-  });
-
+  // ── Auto-save text queue item ──
   useActiveTextQueueAutosave({
     activeSection,
     activeQueueIndex,
     projectorQueue,
     textContent,
     buildCurrentTextPayload,
-    updateSelectedQueueItem: handleUpdateActiveQueueItem,
+    updateSelectedQueueItem,
   });
 
-  const handleMediaQueueItemPlayed = useCallback(() => {
-    setMediaQueueHomeToken(Date.now());
-  }, []);
-
-  const handleQueueItemSelected = useCallback(
-    (item) => {
-      const isSongQueueItem = item?.section === 'songs';
-      setTransitionEnabled(!isSongQueueItem);
-    },
-    [setTransitionEnabled]
-  );
-
-  const { playQueueItem: handlePlayQueueItem } = useQueuePlayback({
-    projectorQueue,
-    activeQueueIndex,
-    setActiveQueueIndex,
-    setActiveSection,
-    setActivePreloadItem,
-    applyTextPayloadToEditor,
-    resolveYouTubePayload,
-    getYouTubeVideoId,
-    normalizeYouTubeUrl,
-    pushToProjector,
-    onMediaQueueItemPlayed: handleMediaQueueItemPlayed,
-    onQueueItemSelected: handleQueueItemSelected,
-  });
-
-  const handleClearProjector = useCallback(
-    () => handleSendToProjector(' '),
-    [handleSendToProjector]
-  );
-  const handleCloseLegalModal = useCallback(() => setShowLegalModal(false), []);
-
-  // ── Grouped prop objects for child components ──
-  // These reduce visual clutter in the JSX without changing child APIs.
-
-  const topBarProps = useMemo(
-    () => ({
-      appVersion: APP_VERSION,
-      projectorActive,
-      trialLabel,
-      trialExpired: !!licenseStatus?.trial?.expired,
-      onOpenLegal: handleOpenLegal,
-      onClear: handleClearProjector,
-      onBlackout: handleBlackout,
-      onMinimize: handleMinimizeWindow,
-      onToggleMaximize: handleToggleMaximizeWindow,
-      onClose: handleCloseWindow,
-    }),
-    [
-      projectorActive,
-      trialLabel,
-      licenseStatus?.trial?.expired,
-      handleOpenLegal,
-      handleClearProjector,
-      handleBlackout,
-      handleMinimizeWindow,
-      handleToggleMaximizeWindow,
-      handleCloseWindow,
-    ]
-  );
-
-  const sidebarQueueProps = useMemo(
-    () => ({
-      activeSection,
-      openDisplays,
-      openText,
-      openSongs,
-      openBible,
-      openMedia,
-      projectorQueue,
-      draggingQueueId,
-      setDraggingQueueId,
-      activeQueueIndex,
-      handleMoveQueueItem,
-      editingQueueId,
-      editingQueueTitle,
-      setEditingQueueTitle,
-      handleCommitRenameQueueItem,
-      handleCancelRenameQueueItem,
-      handlePlayQueueItem,
-      handleStartRenameQueueItem,
-      handleRemoveActiveQueueItem,
-      handleClearQueue,
-      showQueueTypeTags,
-      setShowQueueTypeTags,
-    }),
-    [
-      activeSection,
-      openDisplays,
-      openText,
-      openSongs,
-      openBible,
-      openMedia,
-      projectorQueue,
-      draggingQueueId,
-      setDraggingQueueId,
-      activeQueueIndex,
-      handleMoveQueueItem,
-      editingQueueId,
-      editingQueueTitle,
-      setEditingQueueTitle,
-      handleCommitRenameQueueItem,
-      handleCancelRenameQueueItem,
-      handlePlayQueueItem,
-      handleStartRenameQueueItem,
-      handleRemoveActiveQueueItem,
-      handleClearQueue,
-      showQueueTypeTags,
-      setShowQueueTypeTags,
-    ]
-  );
-
-  const mainContentProps = useMemo(
-    () => ({
-      activeSection,
-      displays,
-      projectorDisplayId,
-      projectorActive,
-      handleStartProjector,
-      handleStopProjector,
-      textCanvasRef,
-      previewAspectRatio,
-      textBackground,
-      textSnapGuide,
-      textLayerRef,
-      textLayout,
-      startTextDrag,
-      textEditableRef,
-      setTextContent,
-      textFontFamily,
-      textColor,
-      textCanvasDisplayFontPx,
-      textContent,
-      startTextResize,
-      handleOpenBackgroundPicker,
-      setTextBackground,
-      fontSize,
-      setFontSize,
-      setTextSizePx,
-      textSizePx,
-      setTextFontFamily,
-      setTextColor,
-      handleSendToProjector,
-      handleAddTextToQueue,
-      handleProjectMedia,
-      handleAddBibleQueueItem,
-      handleUpdateActiveQueueItem,
-      activePreloadItem,
-      bibleCatalogOpenToken,
-      biblePickedBackground,
-      handleAddSongQueueItem,
-      songPickedBackground,
-      songsListOpenToken,
-      handleAddPlaylistItem,
-      mediaHomeOpenToken: Math.max(mediaHomeOpenToken || 0, mediaQueueHomeToken || 0),
-      backgroundPickerTarget,
-      handlePickBackgroundFromMedia,
-      handleCancelBackgroundPicker,
-    }),
-    [
-      activeSection,
-      displays,
-      projectorDisplayId,
-      projectorActive,
-      handleStartProjector,
-      handleStopProjector,
-      previewAspectRatio,
-      textBackground,
-      textSnapGuide,
-      textLayout,
-      startTextDrag,
-      textFontFamily,
-      textColor,
-      textCanvasDisplayFontPx,
-      textContent,
-      startTextResize,
-      handleOpenBackgroundPicker,
-      setTextContent,
-      setTextBackground,
-      fontSize,
-      setFontSize,
-      setTextSizePx,
-      textSizePx,
-      setTextFontFamily,
-      setTextColor,
-      handleSendToProjector,
-      handleAddTextToQueue,
-      handleProjectMedia,
-      handleAddBibleQueueItem,
-      handleUpdateActiveQueueItem,
-      activePreloadItem,
-      bibleCatalogOpenToken,
-      biblePickedBackground,
-      handleAddSongQueueItem,
-      songPickedBackground,
-      songsListOpenToken,
-      handleAddPlaylistItem,
-      mediaHomeOpenToken,
-      mediaQueueHomeToken,
-      backgroundPickerTarget,
-      handlePickBackgroundFromMedia,
-      handleCancelBackgroundPicker,
-    ]
-  );
-
-  const previewPanelProps = useMemo(
-    () => ({
-      previewStageRef,
-      previewSlide,
-      previewSplitEnabled,
-      previewContentPanePercent,
-      previewRightPanePercent,
-      previewCameraScale,
-      previewStageWidth,
-      previewVideoRef,
-      handleLoadedMetadata,
-      handleTimeUpdate,
-      handlePlay,
-      handlePause,
-      handleVolumeChange,
-      togglePauseResume,
-      stopPlayback,
-      toggleMute,
-      previewVideoPaused,
-      previewVideoMuted,
-      previewVideoCurrent,
-      previewVideoDuration,
-      getYouTubeEmbedUrl,
-      sceneConfig,
-      previewTestNow,
-      cameraPreviewRef,
-      cameraStatus,
-      previewMaskVisible,
-      transitionDurationMs,
-      projectorQueue,
-      nextQueueTitle,
-      transitionEnabled,
-      setTransitionEnabled,
-      transitionDelayMs,
-      setTransitionDelayMs,
-      setTransitionDurationMs,
-      setSceneConfig,
-      cameraDevices,
-      displays,
-      projectorActive,
-      isElectron,
-      handleExportSetupBundle,
-      handleImportSetupBundle,
-      setupTransferBusy,
-    }),
-    [
-      previewSlide,
-      previewSplitEnabled,
-      previewContentPanePercent,
-      previewRightPanePercent,
-      previewCameraScale,
-      previewStageWidth,
-      previewVideoRef,
-      handleLoadedMetadata,
-      handleTimeUpdate,
-      handlePlay,
-      handlePause,
-      handleVolumeChange,
-      togglePauseResume,
-      stopPlayback,
-      toggleMute,
-      previewVideoPaused,
-      previewVideoMuted,
-      previewVideoCurrent,
-      previewVideoDuration,
-      getYouTubeEmbedUrl,
-      sceneConfig,
-      previewTestNow,
-      cameraPreviewRef,
-      cameraStatus,
-      previewMaskVisible,
-      transitionDurationMs,
-      projectorQueue,
-      nextQueueTitle,
-      transitionEnabled,
-      setTransitionEnabled,
-      transitionDelayMs,
-      setTransitionDelayMs,
-      setTransitionDurationMs,
-      setSceneConfig,
-      cameraDevices,
-      displays,
-      projectorActive,
-      isElectron,
-      handleExportSetupBundle,
-      handleImportSetupBundle,
-      setupTransferBusy,
-    ]
-  );
-
-  const legalModalProps = useMemo(
-    () => ({
-      show: showLegalModal,
-      onClose: handleCloseLegalModal,
-      licenseStatus,
-      licenseDeviceId,
-      licenseInput,
-      setLicenseInput,
-      handleActivateLicense,
-      handleClearLicense,
-      handleAcceptEula,
-      licenseActionError,
-      licenseActionMsg,
-      eulaText,
-    }),
-    [
-      showLegalModal,
-      handleCloseLegalModal,
-      licenseStatus,
-      licenseDeviceId,
-      licenseInput,
-      handleActivateLicense,
-      handleClearLicense,
-      handleAcceptEula,
-      licenseActionError,
-      licenseActionMsg,
-      eulaText,
-    ]
-  );
+  // ── Next queue title for preview ──
+  const nextQueueTitle = useMemo(() => {
+    if (projectorQueue.length === 0) return 'No content';
+    const nextIndex =
+      (activeQueueIndex >= 0 ? activeQueueIndex + 1 : 0) >= projectorQueue.length
+        ? projectorQueue.length - 1
+        : activeQueueIndex >= 0
+          ? activeQueueIndex + 1
+          : 0;
+    return projectorQueue[nextIndex]?.title || 'No content';
+  }, [projectorQueue, activeQueueIndex]);
 
   return (
     <div className="app-container">
-      <TopBar {...topBarProps} />
-      <SidebarQueue {...sidebarQueueProps} />
-      <MainContentArea {...mainContentProps} />
-      <PreviewPanel {...previewPanelProps} />
-      <LegalModal {...legalModalProps} />
+      <TopBar appVersion={APP_VERSION} onClear={handleClearProjector} />
+      <SidebarQueue
+        openDisplays={openDisplays}
+        openText={openText}
+        openSongs={openSongs}
+        openBible={openBible}
+        openMedia={openMedia}
+      />
+      <MainContentArea
+        textCanvasRef={textCanvasRef}
+        textBackground={textBackground}
+        textSnapGuide={textSnapGuide}
+        textLayerRef={textLayerRef}
+        textLayout={textLayout}
+        startTextDrag={startTextDrag}
+        textEditableRef={textEditableRef}
+        setTextContent={setTextContent}
+        textFontFamily={textFontFamily}
+        textColor={textColor}
+        textCanvasDisplayFontPx={textCanvasDisplayFontPx}
+        textContent={textContent}
+        startTextResize={startTextResize}
+        handleOpenBackgroundPicker={handleOpenBackgroundPicker}
+        setTextBackground={setTextBackground}
+        fontSize={fontSize}
+        setFontSize={setFontSize}
+        setTextSizePx={setTextSizePx}
+        textSizePx={textSizePx}
+        setTextFontFamily={setTextFontFamily}
+        setTextColor={setTextColor}
+        handleSendToProjector={handleSendToProjector}
+        handleAddTextToQueue={handleAddTextToQueue}
+        handleProjectMedia={handleProjectMedia}
+        handleAddBibleQueueItem={addBibleQueueItem}
+        handleUpdateActiveQueueItem={updateSelectedQueueItem}
+        handleAddSongQueueItem={addSongQueueItem}
+        songPickedBackground={songPickedBackground}
+        songsListOpenToken={songsListOpenToken}
+        bibleCatalogOpenToken={bibleCatalogOpenToken}
+        biblePickedBackground={biblePickedBackground}
+        handleAddPlaylistItem={handleAddPlaylistItem}
+        mediaHomeOpenToken={Math.max(mediaHomeOpenToken || 0, mediaQueueHomeToken || 0)}
+        backgroundPickerTarget={backgroundPickerTarget}
+        handlePickBackgroundFromMedia={handlePickBackgroundFromMedia}
+        handleCancelBackgroundPicker={handleCancelBackgroundPicker}
+      />
+      <PreviewPanel nextQueueTitle={nextQueueTitle} />
+      <LegalModal />
       <ToastOverlay toast={toast} />
     </div>
+  );
+}
+
+/**
+ * ControlPanel is now a thin shell that sets up context providers.
+ * All shared state lives in the four contexts; ControlPanelInner handles
+ * only the text-editor / background-picker orchestration that bridges them.
+ */
+function ControlPanel() {
+  return (
+    <AppProvider>
+      <ControlPanelProviders />
+    </AppProvider>
+  );
+}
+
+/**
+ * Intermediate component that accesses AppContext to supply applyTextPayloadToEditor
+ * to QueueProvider (which needs it for queue playback of text items).
+ */
+function ControlPanelProviders() {
+  // We need the text editor hook at this level so QueueProvider can receive
+  // applyTextPayloadToEditor. However, the full text editor state is owned by
+  // ControlPanelInner. To break the circular dependency, we use a ref-based
+  // callback that ControlPanelInner will update.
+  const applyTextRef = useRef(() => {});
+  const stableApplyText = useCallback((payload) => applyTextRef.current(payload), []);
+
+  return (
+    <LicenseProvider>
+      <ProjectorProvider>
+        <QueueProvider applyTextPayloadToEditor={stableApplyText}>
+          <ControlPanelInner applyTextPayloadRef={applyTextRef} />
+        </QueueProvider>
+      </ProjectorProvider>
+    </LicenseProvider>
   );
 }
 

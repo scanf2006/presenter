@@ -1,29 +1,28 @@
 import React from 'react';
+import { useAppContext } from '../../contexts/AppContext';
+import { useQueueContext } from '../../contexts/QueueContext';
 
-function SidebarQueue({
-  activeSection,
-  openDisplays,
-  openText,
-  openSongs,
-  openBible,
-  openMedia,
-  projectorQueue,
-  draggingQueueId,
-  setDraggingQueueId,
-  activeQueueIndex,
-  handleMoveQueueItem,
-  editingQueueId,
-  editingQueueTitle,
-  setEditingQueueTitle,
-  handleCommitRenameQueueItem,
-  handleCancelRenameQueueItem,
-  handlePlayQueueItem,
-  handleStartRenameQueueItem,
-  handleRemoveActiveQueueItem,
-  handleClearQueue,
-  showQueueTypeTags,
-  setShowQueueTypeTags,
-}) {
+function SidebarQueue({ openDisplays, openText, openSongs, openBible, openMedia }) {
+  const { activeSection } = useAppContext();
+  const {
+    projectorQueue,
+    activeQueueIndex,
+    draggingQueueId,
+    setDraggingQueueId,
+    editingQueueId,
+    editingQueueTitle,
+    setEditingQueueTitle,
+    moveQueueItemByIndex,
+    commitRenameSelectedQueueItem,
+    cancelRenameSelectedQueueItem,
+    playQueueItem,
+    startRenameSelectedQueueItem,
+    removeSelectedQueueItem,
+    clearAllQueueItems,
+    showQueueTypeTags,
+    setShowQueueTypeTags,
+  } = useQueueContext();
+
   const getQueueTypeLabel = (item) => {
     const section = item?.section || '';
     const type = item?.type || item?.payload?.type || '';
@@ -38,10 +37,11 @@ function SidebarQueue({
     return 'MEDIA';
   };
 
-  const getDisplayTitle = (rawTitle) => String(rawTitle || '')
-    .replace(/^\s*Song:\s*/i, '')
-    .replace(/^\s*[📖]\s*/u, '')
-    .trim();
+  const getDisplayTitle = (rawTitle) =>
+    String(rawTitle || '')
+      .replace(/^\s*Song:\s*/i, '')
+      .replace(/^\s*[📖]\s*/u, '')
+      .trim();
 
   const navItems = [
     { key: 'displays', icon: 'D', label: 'Displays', hint: 'Screen output', onClick: openDisplays },
@@ -69,7 +69,9 @@ function SidebarQueue({
                   <span className="sidebar__item-label">{item.label}</span>
                   <span className="sidebar__item-hint">{item.hint}</span>
                 </span>
-                <span className={`sidebar__item-dot ${isActive ? 'sidebar__item-dot--active' : ''}`} />
+                <span
+                  className={`sidebar__item-dot ${isActive ? 'sidebar__item-dot--active' : ''}`}
+                />
               </button>
             );
           })}
@@ -91,9 +93,7 @@ function SidebarQueue({
         </div>
         <div className="cp-queue-list">
           {projectorQueue.length === 0 && (
-            <div className="cp-queue-empty">
-              Add items from Media or Free Text.
-            </div>
+            <div className="cp-queue-empty">Add items from Media or Free Text.</div>
           )}
           {projectorQueue.map((item, index) => (
             <div
@@ -105,7 +105,7 @@ function SidebarQueue({
               onDrop={() => {
                 if (!draggingQueueId || draggingQueueId === item.id) return;
                 const fromIndex = projectorQueue.findIndex((q) => q.id === draggingQueueId);
-                handleMoveQueueItem(fromIndex, index);
+                moveQueueItemByIndex(fromIndex, index);
                 setDraggingQueueId(null);
               }}
               className={`cp-queue-card ${index === activeQueueIndex ? 'cp-queue-card--active' : ''}`}
@@ -115,7 +115,9 @@ function SidebarQueue({
                   ::
                 </span>
                 <span className="cp-queue-index">{index + 1}.</span>
-                {showQueueTypeTags && <span className="cp-queue-type">{getQueueTypeLabel(item)}</span>}
+                {showQueueTypeTags && (
+                  <span className="cp-queue-type">{getQueueTypeLabel(item)}</span>
+                )}
                 {editingQueueId === item.id ? (
                   <input
                     autoFocus
@@ -124,18 +126,18 @@ function SidebarQueue({
                     onChange={(e) => setEditingQueueTitle(e.target.value)}
                     onClick={(e) => e.stopPropagation()}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleCommitRenameQueueItem();
-                      if (e.key === 'Escape') handleCancelRenameQueueItem();
+                      if (e.key === 'Enter') commitRenameSelectedQueueItem();
+                      if (e.key === 'Escape') cancelRenameSelectedQueueItem();
                     }}
-                    onBlur={handleCommitRenameQueueItem}
+                    onBlur={commitRenameSelectedQueueItem}
                     className="cp-queue-input"
                   />
                 ) : (
                   <span
-                    onClick={() => handlePlayQueueItem(index)}
+                    onClick={() => playQueueItem(index)}
                     onDoubleClick={(e) => {
                       e.stopPropagation();
-                      handleStartRenameQueueItem(item);
+                      startRenameSelectedQueueItem(item);
                     }}
                     className="cp-queue-title"
                     title="Click to project; double-click to rename"
@@ -148,7 +150,7 @@ function SidebarQueue({
                     className="btn btn--ghost cp-queue-edit-btn"
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleStartRenameQueueItem(item);
+                      startRenameSelectedQueueItem(item);
                     }}
                     title="Rename card"
                   >
@@ -161,13 +163,17 @@ function SidebarQueue({
         </div>
         <button
           className="btn btn--ghost cp-queue-btn-full cp-queue-btn-danger"
-          onClick={handleRemoveActiveQueueItem}
+          onClick={removeSelectedQueueItem}
           disabled={activeQueueIndex < 0 || activeQueueIndex >= projectorQueue.length}
           title="Delete selected queue card"
         >
           Del Selected
         </button>
-        <button className="btn btn--ghost cp-queue-btn-full" onClick={handleClearQueue} disabled={projectorQueue.length === 0}>
+        <button
+          className="btn btn--ghost cp-queue-btn-full"
+          onClick={clearAllQueueItems}
+          disabled={projectorQueue.length === 0}
+        >
           Clear Queue
         </button>
       </div>

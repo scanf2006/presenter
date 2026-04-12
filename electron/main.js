@@ -129,6 +129,7 @@ const trialGuard = createTrialGuard({
     if (!store || typeof store.readAppSettings !== 'function') return null;
     const settings = store.readAppSettings();
     return {
+      trialConsumedMs: settings?.trialConsumedMs ?? 0,
       trialStartedAtMs: settings?.trialStartedAtMs ?? null,
       trialLastSeenAtMs: settings?.trialLastSeenAtMs ?? null,
       trialClockTampered: settings?.trialClockTampered === true,
