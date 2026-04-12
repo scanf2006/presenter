@@ -44,6 +44,7 @@ function BibleBrowser({
   const [isApplyingQueuePreload, setIsApplyingQueuePreload] = useState(false);
   const verseRowRefs = useRef(new Map());
   const preloadPayloadRef = useRef(null);
+  const skipAutoProjectOnceRef = useRef(false);
   const versesLoadSeqRef = useRef(0);
   const isApplyingQueuePreloadRef = useRef(false);
 
@@ -376,6 +377,10 @@ function BibleBrowser({
 
   useEffect(() => {
     if (isApplyingQueuePreloadRef.current || isApplyingQueuePreload) return;
+    if (skipAutoProjectOnceRef.current) {
+      skipAutoProjectOnceRef.current = false;
+      return;
+    }
     if (selectedVersesRef.current.length > 0) {
       handleProjectRef.current();
     }
@@ -414,6 +419,7 @@ function BibleBrowser({
     beginQueuePreload();
     const payload = activePreloadItem.payload;
     preloadPayloadRef.current = payload;
+    skipAutoProjectOnceRef.current = payload.deferProject === true;
     setSelectedVerses([]);
     if (payload.fontSize) setFontSize(payload.fontSize);
     if (payload.background) setBibleBackground(payload.background);
@@ -493,12 +499,15 @@ function BibleBrowser({
           sourcePayload.background !== undefined ? sourcePayload.background : bibleBackground,
       };
 
-      onProjectContent(projectedPayload);
-      if (isElectron && typeof window.churchDisplay?.sendToProjectorBackground === 'function') {
-        window.churchDisplay.sendToProjectorBackground(projectedPayload.background || null);
-      }
-      if (typeof onUpdateActiveQueueItem === 'function') {
-        onUpdateActiveQueueItem(projectedPayload, projectedPayload.reference, 'bible');
+      // Queue preload can request "show first, project on second click".
+      if (sourcePayload.deferProject !== true) {
+        onProjectContent(projectedPayload);
+        if (isElectron && typeof window.churchDisplay?.sendToProjectorBackground === 'function') {
+          window.churchDisplay.sendToProjectorBackground(projectedPayload.background || null);
+        }
+        if (typeof onUpdateActiveQueueItem === 'function') {
+          onUpdateActiveQueueItem(projectedPayload, projectedPayload.reference, 'bible');
+        }
       }
     }
     preloadPayloadRef.current = null;
