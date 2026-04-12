@@ -1,6 +1,27 @@
 const fs = require('fs');
 const path = require('path');
 
+function sanitizeImportedAppSettings(settingsPath, warnings) {
+  try {
+    if (!fs.existsSync(settingsPath)) return;
+    const raw = fs.readFileSync(settingsPath, 'utf8');
+    const parsed = JSON.parse(raw);
+    const sanitized = {
+      ...(parsed && typeof parsed === 'object' ? parsed : {}),
+      licenseKey: '',
+      acceptedEulaAt: null,
+      acceptedEulaProof: '',
+      trialConsumedMs: 0,
+      trialStartedAtMs: null,
+      trialLastSeenAtMs: null,
+      trialClockTampered: false,
+    };
+    fs.writeFileSync(settingsPath, JSON.stringify(sanitized, null, 2), 'utf8');
+  } catch (err) {
+    warnings.push(`Failed to sanitize imported app-settings: ${err.message}`);
+  }
+}
+
 function registerSetupBundleIPC({
   ipcMain,
   dialog,
@@ -131,6 +152,7 @@ function registerSetupBundleIPC({
           warnings.push(`Failed to import ${name}: ${err.message}`);
         }
       }
+      sanitizeImportedAppSettings(path.join(userDataDir, 'app-settings.json'), warnings);
 
       const minimalMediaDir = path.join(importDir, 'media-selected');
       const legacyMediaDir = path.join(importDir, 'media');

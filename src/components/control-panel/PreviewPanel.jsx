@@ -86,7 +86,6 @@ function PreviewPanel({ nextQueueTitle }) {
           )}
         </div>
       </div>
-
       <PreviewStage />
 
       {showPreviewStatusStrip && (

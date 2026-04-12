@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 
 export default function useQueuePlayback({
   projectorQueue,
@@ -15,6 +15,8 @@ export default function useQueuePlayback({
   onQueueItemSelected,
   onMediaQueueItemPlayed,
 }) {
+  const pendingBibleClickIdRef = useRef(null);
+
   const playQueueItem = useCallback(
     async (index) => {
       if (index < 0 || index >= projectorQueue.length) return;
@@ -39,6 +41,7 @@ export default function useQueuePlayback({
         item.section === 'media' &&
         (item.payload?.type === 'ppt' || item.payload?.type === 'pdf')
       ) {
+        pendingBibleClickIdRef.current = null;
         setActivePreloadItem({
           type: item.payload.type,
           payload: {
@@ -53,6 +56,7 @@ export default function useQueuePlayback({
       }
 
       if (item.section === 'songs' && item.payload?.type === 'song') {
+        pendingBibleClickIdRef.current = null;
         setActivePreloadItem({
           type: 'song',
           payload: {
@@ -65,16 +69,24 @@ export default function useQueuePlayback({
       }
 
       if (item.section === 'bible' && item.payload?.type === 'bible') {
+        const isSecondClickSameItem = pendingBibleClickIdRef.current === item.id;
+        pendingBibleClickIdRef.current = isSecondClickSameItem ? null : item.id;
+
+        // Bible queue uses strict two-step behavior:
+        // first click always preload/show selection only, second click on same item projects.
         setActivePreloadItem({
           type: 'bible',
           payload: {
             ...item.payload,
             title: item.title,
+            deferProject: !isSecondClickSameItem,
           },
-          token: Date.now(),
+          token: `${Date.now()}-${index}-${item.id || ''}`,
         });
+        // Bible playback is resolved/projected by BibleBrowser preload flow.
         return;
       } else {
+        pendingBibleClickIdRef.current = null;
         setActivePreloadItem(null);
       }
 

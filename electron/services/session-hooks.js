@@ -101,7 +101,7 @@ function createSessionHooks({ session, logger = console }) {
                 "img-src 'self' local-media: data: https://i.ytimg.com https://*.ytimg.com; " +
                 "media-src 'self' local-media: https://*.googlevideo.com blob:; " +
                 "frame-src 'self' https://www.youtube.com; " +
-                "connect-src 'self' https://www.youtube.com https://*.youtube.com https://*.googlevideo.com; " +
+                "connect-src 'self' local-media: https://www.youtube.com https://*.youtube.com https://*.googlevideo.com; " +
                 "font-src 'self' data:;",
             ],
           },

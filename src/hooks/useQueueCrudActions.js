@@ -6,6 +6,7 @@ export default function useQueueCrudActions({
   updateActiveQueueItem,
   moveQueueItem,
   removeActiveQueueItem,
+  showConfirm,
   startRenameQueueItem,
   commitRenameQueueItem,
   cancelRenameQueueItem,
@@ -31,9 +32,14 @@ export default function useQueueCrudActions({
     moveQueueItem(fromIndex, toIndex);
   }, [moveQueueItem]);
 
-  const removeSelectedQueueItem = useCallback(() => {
+  const removeSelectedQueueItem = useCallback(async () => {
+    const ok = await showConfirm(
+      'Delete Selected Queue Card',
+      'Are you sure you want to delete the selected queue card?'
+    );
+    if (!ok) return;
     removeActiveQueueItem();
-  }, [removeActiveQueueItem]);
+  }, [removeActiveQueueItem, showConfirm]);
 
   const startRenameSelectedQueueItem = useCallback((item) => {
     startRenameQueueItem(item);
@@ -48,8 +54,16 @@ export default function useQueueCrudActions({
   }, [cancelRenameQueueItem]);
 
   const clearAllQueueItems = useCallback(() => {
-    clearQueue();
-  }, [clearQueue]);
+    const run = async () => {
+      const ok = await showConfirm(
+        'Clear Queue',
+        'Are you sure you want to clear all queue items?'
+      );
+      if (!ok) return;
+      clearQueue();
+    };
+    run();
+  }, [clearQueue, showConfirm]);
 
   return {
     addSongQueueItem,

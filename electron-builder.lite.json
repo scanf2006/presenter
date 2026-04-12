@@ -18,10 +18,6 @@
       "filter": [
         "bible_*.db"
       ]
-    },
-    {
-      "from": "data/seed/projector-queue.json",
-      "to": "data-seed/projector-queue.json"
     }
   ],
   "win": {
