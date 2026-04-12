@@ -12,6 +12,7 @@ import MainContentArea from './control-panel/MainContentArea';
 import PreviewPanel from './control-panel/PreviewPanel';
 import LegalModal from './control-panel/LegalModal';
 import ToastOverlay from './control-panel/ToastOverlay';
+import AppDialog from './control-panel/AppDialog';
 
 const APP_VERSION = appPkg.version;
 
@@ -20,7 +21,7 @@ const APP_VERSION = appPkg.version;
  * section-navigation orchestration that bridges them.
  */
 function ControlPanelInner() {
-  const { toast, setActiveSection } = useAppContext();
+  const { toast, dialog, closeDialog, setActiveSection } = useAppContext();
   const { setActiveQueueIndex, activeQueueIndex, projectorQueue, mediaQueueHomeToken } =
     useQueueContext();
   const { handleClearProjector, resetFreeTextEditor } = useTextEditorContext();
@@ -71,6 +72,7 @@ function ControlPanelInner() {
       <PreviewPanel nextQueueTitle={nextQueueTitle} />
       <LegalModal />
       <ToastOverlay toast={toast} />
+      <AppDialog dialog={dialog} onClose={closeDialog} />
     </div>
   );
 }

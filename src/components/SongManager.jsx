@@ -7,6 +7,7 @@ import {
   getSelectableThumbIndexStyle,
   getSelectableThumbSelectedTagStyle,
 } from '../utils/thumbnail';
+import { useAppContext } from '../contexts/AppContext';
 
 const TEXT_FONT_OPTIONS = ['Noto Sans SC', 'Microsoft YaHei', 'Arial', 'Times New Roman', 'SimHei'];
 
@@ -49,6 +50,7 @@ function SongManager({
 
   const isElectron = typeof window.churchDisplay !== 'undefined';
   const fileInputRef = useRef(null);
+  const { showToast, showConfirm } = useAppContext();
 
   // 加载歌曲列表
   const loadSongs = useCallback(async () => {
@@ -168,7 +170,7 @@ function SongManager({
   // 保存歌曲
   const handleSave = useCallback(async () => {
     if (!formTitle.trim() || !formLyrics.trim()) {
-      alert('Please enter song title and lyrics');
+      showToast('Please enter song title and lyrics', 'warning');
       return;
     }
     const song = {
@@ -194,12 +196,21 @@ function SongManager({
     setFormLyrics('');
     setSongBackground(null);
     await loadSongs();
-  }, [editingSong, formTitle, formAuthor, formLyrics, songBackground, isElectron, loadSongs]);
+  }, [
+    editingSong,
+    formTitle,
+    formAuthor,
+    formLyrics,
+    songBackground,
+    isElectron,
+    loadSongs,
+    showToast,
+  ]);
 
   // 删除歌曲
   const handleDelete = useCallback(
     async (songId) => {
-      if (!window.confirm('Delete this song?')) return;
+      if (!(await showConfirm('Delete this song?'))) return;
       try {
         if (isElectron) {
           await window.churchDisplay.songsDelete(songId);
@@ -210,7 +221,7 @@ function SongManager({
       if (selectedSong?.id === songId) setSelectedSong(null);
       await loadSongs();
     },
-    [isElectron, selectedSong, loadSongs]
+    [isElectron, selectedSong, loadSongs, showConfirm]
   );
 
   // start editing
