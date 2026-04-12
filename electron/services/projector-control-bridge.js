@@ -1,12 +1,12 @@
 function createProjectorControlBridge({
   controlCloseController,
   controlWindowRef,
-  dialog,
+  dialog: _dialog,
   projectorChannel,
   projectorWindowRef,
 }) {
   function requestCloseControlWindow() {
-    return controlCloseController.requestClose(controlWindowRef(), dialog);
+    return controlCloseController.requestClose(controlWindowRef());
   }
 
   function openYouTubeWatchInProjector(rawUrl) {

@@ -22,14 +22,20 @@ function bindControlWindowEvents({
     forceWindowZoom100(controlWindow);
   });
 
-  controlWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
-    logger.error('[ControlWindow] did-fail-load', { errorCode, errorDescription, validatedURL });
-    try {
-      splashController.revealControlWindow(controlWindow);
-    } catch (revealErr) {
-      logger.warn('[ControlWindow] reveal on did-fail-load failed:', revealErr?.message || revealErr);
+  controlWindow.webContents.on(
+    'did-fail-load',
+    (_event, errorCode, errorDescription, validatedURL) => {
+      logger.error('[ControlWindow] did-fail-load', { errorCode, errorDescription, validatedURL });
+      try {
+        splashController.revealControlWindow(controlWindow);
+      } catch (revealErr) {
+        logger.warn(
+          '[ControlWindow] reveal on did-fail-load failed:',
+          revealErr?.message || revealErr
+        );
+      }
     }
-  });
+  );
 
   controlWindow.once('ready-to-show', () => {
     clearTimeout(revealByTimer);
@@ -40,11 +46,7 @@ function bindControlWindowEvents({
   controlWindow.on('close', (event) => {
     if (controlCloseController.canBypassClosePrompt()) return;
     event.preventDefault();
-    const result = controlCloseController.confirmClose(controlWindow, dialog);
-    if (result.confirmed) {
-      controlCloseController.allowClose();
-      controlWindow.close();
-    }
+    controlCloseController.requestExitViaRenderer(controlWindow, dialog);
   });
 
   controlWindow.on('closed', () => {

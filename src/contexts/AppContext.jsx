@@ -1,4 +1,12 @@
-import React, { createContext, useContext, useState, useCallback, useRef, useMemo } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useRef,
+  useMemo,
+  useEffect,
+} from 'react';
 import useToastMessage from '../hooks/useToastMessage';
 
 const AppContext = createContext(null);
@@ -51,6 +59,26 @@ export function AppProvider({ children }) {
     setDialog(null);
     dialogResolveRef.current = null;
   }, []);
+
+  // ── Listen for main-process exit confirmation request (Alt+F4 / taskbar close) ──
+  const showConfirmRef = useRef(showConfirm);
+  useEffect(() => {
+    showConfirmRef.current = showConfirm;
+  }, [showConfirm]);
+
+  useEffect(() => {
+    if (!isElectron || typeof window.churchDisplay?.onConfirmExitRequest !== 'function') return;
+    const cleanup = window.churchDisplay.onConfirmExitRequest(async () => {
+      const ok = await showConfirmRef.current(
+        'Confirm Exit',
+        'Are you sure you want to exit ChurchDisplay Pro?\nUnsaved temporary changes may be lost.'
+      );
+      if (typeof window.churchDisplay?.confirmExitResponse === 'function') {
+        window.churchDisplay.confirmExitResponse(ok);
+      }
+    });
+    return cleanup;
+  }, [isElectron]);
 
   const value = useMemo(
     () => ({

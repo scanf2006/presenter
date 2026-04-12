@@ -8,18 +8,24 @@ function onWithCleanup(channel, handler) {
 const api = {
   // Displays
   getDisplays: () => ipcRenderer.invoke('get-displays'),
-  onDisplaysChanged: (callback) => onWithCleanup('displays-changed', (_e, displays) => callback(displays)),
+  onDisplaysChanged: (callback) =>
+    onWithCleanup('displays-changed', (_e, displays) => callback(displays)),
 
   // Control window
   closeControlWindow: () => ipcRenderer.invoke('close-control-window'),
   minimizeControlWindow: () => ipcRenderer.invoke('minimize-control-window'),
   toggleMaximizeControlWindow: () => ipcRenderer.invoke('toggle-maximize-control-window'),
 
+  // Exit confirmation (main → renderer → main)
+  onConfirmExitRequest: (callback) => onWithCleanup('confirm-exit-request', () => callback()),
+  confirmExitResponse: (confirmed) => ipcRenderer.send('confirm-exit-response', confirmed),
+
   // Projector
   startProjector: (displayId) => ipcRenderer.invoke('start-projector', displayId),
   stopProjector: () => ipcRenderer.invoke('stop-projector'),
   getProjectorStatus: () => ipcRenderer.invoke('get-projector-status'),
-  onProjectorStatus: (callback) => onWithCleanup('projector-status', (_e, status) => callback(status)),
+  onProjectorStatus: (callback) =>
+    onWithCleanup('projector-status', (_e, status) => callback(status)),
 
   // Content push
   sendToProjector: (data) => ipcRenderer.send('send-to-projector', data),
@@ -30,12 +36,16 @@ const api = {
   sendMediaCommand: (command) => ipcRenderer.send('projector-command', command),
 
   // Projector listeners
-  onProjectorContent: (callback) => onWithCleanup('projector-content', (_e, data) => callback(data)),
-  onProjectorBackground: (callback) => onWithCleanup('projector-background', (_e, data) => callback(data)),
-  onProjectorTransition: (callback) => onWithCleanup('projector-transition', (_e, data) => callback(data)),
+  onProjectorContent: (callback) =>
+    onWithCleanup('projector-content', (_e, data) => callback(data)),
+  onProjectorBackground: (callback) =>
+    onWithCleanup('projector-background', (_e, data) => callback(data)),
+  onProjectorTransition: (callback) =>
+    onWithCleanup('projector-transition', (_e, data) => callback(data)),
   onProjectorScene: (callback) => onWithCleanup('projector-scene', (_e, data) => callback(data)),
   onProjectorBlackout: (callback) => onWithCleanup('projector-blackout', () => callback()),
-  onMediaCommand: (callback) => onWithCleanup('projector-command', (_e, command) => callback(command)),
+  onMediaCommand: (callback) =>
+    onWithCleanup('projector-command', (_e, command) => callback(command)),
 
   // Media
   selectFiles: (options) => ipcRenderer.invoke('select-files', options),
@@ -68,7 +78,8 @@ const api = {
 
   // Bible
   bibleGetBooks: (version) => ipcRenderer.invoke('bible-get-books', version),
-  bibleGetVerses: (version, bookSN, chapter) => ipcRenderer.invoke('bible-get-verses', version, bookSN, chapter),
+  bibleGetVerses: (version, bookSN, chapter) =>
+    ipcRenderer.invoke('bible-get-verses', version, bookSN, chapter),
   bibleSearch: (version, keyword) => ipcRenderer.invoke('bible-search', version, keyword),
 
   // Songs
