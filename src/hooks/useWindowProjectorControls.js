@@ -4,6 +4,7 @@ export default function useWindowProjectorControls({
   isElectron,
   setProjectorActive,
   setProjectorDisplayId,
+  showConfirm,
 }) {
   const startProjector = useCallback(
     (displayId) => {
@@ -46,11 +47,16 @@ export default function useWindowProjectorControls({
     }
   }, [isElectron]);
 
-  const closeWindow = useCallback(() => {
+  const closeWindow = useCallback(async () => {
     if (isElectron && typeof window.churchDisplay?.closeControlWindow === 'function') {
+      const ok = await showConfirm(
+        'Confirm Exit',
+        'Are you sure you want to exit ChurchDisplay Pro?\nUnsaved temporary changes may be lost.'
+      );
+      if (!ok) return;
       window.churchDisplay.closeControlWindow();
     }
-  }, [isElectron]);
+  }, [isElectron, showConfirm]);
 
   return {
     startProjector,

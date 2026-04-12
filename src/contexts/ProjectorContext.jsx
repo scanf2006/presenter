@@ -75,6 +75,7 @@ export function ProjectorProvider({ children }) {
     isElectron,
     setProjectorActive,
     setProjectorDisplayId,
+    showConfirm,
   });
 
   const { exportSetupBundle: handleExportSetupBundle, importSetupBundle: handleImportSetupBundle } =
