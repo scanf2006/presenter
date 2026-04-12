@@ -2,15 +2,10 @@ import React, { useEffect, useCallback, useRef, useMemo } from 'react';
 import appPkg from '../../package.json';
 import { AppProvider, useAppContext } from '../contexts/AppContext';
 import { LicenseProvider } from '../contexts/LicenseContext';
-import { ProjectorProvider, useProjectorContext } from '../contexts/ProjectorContext';
+import { ProjectorProvider } from '../contexts/ProjectorContext';
 import { QueueProvider, useQueueContext } from '../contexts/QueueContext';
-import useTextEditorState from '../hooks/useTextEditorState';
-import useTextCanvasTransform from '../hooks/useTextCanvasTransform';
-import useBackgroundPickerFlow from '../hooks/useBackgroundPickerFlow';
+import { TextEditorProvider, useTextEditorContext } from '../contexts/TextEditorContext';
 import useSectionNavigation from '../hooks/useSectionNavigation';
-import useActiveTextQueueAutosave from '../hooks/useActiveTextQueueAutosave';
-import useObservedWidth from '../hooks/useObservedWidth';
-import { PREVIEW, TEXT_EDITOR } from '../constants/ui';
 import TopBar from './control-panel/TopBar';
 import SidebarQueue from './control-panel/SidebarQueue';
 import MainContentArea from './control-panel/MainContentArea';
@@ -21,95 +16,57 @@ import ToastOverlay from './control-panel/ToastOverlay';
 const APP_VERSION = appPkg.version;
 
 /**
- * Inner component that consumes all contexts and provides the remaining
- * text-editor / background-picker / section-navigation orchestration.
+ * Inner component that consumes all contexts and provides only the
+ * section-navigation orchestration that bridges them.
  */
-function ControlPanelInner({ applyTextPayloadRef }) {
-  const { activeSection, setActiveSection, toast } = useAppContext();
+function ControlPanelInner() {
+  const { toast, setActiveSection } = useAppContext();
   const {
-    currentSlide,
-    pushToProjector,
-    normalizeYouTubeUrl,
-    getYouTubeVideoId,
-    resolveYouTubePayload,
-  } = useProjectorContext();
-
-  const {
-    projectorQueue,
-    activeQueueIndex,
     setActiveQueueIndex,
-    getQueueItemTitle,
-    addOrUpdateQueueItem,
+    activeQueueIndex,
+    projectorQueue,
+    mediaQueueHomeToken,
     addSongQueueItem,
     addBibleQueueItem,
     updateSelectedQueueItem,
-    mediaQueueHomeToken,
   } = useQueueContext();
-
-  // ── Text editor state ──
-  const textCanvasRef = useRef(null);
-  const textLayerRef = useRef(null);
-  const textEditableRef = useRef(null);
-
   const {
-    textContent,
-    setTextContent,
-    fontSize,
-    setFontSize,
-    textFontFamily,
-    setTextFontFamily,
-    textColor,
-    setTextColor,
-    textSizePx,
-    setTextSizePx,
-    textBackground,
-    setTextBackground,
-    textLayout,
-    setTextLayout,
-    textSnapGuide,
-    setTextSnapGuide,
-    buildCurrentTextPayload,
-    resetTextEditorState,
-    applyTextPayloadToEditor,
-  } = useTextEditorState();
-
-  const clamp = useCallback((v, min, max) => Math.max(min, Math.min(max, v)), []);
-
-  const { startTextDrag, startTextResize, resetTextTransformState } = useTextCanvasTransform({
-    textCanvasRef,
-    textLayerRef,
-    textLayout,
-    setTextLayout,
-    textSizePx,
-    setTextSizePx,
-    clamp,
-    setTextSnapGuide,
-  });
-
-  // Keep the ref in sync so QueueProvider can call applyTextPayloadToEditor
-  useEffect(() => {
-    if (applyTextPayloadRef) applyTextPayloadRef.current = applyTextPayloadToEditor;
-  }, [applyTextPayloadRef, applyTextPayloadToEditor]);
-
-  // ── Background picker ──
-  const {
+    handleClearProjector,
+    handleProjectMedia,
+    handleAddPlaylistItem,
+    handleOpenBackgroundPicker,
+    handlePickBackgroundFromMedia,
+    handleCancelBackgroundPicker,
     backgroundPickerTarget,
     songPickedBackground,
     biblePickedBackground,
-    openBackgroundPicker: handleOpenBackgroundPicker,
-    pickBackgroundFromMedia: handlePickBackgroundFromMedia,
-    cancelBackgroundPicker: handleCancelBackgroundPicker,
-  } = useBackgroundPickerFlow({
-    setActiveSection,
+    resetFreeTextEditor,
+    // Text editor state — still passed to MainContentArea as props
+    textCanvasRef,
+    textBackground,
+    textSnapGuide,
+    textLayerRef,
+    textLayout,
+    startTextDrag,
+    textEditableRef,
+    setTextContent,
+    textFontFamily,
+    textColor,
+    textCanvasDisplayFontPx,
+    textContent,
+    startTextResize,
     setTextBackground,
-  });
+    fontSize,
+    setFontSize,
+    setTextSizePx,
+    textSizePx,
+    setTextFontFamily,
+    setTextColor,
+    handleSendToProjector,
+    handleAddTextToQueue,
+  } = useTextEditorContext();
 
   // ── Section navigation ──
-  const resetFreeTextEditor = useCallback(() => {
-    resetTextEditorState();
-    resetTextTransformState();
-  }, [resetTextEditorState, resetTextTransformState]);
-
   const {
     songsListOpenToken,
     bibleCatalogOpenToken,
@@ -123,119 +80,6 @@ function ControlPanelInner({ applyTextPayloadRef }) {
     setActiveQueueIndex,
     setActiveSection,
     resetFreeTextEditor,
-  });
-
-  // ── Text canvas dimensions ──
-  const textCanvasWidth = useObservedWidth(textCanvasRef, [activeSection]);
-  const textCanvasWidthRatio = Math.max(
-    PREVIEW.MIN_WIDTH_RATIO,
-    (textCanvasWidth || PREVIEW.STAGE_FALLBACK_WIDTH_PX * 2.5) / PREVIEW.STAGE_BASE_WIDTH_PX
-  );
-  const textCanvasDisplayFontPx = Math.max(
-    12,
-    Math.min(TEXT_EDITOR.SIZE_CLAMP_MAX_PX, Math.round(textSizePx * textCanvasWidthRatio))
-  );
-
-  // ── Sync contentEditable with textContent state ──
-  useEffect(() => {
-    const el = textEditableRef.current;
-    if (!el) return;
-    if (document.activeElement === el) return;
-    const current = (el.innerText || '').replace(/\r/g, '');
-    const next = (textContent || '').replace(/\r/g, '');
-    if (current !== next) {
-      el.innerText = next;
-    }
-  }, [textContent, activeSection]);
-
-  // ── Send text to projector ──
-  const handleSendToProjector = useCallback(
-    (content) => {
-      const data = buildCurrentTextPayload(content || textContent);
-      pushToProjector(data);
-    },
-    [textContent, buildCurrentTextPayload, pushToProjector]
-  );
-
-  const handleAddTextToQueue = useCallback(() => {
-    if (!textContent.trim()) return;
-    const payload = buildCurrentTextPayload(textContent);
-    addOrUpdateQueueItem(payload, getQueueItemTitle(payload), 'text');
-  }, [textContent, buildCurrentTextPayload, addOrUpdateQueueItem, getQueueItemTitle]);
-
-  const handleClearProjector = useCallback(
-    () => handleSendToProjector(' '),
-    [handleSendToProjector]
-  );
-
-  // ── Background change auto-project ──
-  const sendToProjectorRef = useRef(handleSendToProjector);
-  const activeSectionRef = useRef(activeSection);
-  const textContentRef = useRef(textContent);
-  const currentSlideRef = useRef(currentSlide);
-  useEffect(() => {
-    sendToProjectorRef.current = handleSendToProjector;
-  }, [handleSendToProjector]);
-  useEffect(() => {
-    activeSectionRef.current = activeSection;
-  }, [activeSection]);
-  useEffect(() => {
-    textContentRef.current = textContent;
-  }, [textContent]);
-  useEffect(() => {
-    currentSlideRef.current = currentSlide;
-  }, [currentSlide]);
-
-  useEffect(() => {
-    if (
-      activeSectionRef.current === 'text' &&
-      textContentRef.current.trim() &&
-      currentSlideRef.current?.type === 'text'
-    ) {
-      sendToProjectorRef.current();
-    }
-  }, [textBackground]);
-
-  // ── Media projection (YouTube resolve) ──
-  const handleProjectMedia = useCallback(
-    async (mediaData) => {
-      try {
-        const playableData =
-          mediaData?.type === 'youtube'
-            ? await resolveYouTubePayload({
-                ...mediaData,
-                videoId: mediaData.videoId || getYouTubeVideoId(mediaData),
-                url: normalizeYouTubeUrl(mediaData),
-                name: mediaData.name || 'YouTube',
-              })
-            : mediaData;
-        pushToProjector(playableData);
-      } catch (err) {
-        alert(`YouTube play failed: ${err.message || 'Unknown error'}`);
-      }
-    },
-    [pushToProjector, normalizeYouTubeUrl, getYouTubeVideoId, resolveYouTubePayload]
-  );
-
-  // ── Playlist item handler ──
-  const handleAddPlaylistItem = useCallback(
-    (item) => {
-      const payload = item?.payload || null;
-      if (!payload) return;
-      const title = item?.name || getQueueItemTitle(payload);
-      addOrUpdateQueueItem(payload, title, 'media', { forceAppend: true });
-    },
-    [addOrUpdateQueueItem, getQueueItemTitle]
-  );
-
-  // ── Auto-save text queue item ──
-  useActiveTextQueueAutosave({
-    activeSection,
-    activeQueueIndex,
-    projectorQueue,
-    textContent,
-    buildCurrentTextPayload,
-    updateSelectedQueueItem,
   });
 
   // ── Next queue title for preview ──
@@ -307,8 +151,8 @@ function ControlPanelInner({ applyTextPayloadRef }) {
 
 /**
  * ControlPanel is now a thin shell that sets up context providers.
- * All shared state lives in the four contexts; ControlPanelInner handles
- * only the text-editor / background-picker orchestration that bridges them.
+ * All shared state lives in the five contexts; ControlPanelInner handles
+ * only section-navigation orchestration that bridges them.
  */
 function ControlPanel() {
   return (
@@ -319,14 +163,14 @@ function ControlPanel() {
 }
 
 /**
- * Intermediate component that accesses AppContext to supply applyTextPayloadToEditor
- * to QueueProvider (which needs it for queue playback of text items).
+ * Intermediate component that wires up the ref-bridge so QueueProvider
+ * can call `applyTextPayloadToEditor` (owned by TextEditorProvider).
+ *
+ * Provider nesting: License > Projector > Queue > TextEditor > Inner
+ * The ref-bridge feeds applyTextPayloadToEditor from TextEditorContext
+ * back up to QueueProvider to break the circular dependency.
  */
 function ControlPanelProviders() {
-  // We need the text editor hook at this level so QueueProvider can receive
-  // applyTextPayloadToEditor. However, the full text editor state is owned by
-  // ControlPanelInner. To break the circular dependency, we use a ref-based
-  // callback that ControlPanelInner will update.
   const applyTextRef = useRef(() => {});
   const stableApplyText = useCallback((payload) => applyTextRef.current(payload), []);
 
@@ -334,11 +178,26 @@ function ControlPanelProviders() {
     <LicenseProvider>
       <ProjectorProvider>
         <QueueProvider applyTextPayloadToEditor={stableApplyText}>
-          <ControlPanelInner applyTextPayloadRef={applyTextRef} />
+          <TextEditorProvider>
+            <ApplyTextBridge applyTextRef={applyTextRef} />
+            <ControlPanelInner />
+          </TextEditorProvider>
         </QueueProvider>
       </ProjectorProvider>
     </LicenseProvider>
   );
+}
+
+/**
+ * Tiny bridge component that keeps the ref in sync with
+ * applyTextPayloadToEditor from TextEditorContext.
+ */
+function ApplyTextBridge({ applyTextRef }) {
+  const { applyTextPayloadToEditor } = useTextEditorContext();
+  useEffect(() => {
+    applyTextRef.current = applyTextPayloadToEditor;
+  }, [applyTextRef, applyTextPayloadToEditor]);
+  return null;
 }
 
 export default ControlPanel;
