@@ -21,50 +21,9 @@ const APP_VERSION = appPkg.version;
  */
 function ControlPanelInner() {
   const { toast, setActiveSection } = useAppContext();
-  const {
-    setActiveQueueIndex,
-    activeQueueIndex,
-    projectorQueue,
-    mediaQueueHomeToken,
-    addSongQueueItem,
-    addBibleQueueItem,
-    updateSelectedQueueItem,
-  } = useQueueContext();
-  const {
-    handleClearProjector,
-    handleProjectMedia,
-    handleAddPlaylistItem,
-    handleOpenBackgroundPicker,
-    handlePickBackgroundFromMedia,
-    handleCancelBackgroundPicker,
-    backgroundPickerTarget,
-    songPickedBackground,
-    biblePickedBackground,
-    resetFreeTextEditor,
-    // Text editor state — still passed to MainContentArea as props
-    textCanvasRef,
-    textBackground,
-    textSnapGuide,
-    textLayerRef,
-    textLayout,
-    startTextDrag,
-    textEditableRef,
-    setTextContent,
-    textFontFamily,
-    textColor,
-    textCanvasDisplayFontPx,
-    textContent,
-    startTextResize,
-    setTextBackground,
-    fontSize,
-    setFontSize,
-    setTextSizePx,
-    textSizePx,
-    setTextFontFamily,
-    setTextColor,
-    handleSendToProjector,
-    handleAddTextToQueue,
-  } = useTextEditorContext();
+  const { setActiveQueueIndex, activeQueueIndex, projectorQueue, mediaQueueHomeToken } =
+    useQueueContext();
+  const { handleClearProjector, resetFreeTextEditor } = useTextEditorContext();
 
   // ── Section navigation ──
   const {
@@ -105,42 +64,9 @@ function ControlPanelInner() {
         openMedia={openMedia}
       />
       <MainContentArea
-        textCanvasRef={textCanvasRef}
-        textBackground={textBackground}
-        textSnapGuide={textSnapGuide}
-        textLayerRef={textLayerRef}
-        textLayout={textLayout}
-        startTextDrag={startTextDrag}
-        textEditableRef={textEditableRef}
-        setTextContent={setTextContent}
-        textFontFamily={textFontFamily}
-        textColor={textColor}
-        textCanvasDisplayFontPx={textCanvasDisplayFontPx}
-        textContent={textContent}
-        startTextResize={startTextResize}
-        handleOpenBackgroundPicker={handleOpenBackgroundPicker}
-        setTextBackground={setTextBackground}
-        fontSize={fontSize}
-        setFontSize={setFontSize}
-        setTextSizePx={setTextSizePx}
-        textSizePx={textSizePx}
-        setTextFontFamily={setTextFontFamily}
-        setTextColor={setTextColor}
-        handleSendToProjector={handleSendToProjector}
-        handleAddTextToQueue={handleAddTextToQueue}
-        handleProjectMedia={handleProjectMedia}
-        handleAddBibleQueueItem={addBibleQueueItem}
-        handleUpdateActiveQueueItem={updateSelectedQueueItem}
-        handleAddSongQueueItem={addSongQueueItem}
-        songPickedBackground={songPickedBackground}
         songsListOpenToken={songsListOpenToken}
         bibleCatalogOpenToken={bibleCatalogOpenToken}
-        biblePickedBackground={biblePickedBackground}
-        handleAddPlaylistItem={handleAddPlaylistItem}
         mediaHomeOpenToken={Math.max(mediaHomeOpenToken || 0, mediaQueueHomeToken || 0)}
-        backgroundPickerTarget={backgroundPickerTarget}
-        handlePickBackgroundFromMedia={handlePickBackgroundFromMedia}
-        handleCancelBackgroundPicker={handleCancelBackgroundPicker}
       />
       <PreviewPanel nextQueueTitle={nextQueueTitle} />
       <LegalModal />
