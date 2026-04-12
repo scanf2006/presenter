@@ -4,19 +4,16 @@ import BibleBrowser from '../BibleBrowser';
 import SongManager from '../SongManager';
 import { getPreviewMediaUrl } from '../../utils/preview';
 import { PREVIEW, TEXT_EDITOR } from '../../constants/ui';
+import { useAppContext } from '../../contexts/AppContext';
+import { useProjectorContext } from '../../contexts/ProjectorContext';
+import { useQueueContext } from '../../contexts/QueueContext';
 
 const TEXT_FONT_OPTIONS = ['Noto Sans SC', 'Microsoft YaHei', 'Arial', 'Times New Roman', 'SimHei'];
 
 function MainContentArea(props) {
   const {
-    activeSection,
-    displays,
-    projectorDisplayId,
-    projectorActive,
-    handleStartProjector,
-    handleStopProjector,
+    // Text editor props (remain as props since text editor state lives in ControlPanelInner)
     textCanvasRef,
-    previewAspectRatio,
     textBackground,
     textSnapGuide,
     textLayerRef,
@@ -39,21 +36,33 @@ function MainContentArea(props) {
     setTextColor,
     handleSendToProjector,
     handleAddTextToQueue,
+    // Media / Bible / Song callbacks
     handleProjectMedia,
     handleAddBibleQueueItem,
     handleUpdateActiveQueueItem,
-    activePreloadItem,
-    bibleCatalogOpenToken,
-    biblePickedBackground,
     handleAddSongQueueItem,
     songPickedBackground,
     songsListOpenToken,
+    bibleCatalogOpenToken,
+    biblePickedBackground,
     handleAddPlaylistItem,
     mediaHomeOpenToken,
     backgroundPickerTarget,
     handlePickBackgroundFromMedia,
     handleCancelBackgroundPicker,
   } = props;
+
+  // Read from contexts instead of props
+  const { activeSection } = useAppContext();
+  const {
+    displays,
+    projectorDisplayId,
+    projectorActive,
+    handleStartProjector,
+    handleStopProjector,
+    previewAspectRatio,
+  } = useProjectorContext();
+  const { activePreloadItem } = useQueueContext();
 
   return (
     <div className="main-content">

@@ -1,29 +1,35 @@
 import React from 'react';
+import { useProjectorContext } from '../../contexts/ProjectorContext';
+import { useLicenseContext } from '../../contexts/LicenseContext';
 
-function TopBar({
-  appVersion,
-  projectorActive,
-  trialLabel,
-  trialExpired,
-  onOpenLegal,
-  onClear,
-  onBlackout,
-  onMinimize,
-  onToggleMaximize,
-  onClose,
-}) {
+function TopBar({ appVersion, onClear }) {
+  const {
+    projectorActive,
+    handleBlackout,
+    handleMinimizeWindow,
+    handleToggleMaximizeWindow,
+    handleCloseWindow,
+  } = useProjectorContext();
+
+  const { trialLabel, trialExpired, handleOpenLegal } = useLicenseContext();
+
   return (
     <div className="top-bar">
       <div className="top-bar__brand">
         <div className="top-bar__logo">CD</div>
         <span className="top-bar__title">
-          ChurchDisplay Pro ({'\u6b64\u7248\u672c\u4e3a\u591a\u4f26\u591a\u795e\u53ec\u4f1a\u6d3b\u77f3\u5802\u7279\u4f9b--\u7248\u6743\u5c5e\u4e8eAiden\u6240\u6709aiden2006.video@gmail.com'}) v
-          {appVersion}
+          ChurchDisplay Pro (
+          {
+            '\u6b64\u7248\u672c\u4e3a\u591a\u4f26\u591a\u795e\u53ec\u4f1a\u6d3b\u77f3\u5802\u7279\u4f9b--\u7248\u6743\u5c5e\u4e8eAiden\u6240\u6709aiden2006.video@gmail.com'
+          }
+          ) v{appVersion}
         </span>
       </div>
       <div className="top-bar__controls">
         <div className="cp-status-inline">
-          <span className={`status-dot ${projectorActive ? 'status-dot--active' : 'status-dot--inactive'}`} />
+          <span
+            className={`status-dot ${projectorActive ? 'status-dot--active' : 'status-dot--inactive'}`}
+          />
           {projectorActive ? 'Projecting' : 'Idle'}
         </div>
         {!!trialLabel && (
@@ -38,22 +44,35 @@ function TopBar({
             {trialLabel}
           </div>
         )}
-        <button className="btn btn--ghost cp-btn-license" onClick={onOpenLegal}>
+        <button className="btn btn--ghost cp-btn-license" onClick={handleOpenLegal}>
           License
         </button>
         <button className="btn btn--ghost btn--icon" onClick={onClear} title="Clear">
           Clr
         </button>
-        <button className="btn btn--ghost btn--icon" onClick={onBlackout} title="Blackout">
+        <button className="btn btn--ghost btn--icon" onClick={handleBlackout} title="Blackout">
           Blk
         </button>
-        <button className="btn btn--ghost btn--icon" onClick={onMinimize} title="Minimize">
+        <button
+          className="btn btn--ghost btn--icon"
+          onClick={handleMinimizeWindow}
+          title="Minimize"
+        >
           _
         </button>
-        <button className="btn btn--ghost btn--icon" onClick={onToggleMaximize} title="Maximize / Restore">
+        <button
+          className="btn btn--ghost btn--icon"
+          onClick={handleToggleMaximizeWindow}
+          title="Maximize / Restore"
+        >
           [ ]
         </button>
-        <button className="btn btn--ghost btn--icon" onClick={onClose} title="Close" style={{ color: '#ff6b6b' }}>
+        <button
+          className="btn btn--ghost btn--icon"
+          onClick={handleCloseWindow}
+          title="Close"
+          style={{ color: '#ff6b6b' }}
+        >
           x
         </button>
       </div>

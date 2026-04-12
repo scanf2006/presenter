@@ -1,5 +1,4 @@
 const DEFAULT_TRIAL_DURATION_MS = 60 * 60 * 1000;
-const DEFAULT_CLOCK_SKEW_TOLERANCE_MS = 2 * 60 * 1000;
 
 function formatDurationMs(ms) {
   const safeMs = Math.max(0, Number(ms) || 0);
@@ -12,94 +11,87 @@ function formatDurationMs(ms) {
 function createTrialGuard({
   getLicenseStatus,
   durationMs = DEFAULT_TRIAL_DURATION_MS,
-  clockSkewToleranceMs = DEFAULT_CLOCK_SKEW_TOLERANCE_MS,
   readTrialState = null,
   writeTrialState = null,
 }) {
   let cachedState = {
-    trialStartedAtMs: null,
-    trialLastSeenAtMs: null,
+    trialConsumedMs: 0,
     trialClockTampered: false,
   };
+  let hasLoadedState = false;
+  let sessionBaseConsumedMs = 0;
+  let sessionStartHrNs = process.hrtime.bigint();
+  let lastPersistedConsumedMs = 0;
 
   function isLicensedNow() {
     const status = typeof getLicenseStatus === 'function' ? getLicenseStatus() : null;
     return !!status?.isLicensed;
   }
 
-  function ensureTrialStarted() {
-    if (cachedState.trialStartedAtMs === null) {
-      cachedState.trialStartedAtMs = Date.now();
-    }
-    return cachedState.trialStartedAtMs;
-  }
+  function loadStateOnce() {
+    if (hasLoadedState) return cachedState;
+    hasLoadedState = true;
 
-  function loadState() {
-    if (typeof readTrialState !== 'function') return cachedState;
+    if (typeof readTrialState !== 'function') {
+      sessionBaseConsumedMs = cachedState.trialConsumedMs;
+      lastPersistedConsumedMs = cachedState.trialConsumedMs;
+      return cachedState;
+    }
+
     try {
       const persisted = readTrialState() || {};
-      const started =
-        Number.isFinite(persisted.trialStartedAtMs) && persisted.trialStartedAtMs > 0
-          ? Number(persisted.trialStartedAtMs)
-          : null;
-      const lastSeen =
-        Number.isFinite(persisted.trialLastSeenAtMs) && persisted.trialLastSeenAtMs > 0
-          ? Number(persisted.trialLastSeenAtMs)
-          : null;
+      const persistedConsumedMs =
+        Number.isFinite(persisted.trialConsumedMs) && persisted.trialConsumedMs >= 0
+          ? Number(persisted.trialConsumedMs)
+          : 0;
+
       cachedState = {
-        trialStartedAtMs: started,
-        trialLastSeenAtMs: lastSeen,
-        trialClockTampered: persisted.trialClockTampered === true,
+        trialConsumedMs: Math.max(0, persistedConsumedMs),
+        // Keep this field for response shape compatibility with existing UI.
+        trialClockTampered: false,
       };
     } catch (_err) {
       // ignore read failures and keep in-memory fallback
     }
+
+    sessionBaseConsumedMs = cachedState.trialConsumedMs;
+    lastPersistedConsumedMs = cachedState.trialConsumedMs;
+    sessionStartHrNs = process.hrtime.bigint();
     return cachedState;
   }
 
-  function persistState(nextState) {
-    cachedState = nextState;
+  function getSessionRuntimeMs() {
+    const diffNs = process.hrtime.bigint() - sessionStartHrNs;
+    if (diffNs <= 0n) return 0;
+    return Number(diffNs / 1000000n);
+  }
+
+  function getLiveConsumedMs() {
+    const runtimeMs = getSessionRuntimeMs();
+    return Math.max(0, sessionBaseConsumedMs + runtimeMs);
+  }
+
+  function persistConsumedIfNeeded(nextConsumedMs, force = false) {
+    cachedState = {
+      ...cachedState,
+      trialConsumedMs: Math.max(0, Number(nextConsumedMs) || 0),
+    };
     if (typeof writeTrialState !== 'function') return;
+
+    const shouldPersist = force || cachedState.trialConsumedMs - lastPersistedConsumedMs >= 1000;
+    if (!shouldPersist) return;
+
     try {
       writeTrialState({
-        trialStartedAtMs: nextState.trialStartedAtMs,
-        trialLastSeenAtMs: nextState.trialLastSeenAtMs,
-        trialClockTampered: nextState.trialClockTampered === true,
+        trialConsumedMs: cachedState.trialConsumedMs,
+        trialClockTampered: false,
       });
+      lastPersistedConsumedMs = cachedState.trialConsumedMs;
+      sessionBaseConsumedMs = cachedState.trialConsumedMs;
+      sessionStartHrNs = process.hrtime.bigint();
     } catch (_err) {
       // ignore write failures and keep runtime behavior stable
     }
-  }
-
-  function ensureState(nowMs) {
-    const current = loadState();
-    const next = { ...current };
-
-    if (!Number.isFinite(next.trialStartedAtMs) || next.trialStartedAtMs <= 0) {
-      next.trialStartedAtMs = nowMs;
-    }
-
-    if (!Number.isFinite(next.trialLastSeenAtMs) || next.trialLastSeenAtMs <= 0) {
-      next.trialLastSeenAtMs = nowMs;
-    }
-
-    if (nowMs + clockSkewToleranceMs < next.trialLastSeenAtMs) {
-      next.trialClockTampered = true;
-    }
-
-    if (nowMs > next.trialLastSeenAtMs) {
-      next.trialLastSeenAtMs = nowMs;
-    }
-
-    const changed =
-      next.trialStartedAtMs !== current.trialStartedAtMs ||
-      next.trialLastSeenAtMs !== current.trialLastSeenAtMs ||
-      next.trialClockTampered !== current.trialClockTampered;
-
-    if (changed) persistState(next);
-    else cachedState = next;
-
-    return next;
   }
 
   function getTrialStatus() {
@@ -113,17 +105,18 @@ function createTrialGuard({
         elapsedMs: 0,
         remainingMs: null,
         remainingLabel: null,
+        clockTampered: false,
         message: 'Licensed',
       };
     }
 
-    const nowMs = Date.now();
-    const state = ensureState(nowMs);
-    const startedAtMs = state.trialStartedAtMs ?? ensureTrialStarted();
+    loadStateOnce();
+    const elapsedMs = getLiveConsumedMs();
+    persistConsumedIfNeeded(elapsedMs);
 
-    const elapsedMs = Math.max(0, nowMs - startedAtMs);
     const remainingMs = Math.max(0, durationMs - elapsedMs);
-    const expired = remainingMs <= 0 || state.trialClockTampered === true;
+    const expired = remainingMs <= 0;
+    const startedAtMs = Date.now() - elapsedMs;
 
     return {
       enabled: true,
@@ -133,11 +126,9 @@ function createTrialGuard({
       startedAtMs,
       elapsedMs,
       remainingMs,
-      clockTampered: state.trialClockTampered === true,
+      clockTampered: false,
       remainingLabel: formatDurationMs(remainingMs),
-      message: state.trialClockTampered
-        ? 'System clock rollback detected. Please activate license to continue projection.'
-        : expired
+      message: expired
         ? 'Trial expired. Please activate license to continue projection.'
         : `Trial remaining: ${formatDurationMs(remainingMs)}`,
     };
@@ -150,6 +141,8 @@ function createTrialGuard({
 
     const trial = getTrialStatus();
     if (trial.expired) {
+      // Force one last flush when the trial crosses the boundary.
+      persistConsumedIfNeeded(durationMs, true);
       return {
         allowed: false,
         reason: 'trial_expired',

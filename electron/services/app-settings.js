@@ -17,6 +17,7 @@ function createAppSettingsStore(settingsPath, appVersion = null, getDeviceId = n
         licenseKey: '',
         acceptedEulaAt: null,
         acceptedEulaProof: '',
+        trialConsumedMs: 0,
         trialStartedAtMs: null,
         trialLastSeenAtMs: null,
         trialClockTampered: false,
@@ -28,6 +29,7 @@ function createAppSettingsStore(settingsPath, appVersion = null, getDeviceId = n
           licenseKey: '',
           acceptedEulaAt: null,
           acceptedEulaProof: '',
+          trialConsumedMs: 0,
           trialStartedAtMs: null,
           trialLastSeenAtMs: null,
           trialClockTampered: false,
@@ -37,11 +39,14 @@ function createAppSettingsStore(settingsPath, appVersion = null, getDeviceId = n
       const parsed = JSON.parse(raw);
       const toNullableNumber = (value) =>
         Number.isFinite(value) && value > 0 ? Number(value) : null;
+      const toNonNegativeNumber = (value) =>
+        Number.isFinite(value) && Number(value) >= 0 ? Number(value) : 0;
       return {
         licenseKey: typeof parsed?.licenseKey === 'string' ? parsed.licenseKey : '',
         acceptedEulaAt: typeof parsed?.acceptedEulaAt === 'string' ? parsed.acceptedEulaAt : null,
         acceptedEulaProof:
           typeof parsed?.acceptedEulaProof === 'string' ? parsed.acceptedEulaProof : '',
+        trialConsumedMs: toNonNegativeNumber(parsed?.trialConsumedMs),
         trialStartedAtMs: toNullableNumber(parsed?.trialStartedAtMs),
         trialLastSeenAtMs: toNullableNumber(parsed?.trialLastSeenAtMs),
         trialClockTampered: parsed?.trialClockTampered === true,
@@ -51,6 +56,7 @@ function createAppSettingsStore(settingsPath, appVersion = null, getDeviceId = n
         licenseKey: '',
         acceptedEulaAt: null,
         acceptedEulaProof: '',
+        trialConsumedMs: 0,
         trialStartedAtMs: null,
         trialLastSeenAtMs: null,
         trialClockTampered: false,
