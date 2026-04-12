@@ -27,7 +27,7 @@ export function useTextEditorContext() {
  * playback of text items).
  */
 export function TextEditorProvider({ children }) {
-  const { activeSection, setActiveSection } = useAppContext();
+  const { activeSection, setActiveSection, showToast } = useAppContext();
   const {
     currentSlide,
     pushToProjector,
@@ -184,10 +184,10 @@ export function TextEditorProvider({ children }) {
             : mediaData;
         pushToProjector(playableData);
       } catch (err) {
-        alert(`YouTube play failed: ${err.message || 'Unknown error'}`);
+        showToast(`YouTube play failed: ${err.message || 'Unknown error'}`, 'error');
       }
     },
-    [pushToProjector, normalizeYouTubeUrl, getYouTubeVideoId, resolveYouTubePayload]
+    [pushToProjector, normalizeYouTubeUrl, getYouTubeVideoId, resolveYouTubePayload, showToast]
   );
 
   // ── Playlist item handler ──

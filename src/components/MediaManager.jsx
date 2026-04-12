@@ -6,6 +6,7 @@ import {
   getSelectableThumbIndexStyle,
   getSelectableThumbSelectedTagStyle,
 } from '../utils/thumbnail';
+import { useAppContext } from '../contexts/AppContext';
 
 const MEDIA_TYPE_ORDER = ['image', 'video', 'pdf', 'ppt'];
 
@@ -34,6 +35,7 @@ function MediaManager({
   const dropRef = useRef(null);
 
   const isElectron = typeof window.churchDisplay !== 'undefined';
+  const { showToast, showConfirm } = useAppContext();
 
   const loadMediaFiles = useCallback(async () => {
     if (isElectron) {
@@ -177,12 +179,12 @@ function MediaManager({
         }
       } catch (err) {
         console.error('[MediaManager] PDF load failed:', err);
-        alert(`Failed to load PDF thumbnails: ${err.message}`);
+        showToast(`Failed to load PDF thumbnails: ${err.message}`, 'error');
       } finally {
         setPdfLoading(false);
       }
     },
-    [onProjectMedia]
+    [onProjectMedia, showToast]
   );
 
   const handleConvertPpt = useCallback(
@@ -199,16 +201,15 @@ function MediaManager({
       }
 
       if (result.error === 'TIMEOUT') {
-        alert(
-          'PPT conversion timed out (over 2 minutes). Please close PowerPoint popups and retry.'
+        showToast(
+          'PPT conversion timed out (over 2 minutes). Please close PowerPoint popups and retry.',
+          'error'
         );
       } else {
-        alert(
-          `PPT conversion failed:\n${result.error || 'Unknown error'}\n\nPlease verify PPT format and Office availability.`
-        );
+        showToast(`PPT conversion failed: ${result.error || 'Unknown error'}`, 'error');
       }
     },
-    [isElectron]
+    [isElectron, showToast]
   );
 
   const handleProjectMedia = useCallback(
@@ -217,7 +218,7 @@ function MediaManager({
         if (file.type === 'image' || file.type === 'video') {
           onPickBackground?.({ type: file.type, path: file.path, name: file.name });
         } else {
-          alert('Background only supports image or video');
+          showToast('Background only supports image or video', 'warning');
         }
         return;
       }
@@ -232,7 +233,14 @@ function MediaManager({
         handleConvertPpt(file);
       }
     },
-    [backgroundPickerTarget, onPickBackground, onProjectMedia, handleLoadPdfGrid, handleConvertPpt]
+    [
+      backgroundPickerTarget,
+      onPickBackground,
+      onProjectMedia,
+      handleLoadPdfGrid,
+      handleConvertPpt,
+      showToast,
+    ]
   );
 
   const parseYouTubeId = useCallback((url) => {
@@ -243,7 +251,7 @@ function MediaManager({
   const handleProjectYouTube = useCallback(() => {
     const id = parseYouTubeId(youtubeUrl);
     if (!id) {
-      alert('Please enter a valid YouTube URL');
+      showToast('Please enter a valid YouTube URL', 'warning');
       return;
     }
     onProjectMedia({
@@ -252,12 +260,12 @@ function MediaManager({
       url: normalizeYouTubeWatchUrl(youtubeUrl) || youtubeUrl.trim(),
       name: `YouTube - ${id}`,
     });
-  }, [youtubeUrl, parseYouTubeId, onProjectMedia]);
+  }, [youtubeUrl, parseYouTubeId, onProjectMedia, showToast]);
 
   const handleQueueYouTube = useCallback(() => {
     const id = parseYouTubeId(youtubeUrl);
     if (!id) {
-      alert('Please enter a valid YouTube URL');
+      showToast('Please enter a valid YouTube URL', 'warning');
       return;
     }
     if (onAddPlaylist) {
@@ -272,7 +280,7 @@ function MediaManager({
         },
       });
     }
-  }, [youtubeUrl, parseYouTubeId, onAddPlaylist]);
+  }, [youtubeUrl, parseYouTubeId, onAddPlaylist, showToast]);
 
   useEffect(() => {
     if (!activePreloadItem) return;
@@ -772,9 +780,9 @@ function MediaManager({
                           )}
 
                           <button
-                            onClick={(e) => {
+                            onClick={async (e) => {
                               e.stopPropagation();
-                              if (window.confirm(`Delete ${file.name}?`)) handleDelete(file);
+                              if (await showConfirm(`Delete ${file.name}?`)) handleDelete(file);
                             }}
                             style={{
                               position: 'absolute',

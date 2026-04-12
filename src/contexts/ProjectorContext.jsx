@@ -20,7 +20,7 @@ export function useProjectorContext() {
 }
 
 export function ProjectorProvider({ children }) {
-  const { isElectron } = useAppContext();
+  const { isElectron, showToast, showAlert, showConfirm } = useAppContext();
 
   const previewStageRef = useRef(null);
   const [setupTransferBusy, setSetupTransferBusy] = useState(false);
@@ -81,6 +81,9 @@ export function ProjectorProvider({ children }) {
     useSetupBundleActions({
       isElectron,
       setSetupTransferBusy,
+      showToast,
+      showAlert,
+      showConfirm,
     });
 
   const {

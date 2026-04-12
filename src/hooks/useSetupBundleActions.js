@@ -3,10 +3,13 @@ import { useCallback } from 'react';
 export default function useSetupBundleActions({
   isElectron,
   setSetupTransferBusy,
+  showToast,
+  showAlert,
+  showConfirm,
 }) {
   const exportSetupBundle = useCallback(async () => {
     if (!isElectron || typeof window.churchDisplay?.exportSetupBundle !== 'function') {
-      alert('Export is available in the desktop app only.');
+      showToast('Export is available in the desktop app only.', 'warning');
       return;
     }
     try {
@@ -16,29 +19,33 @@ export default function useSetupBundleActions({
       if (res?.success) {
         const mb = Number((Number(res.totalBytes || 0) / (1024 * 1024)).toFixed(2));
         const missingCount = Array.isArray(res.missingRefs) ? res.missingRefs.length : 0;
-        alert(
-          `Export completed (${res.mode || 'minimal'}).\n`
-          + `Copied files: ${res.copiedCount || 0}\n`
-          + `Bundle size: ${mb} MB\n`
-          + `Missing refs: ${missingCount}\n\n`
-          + `Folder:\n${res.backupDir}`
+        showAlert(
+          'Export Complete',
+          `Export completed (${res.mode || 'minimal'}).\n` +
+            `Copied files: ${res.copiedCount || 0}\n` +
+            `Bundle size: ${mb} MB\n` +
+            `Missing refs: ${missingCount}\n\n` +
+            `Folder:\n${res.backupDir}`
         );
       } else {
-        alert(`Export failed: ${res?.error || 'Unknown error'}`);
+        showToast(`Export failed: ${res?.error || 'Unknown error'}`, 'error');
       }
     } catch (err) {
-      alert(`Export failed: ${err?.message || 'Unknown error'}`);
+      showToast(`Export failed: ${err?.message || 'Unknown error'}`, 'error');
     } finally {
       setSetupTransferBusy(false);
     }
-  }, [isElectron, setSetupTransferBusy]);
+  }, [isElectron, setSetupTransferBusy, showToast, showAlert]);
 
   const importSetupBundle = useCallback(async () => {
     if (!isElectron || typeof window.churchDisplay?.importSetupBundle !== 'function') {
-      alert('Import is available in the desktop app only.');
+      showToast('Import is available in the desktop app only.', 'warning');
       return;
     }
-    const ok = window.confirm('Import will overwrite queue/config/songs, and merge media files without deleting existing local media. Continue?');
+    const ok = await showConfirm(
+      'Import Setup Bundle',
+      'Import will overwrite queue/config/songs, and merge media files without deleting existing local media. Continue?'
+    );
     if (!ok) return;
     try {
       setSetupTransferBusy(true);
@@ -46,25 +53,27 @@ export default function useSetupBundleActions({
       if (res?.cancelled) return;
       if (res?.success) {
         const mb = Number((Number(res.totalBytes || 0) / (1024 * 1024)).toFixed(2));
-        const warningText = Array.isArray(res.warnings) && res.warnings.length > 0
-          ? `\nWarnings: ${res.warnings.length}`
-          : '';
-        alert(
-          `Import completed (${res.mode || 'minimal'}).\n`
-          + `Copied: ${res.copiedCount || 0}\n`
-          + `Skipped existing: ${res.skippedCount || 0}\n`
-          + `Data size: ${mb} MB${warningText}\n\n`
-          + 'Please restart the app now.'
+        const warningText =
+          Array.isArray(res.warnings) && res.warnings.length > 0
+            ? `\nWarnings: ${res.warnings.length}`
+            : '';
+        showAlert(
+          'Import Complete',
+          `Import completed (${res.mode || 'minimal'}).\n` +
+            `Copied: ${res.copiedCount || 0}\n` +
+            `Skipped existing: ${res.skippedCount || 0}\n` +
+            `Data size: ${mb} MB${warningText}\n\n` +
+            'Please restart the app now.'
         );
       } else {
-        alert(`Import failed: ${res?.error || 'Unknown error'}`);
+        showToast(`Import failed: ${res?.error || 'Unknown error'}`, 'error');
       }
     } catch (err) {
-      alert(`Import failed: ${err?.message || 'Unknown error'}`);
+      showToast(`Import failed: ${err?.message || 'Unknown error'}`, 'error');
     } finally {
       setSetupTransferBusy(false);
     }
-  }, [isElectron, setSetupTransferBusy]);
+  }, [isElectron, setSetupTransferBusy, showToast, showAlert, showConfirm]);
 
   return {
     exportSetupBundle,

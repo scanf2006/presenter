@@ -120,6 +120,7 @@ export function QueueProvider({ applyTextPayloadToEditor, children }) {
     getYouTubeVideoId,
     normalizeYouTubeUrl,
     pushToProjector,
+    showToast,
     onMediaQueueItemPlayed: handleMediaQueueItemPlayed,
     onQueueItemSelected: handleQueueItemSelected,
   });
