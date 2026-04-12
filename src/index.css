@@ -449,6 +449,9 @@ body {
   height: 36px;
   padding: 0;
   font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* ===========================================
