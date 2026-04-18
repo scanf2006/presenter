@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import { useAppContext } from '../../contexts/AppContext';
 import { useQueueContext } from '../../contexts/QueueContext';
 
 function SidebarQueue({ openDisplays, openText, openSongs, openBible, openMedia }) {
+  const [dropHint, setDropHint] = useState({ index: -1, position: 'before' });
+  const queueListRef = useRef(null);
   const { activeSection } = useAppContext();
   const {
     projectorQueue,
@@ -51,6 +53,28 @@ function SidebarQueue({ openDisplays, openText, openSongs, openBible, openMedia 
     { key: 'media', icon: 'M', label: 'Media', hint: 'Image/Video/PDF/PPT', onClick: openMedia },
   ];
 
+  const resolveDropTargetIndex = (fromIndex, targetIndex, position) => {
+    const insertionSlot = position === 'after' ? targetIndex + 1 : targetIndex;
+    const adjusted = insertionSlot > fromIndex ? insertionSlot - 1 : insertionSlot;
+    const maxIndex = Math.max(0, projectorQueue.length - 1);
+    return Math.max(0, Math.min(maxIndex, adjusted));
+  };
+
+  const autoScrollQueueList = (clientY) => {
+    const listEl = queueListRef.current;
+    if (!listEl) return;
+    const rect = listEl.getBoundingClientRect();
+    const edge = 34;
+    const step = 16;
+    if (clientY - rect.top < edge) {
+      listEl.scrollTop -= step;
+      return;
+    }
+    if (rect.bottom - clientY < edge) {
+      listEl.scrollTop += step;
+    }
+  };
+
   return (
     <div className="sidebar">
       <div className="sidebar-nav">
@@ -91,7 +115,30 @@ function SidebarQueue({ openDisplays, openText, openSongs, openBible, openMedia 
             {showQueueTypeTags ? 'Hide Tags' : 'Show Tags'}
           </button>
         </div>
-        <div className="cp-queue-list">
+        <div
+          ref={queueListRef}
+          className="cp-queue-list"
+          onDragOver={(e) => {
+            if (!draggingQueueId) return;
+            e.preventDefault();
+            autoScrollQueueList(e.clientY);
+            if (e.target === e.currentTarget && projectorQueue.length > 0) {
+              setDropHint({ index: projectorQueue.length - 1, position: 'after' });
+            }
+          }}
+          onDrop={(e) => {
+            if (!draggingQueueId) return;
+            e.preventDefault();
+            const fromIndex = projectorQueue.findIndex((q) => q.id === draggingQueueId);
+            if (fromIndex < 0) return;
+            const hintIndex = dropHint.index >= 0 ? dropHint.index : projectorQueue.length - 1;
+            const hintPos = dropHint.index >= 0 ? dropHint.position : 'after';
+            const targetIndex = resolveDropTargetIndex(fromIndex, hintIndex, hintPos);
+            moveQueueItemByIndex(fromIndex, targetIndex);
+            setDraggingQueueId(null);
+            setDropHint({ index: -1, position: 'before' });
+          }}
+        >
           {projectorQueue.length === 0 && (
             <div className="cp-queue-empty">Add items from Media or Free Text.</div>
           )}
@@ -100,15 +147,34 @@ function SidebarQueue({ openDisplays, openText, openSongs, openBible, openMedia 
               key={item.id}
               draggable
               onDragStart={() => setDraggingQueueId(item.id)}
-              onDragEnd={() => setDraggingQueueId(null)}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={() => {
-                if (!draggingQueueId || draggingQueueId === item.id) return;
-                const fromIndex = projectorQueue.findIndex((q) => q.id === draggingQueueId);
-                moveQueueItemByIndex(fromIndex, index);
+              onDragEnd={() => {
                 setDraggingQueueId(null);
+                setDropHint({ index: -1, position: 'before' });
               }}
-              className={`cp-queue-card ${index === activeQueueIndex ? 'cp-queue-card--active' : ''}`}
+              onDragOver={(e) => {
+                if (!draggingQueueId || draggingQueueId === item.id) return;
+                e.preventDefault();
+                autoScrollQueueList(e.clientY);
+                const rect = e.currentTarget.getBoundingClientRect();
+                const y = e.clientY - rect.top;
+                const position = y > rect.height / 2 ? 'after' : 'before';
+                setDropHint((prev) =>
+                  prev.index === index && prev.position === position
+                    ? prev
+                    : { index, position }
+                );
+              }}
+              onDrop={(e) => {
+                if (!draggingQueueId || draggingQueueId === item.id) return;
+                e.preventDefault();
+                const fromIndex = projectorQueue.findIndex((q) => q.id === draggingQueueId);
+                if (fromIndex < 0) return;
+                const targetIndex = resolveDropTargetIndex(fromIndex, index, dropHint.position);
+                moveQueueItemByIndex(fromIndex, targetIndex);
+                setDraggingQueueId(null);
+                setDropHint({ index: -1, position: 'before' });
+              }}
+              className={`cp-queue-card ${index === activeQueueIndex ? 'cp-queue-card--active' : ''} ${draggingQueueId === item.id ? 'cp-queue-card--dragging' : ''} ${dropHint.index === index && dropHint.position === 'before' ? 'cp-queue-card--drop-before' : ''} ${dropHint.index === index && dropHint.position === 'after' ? 'cp-queue-card--drop-after' : ''}`}
             >
               <div className="cp-queue-row">
                 <span title="Drag to reorder" className="cp-queue-drag">
