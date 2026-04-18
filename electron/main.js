@@ -3,6 +3,7 @@
  * Handles window lifecycle, IPC, media pipeline, and persistence.
  */
 const { app, BrowserWindow, screen, ipcMain, dialog, protocol, session } = require('electron');
+const path = require('path');
 
 // C2: Global error handlers — prevent silent crashes.
 process.on('uncaughtException', (err) => {
@@ -103,6 +104,13 @@ const dbStore = createDatabaseStore();
 
 // Development mode flag.
 const isDev = process.env.NODE_ENV !== 'production' && !app.isPackaged;
+if (isDev) {
+  // Keep development data isolated from packaged installs so local dev
+  // license/trial state cannot leak into installer builds on the same machine.
+  const isolatedDevUserData = path.join(app.getPath('appData'), `${app.getName()}-dev`);
+  app.setPath('userData', isolatedDevUserData);
+  console.log(`[Startup] using isolated dev userData: ${isolatedDevUserData}`);
+}
 
 let appSettingsStore = null;
 const {
