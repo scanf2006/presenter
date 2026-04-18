@@ -26,6 +26,7 @@ export function QueueProvider({ applyTextPayloadToEditor, children }) {
     resolveYouTubePayload,
     getYouTubeVideoId,
     normalizeYouTubeUrl,
+    transitionEnabled,
     setTransitionEnabled,
   } = useProjectorContext();
 
@@ -105,9 +106,11 @@ export function QueueProvider({ applyTextPayloadToEditor, children }) {
   const handleQueueItemSelected = useCallback(
     (item) => {
       const isSongQueueItem = item?.section === 'songs';
-      setTransitionEnabled(!isSongQueueItem);
+      if (isSongQueueItem && transitionEnabled) {
+        setTransitionEnabled(false);
+      }
     },
-    [setTransitionEnabled]
+    [transitionEnabled, setTransitionEnabled]
   );
 
   const { playQueueItem, playPrev, playNext } = useQueuePlayback({
