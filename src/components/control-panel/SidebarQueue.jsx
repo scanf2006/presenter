@@ -5,6 +5,7 @@ import { useQueueContext } from '../../contexts/QueueContext';
 function SidebarQueue({ openDisplays, openText, openSongs, openBible, openMedia }) {
   const [dropHint, setDropHint] = useState({ index: -1, position: 'before' });
   const queueListRef = useRef(null);
+  const draggingQueueIdRef = useRef('');
   const { activeSection } = useAppContext();
   const {
     projectorQueue,
@@ -58,6 +59,14 @@ function SidebarQueue({ openDisplays, openText, openSongs, openBible, openMedia 
     const adjusted = insertionSlot > fromIndex ? insertionSlot - 1 : insertionSlot;
     const maxIndex = Math.max(0, projectorQueue.length - 1);
     return Math.max(0, Math.min(maxIndex, adjusted));
+  };
+
+  const readDraggingId = (event) => {
+    const transferId =
+      event?.dataTransfer?.getData('application/x-cdp-queue-id') ||
+      event?.dataTransfer?.getData('text/plain') ||
+      '';
+    return transferId || draggingQueueIdRef.current || draggingQueueId || '';
   };
 
   const autoScrollQueueList = (clientY) => {
@@ -127,15 +136,17 @@ function SidebarQueue({ openDisplays, openText, openSongs, openBible, openMedia 
             }
           }}
           onDrop={(e) => {
-            if (!draggingQueueId) return;
+            const draggingId = readDraggingId(e);
+            if (!draggingId) return;
             e.preventDefault();
-            const fromIndex = projectorQueue.findIndex((q) => q.id === draggingQueueId);
+            const fromIndex = projectorQueue.findIndex((q) => q.id === draggingId);
             if (fromIndex < 0) return;
             const hintIndex = dropHint.index >= 0 ? dropHint.index : projectorQueue.length - 1;
             const hintPos = dropHint.index >= 0 ? dropHint.position : 'after';
             const targetIndex = resolveDropTargetIndex(fromIndex, hintIndex, hintPos);
             moveQueueItemByIndex(fromIndex, targetIndex);
             setDraggingQueueId(null);
+            draggingQueueIdRef.current = '';
             setDropHint({ index: -1, position: 'before' });
           }}
         >
@@ -146,14 +157,25 @@ function SidebarQueue({ openDisplays, openText, openSongs, openBible, openMedia 
             <div
               key={item.id}
               draggable
-              onDragStart={() => setDraggingQueueId(item.id)}
+              onDragStart={(e) => {
+                setDraggingQueueId(item.id);
+                draggingQueueIdRef.current = item.id;
+                if (e.dataTransfer) {
+                  e.dataTransfer.effectAllowed = 'move';
+                  e.dataTransfer.setData('application/x-cdp-queue-id', item.id);
+                  e.dataTransfer.setData('text/plain', item.id);
+                }
+              }}
               onDragEnd={() => {
                 setDraggingQueueId(null);
+                draggingQueueIdRef.current = '';
                 setDropHint({ index: -1, position: 'before' });
               }}
               onDragOver={(e) => {
-                if (!draggingQueueId || draggingQueueId === item.id) return;
+                const draggingId = readDraggingId(e);
+                if (!draggingId || draggingId === item.id) return;
                 e.preventDefault();
+                e.stopPropagation();
                 autoScrollQueueList(e.clientY);
                 const rect = e.currentTarget.getBoundingClientRect();
                 const y = e.clientY - rect.top;
@@ -165,13 +187,16 @@ function SidebarQueue({ openDisplays, openText, openSongs, openBible, openMedia 
                 );
               }}
               onDrop={(e) => {
-                if (!draggingQueueId || draggingQueueId === item.id) return;
+                const draggingId = readDraggingId(e);
+                if (!draggingId || draggingId === item.id) return;
                 e.preventDefault();
-                const fromIndex = projectorQueue.findIndex((q) => q.id === draggingQueueId);
+                e.stopPropagation();
+                const fromIndex = projectorQueue.findIndex((q) => q.id === draggingId);
                 if (fromIndex < 0) return;
                 const targetIndex = resolveDropTargetIndex(fromIndex, index, dropHint.position);
                 moveQueueItemByIndex(fromIndex, targetIndex);
                 setDraggingQueueId(null);
+                draggingQueueIdRef.current = '';
                 setDropHint({ index: -1, position: 'before' });
               }}
               className={`cp-queue-card ${index === activeQueueIndex ? 'cp-queue-card--active' : ''} ${draggingQueueId === item.id ? 'cp-queue-card--dragging' : ''} ${dropHint.index === index && dropHint.position === 'before' ? 'cp-queue-card--drop-before' : ''} ${dropHint.index === index && dropHint.position === 'after' ? 'cp-queue-card--drop-after' : ''}`}

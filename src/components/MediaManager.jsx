@@ -25,12 +25,14 @@ function MediaManager({
   const [importing, setImporting] = useState(false);
   const [pptConverting, setPptConverting] = useState(false);
   const [pptSlides, setPptSlides] = useState(null);
+  const [pptSourcePath, setPptSourcePath] = useState('');
   const [currentSlideIndex, setCurrentSlideIndex] = useState(-1);
 
   const [pdfLoading, setPdfLoading] = useState(false);
   const [activePdf, setActivePdf] = useState(null);
   const [currentPdfPage, setCurrentPdfPage] = useState(1);
   const [selectedMediaKey, setSelectedMediaKey] = useState('');
+  const [detailOpenedFromQueue, setDetailOpenedFromQueue] = useState(false);
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const dropRef = useRef(null);
   const pdfThumbRefs = useRef(new Map());
@@ -140,6 +142,7 @@ function MediaManager({
 
   const handleLoadPdfGrid = useCallback(
     async (file) => {
+      setDetailOpenedFromQueue(Boolean(file?.deferProject));
       setPdfLoading(true);
       // M7: Destroy previous PDF document before loading new one.
       setActivePdf((prev) => {
@@ -193,6 +196,8 @@ function MediaManager({
   const handleConvertPpt = useCallback(
     async (file) => {
       if (!isElectron) return;
+      setDetailOpenedFromQueue(Boolean(file?.deferProject));
+      setPptSourcePath(file?.path || '');
       setPptConverting(true);
       const result = await window.churchDisplay.convertPpt(file.path);
       setPptConverting(false);
@@ -204,11 +209,13 @@ function MediaManager({
       }
 
       if (result.error === 'TIMEOUT') {
+        setPptSourcePath('');
         showToast(
           'PPT conversion timed out (over 2 minutes). Please close PowerPoint popups and retry.',
           'error'
         );
       } else {
+        setPptSourcePath('');
         showToast(`PPT conversion failed: ${result.error || 'Unknown error'}`, 'error');
       }
     },
@@ -313,6 +320,7 @@ function MediaManager({
     setPptConverting(false);
     setPdfLoading(false);
     setPptSlides(null);
+    setPptSourcePath('');
     // M7/M10-R2: Destroy PDF document before clearing reference, using ref.
     if (activePdfRef.current?.pdfDocument) {
       activePdfRef.current.pdfDocument.destroy().catch(() => {});
@@ -482,6 +490,17 @@ function MediaManager({
   }, [displayFiles]);
 
   const isViewingDetail = activePdf || pptSlides || pptConverting || pdfLoading;
+  const isQueuePdfDetail =
+    !!activePdf &&
+    activePreloadItem?.type === 'pdf' &&
+    activePreloadItem?.payload?.deferProject === true &&
+    activePreloadItem?.payload?.path === activePdf.path;
+  const isQueuePptDetail =
+    (!!pptSlides || pptConverting) &&
+    !!pptSourcePath &&
+    activePreloadItem?.type === 'ppt' &&
+    activePreloadItem?.payload?.deferProject === true &&
+    activePreloadItem?.payload?.path === pptSourcePath;
 
   return (
     <div className="media-manager animate-slide-in-up">
@@ -639,18 +658,21 @@ function MediaManager({
                 ({currentPdfPage} / {activePdf.numPages})
               </span>
             </h3>
-            <button
-              className="btn btn--ghost"
-              style={{ padding: '4px 8px', fontSize: '12px' }}
-              onClick={() => {
-                setActivePdf((prev) => {
-                  if (prev?.pdfDocument) prev.pdfDocument.destroy().catch(() => {});
-                  return null;
-                });
-              }}
-            >
-              Close
-            </button>
+            {!detailOpenedFromQueue && !isQueuePdfDetail && (
+              <button
+                className="btn btn--ghost"
+                style={{ padding: '4px 8px', fontSize: '12px' }}
+                onClick={() => {
+                  setDetailOpenedFromQueue(false);
+                  setActivePdf((prev) => {
+                    if (prev?.pdfDocument) prev.pdfDocument.destroy().catch(() => {});
+                    return null;
+                  });
+                }}
+              >
+                Close
+              </button>
+            )}
           </div>
           <div
             style={{
@@ -721,13 +743,19 @@ function MediaManager({
                 ({currentSlideIndex >= 0 ? currentSlideIndex + 1 : '-'} / {pptSlides.length})
               </span>
             </h3>
-            <button
-              className="btn btn--ghost"
-              style={{ padding: '4px 8px', fontSize: '12px' }}
-              onClick={() => setPptSlides(null)}
-            >
-              Close
-            </button>
+            {!detailOpenedFromQueue && !isQueuePptDetail && (
+              <button
+                className="btn btn--ghost"
+                style={{ padding: '4px 8px', fontSize: '12px' }}
+                onClick={() => {
+                  setDetailOpenedFromQueue(false);
+                  setPptSlides(null);
+                  setPptSourcePath('');
+                }}
+              >
+                Close
+              </button>
+            )}
           </div>
           <div
             style={{
