@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
  * PdfThumbnail - 懒加载的 PDF 缩略图生成器
  * 只有该组件进入视口时，才会调用 PDF.js 渲染当前页，极大节约内存和 CPU
  */
-const PdfThumbnail = ({ pdfDocument, pageNumber, onClick, isSelected }) => {
+const PdfThumbnail = ({ pdfDocument, pageNumber, onClick, isSelected, thumbRef }) => {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [isVisible, setIsVisible] = useState(false);
@@ -88,8 +88,12 @@ const PdfThumbnail = ({ pdfDocument, pageNumber, onClick, isSelected }) => {
 
   return (
     <div 
-      ref={containerRef}
+      ref={(el) => {
+        containerRef.current = el;
+        if (typeof thumbRef === 'function') thumbRef(el);
+      }}
       onClick={onClick}
+      tabIndex={-1}
       style={{
         cursor: 'pointer',
         border: isSelected ? '2px solid var(--color-primary)' : '2px solid var(--glass-border)',
@@ -104,7 +108,9 @@ const PdfThumbnail = ({ pdfDocument, pageNumber, onClick, isSelected }) => {
         alignItems: 'center',
         justifyContent: 'center',
         transition: 'all 0.2s',
-        transform: isSelected ? 'scale(1.02)' : 'scale(1)'
+        transform: isSelected ? 'scale(1.02)' : 'scale(1)',
+        outline: isSelected ? '2px solid rgba(99,102,241,0.45)' : 'none',
+        outlineOffset: isSelected ? '1px' : 0,
       }}
     >
       {!hasRendered && !errorMsg && (

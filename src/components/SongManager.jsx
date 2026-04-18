@@ -47,10 +47,12 @@ function SongManager({
   const lastProjectedSectionRef = useRef(null);
   const lastAppliedExternalPickRef = useRef(null);
   const lastHandledPreloadRef = useRef(null);
+  const sectionCardRefs = useRef(new Map());
 
   const isElectron = typeof window.churchDisplay !== 'undefined';
   const fileInputRef = useRef(null);
-  const { showToast, showConfirm } = useAppContext();
+  const { showToast, showConfirm, activeSection } = useAppContext();
+  const isSongsSectionActive = activeSection === 'songs';
 
   // 加载歌曲列表
   const loadSongs = useCallback(async () => {
@@ -312,6 +314,77 @@ function SongManager({
       buildSelectedSongQueuePayload,
     ]
   );
+
+  useEffect(() => {
+    if (!isSongsSectionActive) return;
+    if (!selectedSong) return;
+    const sections = parseLyrics(selectedSong.lyrics);
+    if (sections.length === 0) return;
+    if (selectedSectionIndex < 0 || selectedSectionIndex >= sections.length) return;
+
+    const node = sectionCardRefs.current.get(selectedSectionIndex);
+    if (!node) return;
+    node.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    if (typeof node.focus === 'function') node.focus();
+  }, [isSongsSectionActive, selectedSong, selectedSectionIndex, parseLyrics]);
+
+  useEffect(() => {
+    if (!isSongsSectionActive) return;
+    if (!selectedSong) return;
+    const sections = parseLyrics(selectedSong.lyrics);
+    if (sections.length === 0) return;
+
+    const isTypingTarget = (target) => {
+      if (!target || !(target instanceof HTMLElement)) return false;
+      const tag = String(target.tagName || '').toLowerCase();
+      return (
+        target.isContentEditable ||
+        tag === 'input' ||
+        tag === 'textarea' ||
+        tag === 'select'
+      );
+    };
+
+    const onKeyDown = (event) => {
+      if (isTypingTarget(event.target)) return;
+      const consumeEvent = () => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (typeof event.stopImmediatePropagation === 'function') {
+          event.stopImmediatePropagation();
+        }
+      };
+      const key = event.key;
+      const goPrev = key === 'ArrowLeft' || key === 'ArrowUp' || key === 'PageUp';
+      const goNext = key === 'ArrowRight' || key === 'ArrowDown' || key === 'PageDown';
+      const goFirst = key === 'Home';
+      const goLast = key === 'End';
+      if (!goPrev && !goNext && !goFirst && !goLast) return;
+
+      consumeEvent();
+      const currentIndex =
+        selectedSectionIndex >= 0 && selectedSectionIndex < sections.length ? selectedSectionIndex : -1;
+      let nextIndex = currentIndex;
+      if (goFirst) {
+        nextIndex = 0;
+      } else if (goLast) {
+        nextIndex = sections.length - 1;
+      } else if (goPrev) {
+        nextIndex = currentIndex <= 0 ? 0 : currentIndex - 1;
+      } else if (goNext) {
+        nextIndex = currentIndex < 0 ? 0 : Math.min(sections.length - 1, currentIndex + 1);
+      }
+      if (nextIndex === currentIndex) return;
+
+      const nextSection = sections[nextIndex];
+      if (!nextSection) return;
+      setSelectedSectionIndex(nextIndex);
+      handleProjectSection(nextSection, nextIndex);
+    };
+
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [isSongsSectionActive, selectedSong, selectedSectionIndex, parseLyrics, handleProjectSection]);
 
   const handleQueueSong = useCallback(
     (song) => {
@@ -838,11 +911,16 @@ function SongManager({
           {sections.map((section, idx) => (
             <div
               key={idx}
+              ref={(el) => {
+                if (el) sectionCardRefs.current.set(idx, el);
+                else sectionCardRefs.current.delete(idx);
+              }}
               onClick={() => {
                 setSelectedSectionIndex(idx);
                 handleProjectSection(section, idx);
               }}
               style={getSelectableThumbCardStyle(idx === selectedSectionIndex)}
+              tabIndex={-1}
             >
               {idx === selectedSectionIndex && (
                 <div style={getSelectableThumbSelectedTagStyle()}>SEL</div>

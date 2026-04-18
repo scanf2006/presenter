@@ -33,9 +33,12 @@ function MediaManager({
   const [selectedMediaKey, setSelectedMediaKey] = useState('');
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const dropRef = useRef(null);
+  const pdfThumbRefs = useRef(new Map());
+  const pptThumbRefs = useRef(new Map());
 
   const isElectron = typeof window.churchDisplay !== 'undefined';
-  const { showToast, showConfirm } = useAppContext();
+  const { showToast, showConfirm, activeSection } = useAppContext();
+  const isMediaSectionActive = activeSection === 'media';
 
   const loadMediaFiles = useCallback(async () => {
     if (isElectron) {
@@ -320,6 +323,97 @@ function MediaManager({
     setActiveFilter('all');
   }, [forceShowMediaHomeToken]);
 
+  useEffect(() => {
+    if (!activePdf) return;
+    const node = pdfThumbRefs.current.get(currentPdfPage);
+    if (!node) return;
+    node.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    if (typeof node.focus === 'function') node.focus();
+  }, [activePdf, currentPdfPage]);
+
+  useEffect(() => {
+    if (!Array.isArray(pptSlides) || pptSlides.length === 0) return;
+    if (currentSlideIndex < 0) return;
+    const node = pptThumbRefs.current.get(currentSlideIndex);
+    if (!node) return;
+    node.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    if (typeof node.focus === 'function') node.focus();
+  }, [pptSlides, currentSlideIndex]);
+
+  useEffect(() => {
+    const isTypingTarget = (target) => {
+      if (!target || !(target instanceof HTMLElement)) return false;
+      const tag = String(target.tagName || '').toLowerCase();
+      return (
+        target.isContentEditable ||
+        tag === 'input' ||
+        tag === 'textarea' ||
+        tag === 'select'
+      );
+    };
+
+    const onKeyDown = (event) => {
+      if (!isMediaSectionActive) return;
+      if (isTypingTarget(event.target)) return;
+      const consumeEvent = () => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (typeof event.stopImmediatePropagation === 'function') {
+          event.stopImmediatePropagation();
+        }
+      };
+
+      const key = event.key;
+      const goPrev = key === 'ArrowLeft' || key === 'PageUp';
+      const goNext = key === 'ArrowRight' || key === 'PageDown';
+      if (!goPrev && !goNext) return;
+
+      if (activePdf) {
+        consumeEvent();
+        const maxPage = Number(activePdf.numPages || 1);
+        const nextPage = goPrev
+          ? Math.max(1, currentPdfPage - 1)
+          : Math.min(maxPage, currentPdfPage + 1);
+        if (nextPage === currentPdfPage) return;
+        setCurrentPdfPage(nextPage);
+        onProjectMedia({
+          type: 'pdf',
+          path: activePdf.path,
+          name: activePdf.name,
+          page: nextPage,
+        });
+        return;
+      }
+
+      if (Array.isArray(pptSlides) && pptSlides.length > 0) {
+        consumeEvent();
+        const currentIndex = currentSlideIndex >= 0 ? currentSlideIndex : -1;
+        const nextIndex = goPrev
+          ? currentIndex <= 0
+            ? 0
+            : currentIndex - 1
+          : currentIndex < 0
+            ? 0
+            : Math.min(pptSlides.length - 1, currentIndex + 1);
+        if (nextIndex === currentSlideIndex) return;
+        const slide = pptSlides[nextIndex];
+        if (!slide) return;
+        setCurrentSlideIndex(nextIndex);
+        onProjectMedia({
+          type: 'image',
+          path: slide.path,
+          name: `PPT - Page ${nextIndex + 1}`,
+          fitMode: 'contain',
+        });
+      }
+    };
+
+    if (!isMediaSectionActive) return;
+    if (!activePdf && !(Array.isArray(pptSlides) && pptSlides.length > 0)) return;
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [isMediaSectionActive, activePdf, pptSlides, currentPdfPage, currentSlideIndex, onProjectMedia]);
+
   const formatSize = (bytes) => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -576,6 +670,10 @@ function MediaManager({
                   pdfDocument={activePdf.pdfDocument}
                   pageNumber={pageNumber}
                   isSelected={currentPdfPage === pageNumber}
+                  thumbRef={(el) => {
+                    if (el) pdfThumbRefs.current.set(pageNumber, el);
+                    else pdfThumbRefs.current.delete(pageNumber);
+                  }}
                   onClick={() => {
                     setCurrentPdfPage(pageNumber);
                     onProjectMedia({
@@ -644,6 +742,10 @@ function MediaManager({
             {pptSlides.map((slide, index) => (
               <div
                 key={slide.path}
+                ref={(el) => {
+                  if (el) pptThumbRefs.current.set(index, el);
+                  else pptThumbRefs.current.delete(index);
+                }}
                 onClick={() => {
                   setCurrentSlideIndex(index);
                   onProjectMedia({
@@ -654,6 +756,7 @@ function MediaManager({
                   });
                 }}
                 style={getSelectableThumbCardStyle(currentSlideIndex === index)}
+                tabIndex={-1}
               >
                 {currentSlideIndex === index && (
                   <div style={getSelectableThumbSelectedTagStyle()}>SEL</div>
