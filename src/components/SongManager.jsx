@@ -10,6 +10,7 @@ import {
 import { useAppContext } from '../contexts/AppContext';
 
 const TEXT_FONT_OPTIONS = ['Noto Sans SC', 'Microsoft YaHei', 'Arial', 'Times New Roman', 'SimHei'];
+const BLANK_SECTION_INDEX = -2;
 
 /**
  * 诗歌歌词管理组件
@@ -48,6 +49,7 @@ function SongManager({
   const lastAppliedExternalPickRef = useRef(null);
   const lastHandledPreloadRef = useRef(null);
   const sectionCardRefs = useRef(new Map());
+  const blankSectionCardRef = useRef(null);
 
   const isElectron = typeof window.churchDisplay !== 'undefined';
   const fileInputRef = useRef(null);
@@ -315,10 +317,62 @@ function SongManager({
     ]
   );
 
+  // Project a blank lyrics page (background only, no text).
+  const handleProjectBlankSection = useCallback(() => {
+    const payload = {
+      type: 'lyrics',
+      text: '',
+      fontSize,
+      fontSizePx,
+      fontFamily,
+      textColor,
+      background: songBackground,
+    };
+    if (isElectron && typeof window.churchDisplay?.sendToProjectorBackground === 'function') {
+      window.churchDisplay.sendToProjectorBackground(songBackground || null);
+    }
+    lastProjectedSectionRef.current = {
+      section: {
+        tag: 'BLANK',
+        title: 'Blank',
+        lines: [],
+      },
+    };
+    onProjectContent(payload);
+    if (selectedSong && typeof onUpdateActiveQueueItem === 'function') {
+      const queuePayload = buildSelectedSongQueuePayload(selectedSong, {
+        tag: 'BLANK',
+        title: 'Blank',
+        lines: [],
+      });
+      if (queuePayload) {
+        onUpdateActiveQueueItem(queuePayload, `${selectedSong.title} - Blank`, 'songs');
+      }
+    }
+  }, [
+    fontSize,
+    fontSizePx,
+    fontFamily,
+    textColor,
+    onProjectContent,
+    songBackground,
+    isElectron,
+    selectedSong,
+    onUpdateActiveQueueItem,
+    buildSelectedSongQueuePayload,
+  ]);
+
   useEffect(() => {
     if (!isSongsSectionActive) return;
     if (!selectedSong) return;
     const sections = parseLyrics(selectedSong.lyrics);
+    if (selectedSectionIndex === BLANK_SECTION_INDEX) {
+      const blankNode = blankSectionCardRef.current;
+      if (!blankNode) return;
+      blankNode.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      if (typeof blankNode.focus === 'function') blankNode.focus();
+      return;
+    }
     if (sections.length === 0) return;
     if (selectedSectionIndex < 0 || selectedSectionIndex >= sections.length) return;
 
@@ -332,7 +386,6 @@ function SongManager({
     if (!isSongsSectionActive) return;
     if (!selectedSong) return;
     const sections = parseLyrics(selectedSong.lyrics);
-    if (sections.length === 0) return;
 
     const isTypingTarget = (target) => {
       if (!target || !(target instanceof HTMLElement)) return false;
@@ -362,20 +415,37 @@ function SongManager({
       if (!goPrev && !goNext && !goFirst && !goLast) return;
 
       consumeEvent();
-      const currentIndex =
-        selectedSectionIndex >= 0 && selectedSectionIndex < sections.length ? selectedSectionIndex : -1;
-      let nextIndex = currentIndex;
-      if (goFirst) {
-        nextIndex = 0;
-      } else if (goLast) {
-        nextIndex = sections.length - 1;
-      } else if (goPrev) {
-        nextIndex = currentIndex <= 0 ? 0 : currentIndex - 1;
-      } else if (goNext) {
-        nextIndex = currentIndex < 0 ? 0 : Math.min(sections.length - 1, currentIndex + 1);
-      }
-      if (nextIndex === currentIndex) return;
+      const totalCards = sections.length + 1; // Blank + lyric sections
+      if (totalCards <= 0) return;
+      const toCardPos = (sectionIndex) => {
+        if (sectionIndex === BLANK_SECTION_INDEX) return 0;
+        if (sectionIndex >= 0 && sectionIndex < sections.length) return sectionIndex + 1;
+        return -1;
+      };
+      const fromCardPos = (cardPos) => {
+        if (cardPos === 0) return BLANK_SECTION_INDEX;
+        return cardPos - 1;
+      };
 
+      const currentPos = toCardPos(selectedSectionIndex);
+      let nextPos = currentPos;
+      if (goFirst) {
+        nextPos = 0;
+      } else if (goLast) {
+        nextPos = totalCards - 1;
+      } else if (goPrev) {
+        nextPos = currentPos <= 0 ? 0 : currentPos - 1;
+      } else if (goNext) {
+        nextPos = currentPos < 0 ? 0 : Math.min(totalCards - 1, currentPos + 1);
+      }
+      if (nextPos === currentPos) return;
+
+      const nextIndex = fromCardPos(nextPos);
+      if (nextIndex === BLANK_SECTION_INDEX) {
+        setSelectedSectionIndex(BLANK_SECTION_INDEX);
+        handleProjectBlankSection();
+        return;
+      }
       const nextSection = sections[nextIndex];
       if (!nextSection) return;
       setSelectedSectionIndex(nextIndex);
@@ -384,7 +454,14 @@ function SongManager({
 
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [isSongsSectionActive, selectedSong, selectedSectionIndex, parseLyrics, handleProjectSection]);
+  }, [
+    isSongsSectionActive,
+    selectedSong,
+    selectedSectionIndex,
+    parseLyrics,
+    handleProjectSection,
+    handleProjectBlankSection,
+  ]);
 
   const handleQueueSong = useCallback(
     (song) => {
@@ -908,6 +985,61 @@ function SongManager({
             gap: '10px',
           }}
         >
+          <div
+            ref={blankSectionCardRef}
+            onClick={() => {
+              setSelectedSectionIndex(BLANK_SECTION_INDEX);
+              handleProjectBlankSection();
+            }}
+            style={getSelectableThumbCardStyle(selectedSectionIndex === BLANK_SECTION_INDEX)}
+            tabIndex={-1}
+          >
+            {selectedSectionIndex === BLANK_SECTION_INDEX && (
+              <div style={getSelectableThumbSelectedTagStyle()}>SEL</div>
+            )}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '8px 10px',
+                borderBottom: '1px solid var(--color-border)',
+                background: 'rgba(99,102,241,0.12)',
+              }}
+            >
+              <span style={{ fontSize: '11px', fontWeight: '700', color: 'var(--color-primary)' }}>
+                Slide Blank
+              </span>
+              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>No text</span>
+            </div>
+            <div
+              style={{
+                position: 'relative',
+                width: '100%',
+                aspectRatio: '16 / 9',
+                background: '#000',
+              }}
+            >
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'rgba(255,255,255,0.55)',
+                  fontSize: '12px',
+                  letterSpacing: '0.4px',
+                }}
+              >
+                BLANK
+              </div>
+            </div>
+            <div style={getSelectableThumbIndexStyle(selectedSectionIndex === BLANK_SECTION_INDEX)}>
+              B
+            </div>
+          </div>
+
           {sections.map((section, idx) => (
             <div
               key={idx}

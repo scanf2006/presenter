@@ -1653,18 +1653,46 @@ body {
   padding: 8px;
   background: rgba(10, 14, 32, 0.5);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
-  transition: all var(--transition-fast);
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease,
+    box-shadow 120ms ease;
 }
 .cp-queue-card:hover {
-  border-color: rgba(129, 140, 248, 0.4);
-  background: linear-gradient(180deg, rgba(55, 65, 131, 0.2), rgba(35, 42, 86, 0.16));
+  border-color: rgba(129, 140, 248, 0.48);
+  background: rgba(40, 48, 96, 0.22);
 }
 .cp-queue-card--active {
-  border: 1px solid rgba(165, 180, 252, 0.66);
+  border: 1px solid rgba(248, 113, 113, 0.78);
   background: linear-gradient(180deg, rgba(99, 102, 241, 0.3), rgba(69, 76, 174, 0.26));
   box-shadow:
-    0 0 0 1px rgba(129, 140, 248, 0.28),
-    0 6px 16px rgba(55, 48, 163, 0.24);
+    0 0 0 1px rgba(248, 113, 113, 0.32),
+    0 6px 16px rgba(127, 29, 29, 0.2);
+}
+.cp-queue-card--dragging {
+  opacity: 0.45;
+}
+.cp-queue-card--drop-before,
+.cp-queue-card--drop-after {
+  position: relative;
+}
+.cp-queue-card--drop-before::before,
+.cp-queue-card--drop-after::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(248, 113, 113, 0.92), rgba(239, 68, 68, 0.92));
+  box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.26), 0 0 12px rgba(239, 68, 68, 0.36);
+  pointer-events: none;
+}
+.cp-queue-card--drop-before::before {
+  top: -3px;
+}
+.cp-queue-card--drop-after::after {
+  bottom: -3px;
 }
 .cp-queue-row {
   display: flex;
@@ -1720,6 +1748,22 @@ body {
 }
 .cp-queue-btn-danger {
   color: #ff6b6b;
+}
+.cp-queue-head-btn,
+.cp-queue-edit-btn,
+.cp-queue-btn-full {
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease,
+    box-shadow 120ms ease;
+}
+.cp-queue-head-btn:hover,
+.cp-queue-edit-btn:hover,
+.cp-queue-btn-full:hover {
+  background: rgba(71, 85, 155, 0.2);
+  border-color: rgba(129, 140, 248, 0.5);
+  box-shadow: none;
 }
 
 .cp-input-md {
