@@ -33,6 +33,27 @@ function safeCopyDirIfTargetEmpty(srcDir, destDir) {
   return true;
 }
 
+function sanitizeSeededAppSettings(settingsPath, logger = console) {
+  try {
+    if (!fs.existsSync(settingsPath)) return;
+    const raw = fs.readFileSync(settingsPath, 'utf8');
+    const parsed = JSON.parse(raw);
+    const sanitized = {
+      ...(parsed && typeof parsed === 'object' ? parsed : {}),
+      licenseKey: '',
+      acceptedEulaAt: null,
+      acceptedEulaProof: '',
+      trialConsumedMs: 0,
+      trialStartedAtMs: null,
+      trialLastSeenAtMs: null,
+      trialClockTampered: false,
+    };
+    fs.writeFileSync(settingsPath, JSON.stringify(sanitized, null, 2), 'utf8');
+  } catch (err) {
+    logger.warn('[SeedHydrate] Failed to sanitize seeded app-settings:', err.message);
+  }
+}
+
 function hydrateUserDataFromBundledSeed(app, markerName = '.seed-applied-v1', logger = console) {
   try {
     const userDataDir = app.getPath('userData');
@@ -45,11 +66,14 @@ function hydrateUserDataFromBundledSeed(app, markerName = '.seed-applied-v1', lo
     fs.mkdirSync(userDataDir, { recursive: true });
 
     let copiedAny = false;
-    copiedAny =
-      safeCopyIfMissing(
-        path.join(seedDir, 'app-settings.json'),
-        path.join(userDataDir, 'app-settings.json')
-      ) || copiedAny;
+    const copiedSettings = safeCopyIfMissing(
+      path.join(seedDir, 'app-settings.json'),
+      path.join(userDataDir, 'app-settings.json')
+    );
+    copiedAny = copiedSettings || copiedAny;
+    if (copiedSettings) {
+      sanitizeSeededAppSettings(path.join(userDataDir, 'app-settings.json'), logger);
+    }
     copiedAny =
       safeCopyIfMissing(
         path.join(seedDir, 'projector-queue.json'),
