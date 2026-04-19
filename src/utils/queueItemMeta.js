@@ -2,6 +2,18 @@ export function getPayloadTypeFromItem(item) {
   return String(item?.payload?.type || item?.type || '').toLowerCase();
 }
 
+export function getQueueItemTitleFromPayload(payload) {
+  if (!payload) return 'Untitled Content';
+  if (payload.type === 'text') return payload.text?.split('\n')?.[0]?.slice(0, 24) || 'Free Text';
+  if (payload.type === 'lyrics')
+    return payload.text?.split('\n')?.[0]?.slice(0, 24) || 'Lyrics Section';
+  if (payload.type === 'bible') return payload.reference || 'Bible';
+  if (payload.type === 'song') return payload.songTitle || 'Song';
+  if (payload.type === 'image' || payload.type === 'video' || payload.type === 'pdf')
+    return payload.name || 'Media';
+  return payload.name || payload.type || 'Untitled Content';
+}
+
 export function resolveSectionFromPayloadType(payloadType) {
   if (payloadType === 'text') return 'text';
   if (payloadType === 'bible') return 'bible';

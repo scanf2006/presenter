@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { resolveSectionForPayload } from '../utils/queueItemMeta';
+import { getQueueItemTitleFromPayload, resolveSectionForPayload } from '../utils/queueItemMeta';
 
 const DEFAULT_QUEUE_STORAGE_KEY = 'churchdisplay.projectorQueue.v1';
 
@@ -19,18 +19,6 @@ export default function useProjectorQueue({
     }),
     []
   );
-
-  const getQueueItemTitle = useCallback((payload) => {
-    if (!payload) return 'Untitled Content';
-    if (payload.type === 'text') return payload.text?.split('\n')?.[0]?.slice(0, 24) || 'Free Text';
-    if (payload.type === 'lyrics')
-      return payload.text?.split('\n')?.[0]?.slice(0, 24) || 'Lyrics Section';
-    if (payload.type === 'bible') return payload.reference || 'Bible';
-    if (payload.type === 'song') return payload.songTitle || 'Song';
-    if (payload.type === 'image' || payload.type === 'video' || payload.type === 'pdf')
-      return payload.name || 'Media';
-    return payload.name || payload.type || 'Untitled Content';
-  }, []);
 
   const [projectorQueue, setProjectorQueue] = useState([]);
   const [queueHydrated, setQueueHydrated] = useState(false);
@@ -84,7 +72,7 @@ export default function useProjectorQueue({
     (payload, title, section, options = {}) => {
       if (!payload) return;
       const forceAppend = Boolean(options?.forceAppend);
-      const nextTitle = title || getQueueItemTitle(payload);
+      const nextTitle = title || getQueueItemTitleFromPayload(payload);
       setProjectorQueue((prev) => {
         if (!forceAppend && activeQueueIndex >= 0 && activeQueueIndex < prev.length) {
           const existing = prev[activeQueueIndex];
@@ -102,7 +90,7 @@ export default function useProjectorQueue({
         return [...prev, buildQueueItem(payload, nextTitle, section)];
       });
     },
-    [activeQueueIndex, buildQueueItem, getQueueItemTitle]
+    [activeQueueIndex, buildQueueItem]
   );
 
   const updateActiveQueueItem = useCallback(
@@ -122,7 +110,7 @@ export default function useProjectorQueue({
           updateFlagRef.current = false;
           return prev;
         }
-        const resolvedTitle = title || existing?.title || getQueueItemTitle(payload);
+        const resolvedTitle = title || existing?.title || getQueueItemTitleFromPayload(payload);
         const resolvedType = payload.type || existing?.type || 'text';
         const resolvedSection =
           expectedSection || existing?.section || resolveSectionForPayload(payload);
@@ -153,7 +141,7 @@ export default function useProjectorQueue({
         showToast('Auto-saved to selected queue card');
       }
     },
-    [activeQueueIndex, getQueueItemTitle, showToast]
+    [activeQueueIndex, showToast]
   );
 
   const moveQueueItem = useCallback((fromIndex, toIndex) => {
@@ -226,7 +214,7 @@ export default function useProjectorQueue({
     editingQueueId,
     editingQueueTitle,
     setEditingQueueTitle,
-    getQueueItemTitle,
+    getQueueItemTitle: getQueueItemTitleFromPayload,
     addOrUpdateQueueItem,
     updateActiveQueueItem,
     moveQueueItem,

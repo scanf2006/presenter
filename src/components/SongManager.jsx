@@ -7,6 +7,16 @@ import {
   getSelectableThumbIndexStyle,
   getSelectableThumbSelectedTagStyle,
 } from '../utils/thumbnail';
+import {
+  buildSongBackgroundFromSong,
+  buildSongSaveInput,
+  buildSongQueuePayload,
+  decodeLyricsImportBytes,
+  deriveSongTitleFromImportFile,
+  mergeSongWithBackground,
+  parseSongLyricsSections,
+} from '../utils/songMeta';
+import useSongSectionNavigation from '../hooks/useSongSectionNavigation';
 import { useAppContext } from '../contexts/AppContext';
 
 const TEXT_FONT_OPTIONS = ['Noto Sans SC', 'Microsoft YaHei', 'Arial', 'Times New Roman', 'SimHei'];
@@ -89,87 +99,7 @@ function SongManager({
     loadSongs();
   }, [loadSongs]);
 
-  // 解析歌词段落
-  // R3-M: Memoize parseLyrics to avoid recreating on every render.
-  const parseLyrics = useCallback((lyrics) => {
-    if (!lyrics) return [];
-
-    // compatibility: historical data may store literal "\n"
-    const normalized = lyrics.replace(/\r\n/g, '\n').replace(/\\n/g, '\n').trim();
-    if (!normalized) return [];
-
-    const lines = normalized.split('\n');
-    const hasMarkers = lines.some((line) => /^\s*\[(V\d*|C|B|P|E)\]/i.test(line.trim()));
-
-    // No marker mode: split sections by blank lines.
-    if (!hasMarkers) {
-      const blocks = normalized
-        .split(/\n\s*\n+/)
-        .map((block) =>
-          block
-            .split('\n')
-            .map((line) => line.trim())
-            .filter(Boolean)
-        )
-        .filter((block) => block.length > 0);
-
-      // If only one large paragraph, auto-split every 4 lines for easier projection.
-      if (blocks.length === 1 && blocks[0].length > 4) {
-        const single = blocks[0];
-        const autoBlocks = [];
-        for (let i = 0; i < single.length; i += 4) {
-          autoBlocks.push(single.slice(i, i + 4));
-        }
-        return autoBlocks.map((block, index) => ({
-          tag: `A${index + 1}`,
-          title: `Section ${index + 1}`,
-          lines: block,
-        }));
-      }
-
-      return blocks.map((block, index) => ({
-        tag: `A${index + 1}`,
-        title: `Section ${index + 1}`,
-        lines: block,
-      }));
-    }
-
-    // Marker mode: supports [V1]/[C]/[B]/[P]/[E]
-    const sections = [];
-    let currentSection = { tag: '', title: 'Section 1', lines: [] };
-
-    for (const rawLine of lines) {
-      const line = rawLine.trim();
-      const tagMatch = line.match(/^\[(V\d*|C|B|P|E)\](.*)$/i);
-
-      if (tagMatch) {
-        if (currentSection.lines.length > 0) {
-          sections.push(currentSection);
-        }
-
-        const tag = tagMatch[1].toUpperCase();
-        const extra = tagMatch[2] ? tagMatch[2].trim() : '';
-        let title;
-        if (tag.startsWith('V')) title = `Verse ${tag.substring(1) || ''}`.trim();
-        else if (tag === 'C') title = 'Chorus';
-        else if (tag === 'B') title = 'Bridge';
-        else if (tag === 'P') title = 'Intro';
-        else if (tag === 'E') title = 'Outro';
-        else title = tag;
-        if (extra) title += ` ${extra}`;
-
-        currentSection = { tag, title: title.trim(), lines: [] };
-      } else if (line) {
-        currentSection.lines.push(line);
-      }
-    }
-
-    if (currentSection.lines.length > 0) {
-      sections.push(currentSection);
-    }
-
-    return sections;
-  }, []);
+  const parseLyrics = parseSongLyricsSections;
 
   // 保存歌曲
   const handleSave = useCallback(async () => {
@@ -234,15 +164,7 @@ function SongManager({
     setFormTitle(song.title);
     setFormAuthor(song.author || '');
     setFormLyrics(song.lyrics);
-    setSongBackground(
-      song.backgroundType && song.backgroundPath
-        ? {
-            type: song.backgroundType,
-            path: song.backgroundPath,
-            name: song.backgroundPath.split(/[\\/]/).pop() || 'Background',
-          }
-        : null
-    );
+    setSongBackground(buildSongBackgroundFromSong(song));
     setSelectedSong(null);
   };
 
@@ -260,21 +182,12 @@ function SongManager({
 
   const buildSelectedSongQueuePayload = useCallback(
     (song, section = null, sectionIndex = null) => {
-      if (!song) return null;
-      return {
-        type: 'song',
-        songId: song.id,
-        songTitle: song.title,
-        background: songBackground
-          ? {
-              type: songBackground.type,
-              path: songBackground.path,
-            }
-          : null,
-        lastSectionIndex: Number.isFinite(sectionIndex) ? sectionIndex : null,
-        lastSectionTitle: section?.title || '',
-        lastSectionTag: section?.tag || '',
-      };
+      return buildSongQueuePayload({
+        song,
+        background: songBackground,
+        section,
+        sectionIndex,
+      });
     },
     [songBackground]
   );
@@ -362,122 +275,26 @@ function SongManager({
     buildSelectedSongQueuePayload,
   ]);
 
-  useEffect(() => {
-    if (!isSongsSectionActive) return;
-    if (!selectedSong) return;
-    const sections = parseLyrics(selectedSong.lyrics);
-    if (selectedSectionIndex === BLANK_SECTION_INDEX) {
-      const blankNode = blankSectionCardRef.current;
-      if (!blankNode) return;
-      blankNode.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-      if (typeof blankNode.focus === 'function') blankNode.focus();
-      return;
-    }
-    if (sections.length === 0) return;
-    if (selectedSectionIndex < 0 || selectedSectionIndex >= sections.length) return;
-
-    const node = sectionCardRefs.current.get(selectedSectionIndex);
-    if (!node) return;
-    node.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-    if (typeof node.focus === 'function') node.focus();
-  }, [isSongsSectionActive, selectedSong, selectedSectionIndex, parseLyrics]);
-
-  useEffect(() => {
-    if (!isSongsSectionActive) return;
-    if (!selectedSong) return;
-    const sections = parseLyrics(selectedSong.lyrics);
-
-    const isTypingTarget = (target) => {
-      if (!target || !(target instanceof HTMLElement)) return false;
-      const tag = String(target.tagName || '').toLowerCase();
-      return (
-        target.isContentEditable ||
-        tag === 'input' ||
-        tag === 'textarea' ||
-        tag === 'select'
-      );
-    };
-
-    const onKeyDown = (event) => {
-      if (isTypingTarget(event.target)) return;
-      const consumeEvent = () => {
-        event.preventDefault();
-        event.stopPropagation();
-        if (typeof event.stopImmediatePropagation === 'function') {
-          event.stopImmediatePropagation();
-        }
-      };
-      const key = event.key;
-      const goPrev = key === 'ArrowLeft' || key === 'ArrowUp' || key === 'PageUp';
-      const goNext = key === 'ArrowRight' || key === 'ArrowDown' || key === 'PageDown';
-      const goFirst = key === 'Home';
-      const goLast = key === 'End';
-      if (!goPrev && !goNext && !goFirst && !goLast) return;
-
-      consumeEvent();
-      const totalCards = sections.length + 1; // Blank + lyric sections
-      if (totalCards <= 0) return;
-      const toCardPos = (sectionIndex) => {
-        if (sectionIndex === BLANK_SECTION_INDEX) return 0;
-        if (sectionIndex >= 0 && sectionIndex < sections.length) return sectionIndex + 1;
-        return -1;
-      };
-      const fromCardPos = (cardPos) => {
-        if (cardPos === 0) return BLANK_SECTION_INDEX;
-        return cardPos - 1;
-      };
-
-      const currentPos = toCardPos(selectedSectionIndex);
-      let nextPos = currentPos;
-      if (goFirst) {
-        nextPos = 0;
-      } else if (goLast) {
-        nextPos = totalCards - 1;
-      } else if (goPrev) {
-        nextPos = currentPos <= 0 ? 0 : currentPos - 1;
-      } else if (goNext) {
-        nextPos = currentPos < 0 ? 0 : Math.min(totalCards - 1, currentPos + 1);
-      }
-      if (nextPos === currentPos) return;
-
-      const nextIndex = fromCardPos(nextPos);
-      if (nextIndex === BLANK_SECTION_INDEX) {
-        setSelectedSectionIndex(BLANK_SECTION_INDEX);
-        handleProjectBlankSection();
-        return;
-      }
-      const nextSection = sections[nextIndex];
-      if (!nextSection) return;
-      setSelectedSectionIndex(nextIndex);
-      handleProjectSection(nextSection, nextIndex);
-    };
-
-    window.addEventListener('keydown', onKeyDown, true);
-    return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [
+  useSongSectionNavigation({
     isSongsSectionActive,
     selectedSong,
     selectedSectionIndex,
+    setSelectedSectionIndex,
     parseLyrics,
     handleProjectSection,
     handleProjectBlankSection,
-  ]);
+    sectionCardRefs,
+    blankSectionCardRef,
+    blankSectionIndex: BLANK_SECTION_INDEX,
+  });
 
   const handleQueueSong = useCallback(
     (song) => {
       if (typeof onQueueContent !== 'function' || !song) return;
-      const payload = {
-        type: 'song',
-        songId: song.id,
-        songTitle: song.title,
-        background:
-          song.backgroundType && song.backgroundPath
-            ? {
-                type: song.backgroundType,
-                path: song.backgroundPath,
-              }
-            : null,
-      };
+      const payload = buildSongQueuePayload({
+        song,
+        background: buildSongBackgroundFromSong(song),
+      });
       onQueueContent(payload, song.title);
     },
     [onQueueContent]
@@ -489,15 +306,7 @@ function SongManager({
     setSelectedSectionIndex(-1);
     setEditingSong(null);
     setSelectedSong(song);
-    setSongBackground(
-      song.backgroundType && song.backgroundPath
-        ? {
-            type: song.backgroundType,
-            path: song.backgroundPath,
-            name: song.backgroundPath.split(/[\\/]/).pop() || 'Background',
-          }
-        : null
-    );
+    setSongBackground(buildSongBackgroundFromSong(song));
   }, []);
 
   useEffect(() => {
@@ -521,15 +330,7 @@ function SongManager({
     // Switch song should not auto-project last section from previous song.
     lastProjectedSectionRef.current = null;
     setSelectedSectionIndex(-1);
-    setSongBackground(
-      selectedSong.backgroundType && selectedSong.backgroundPath
-        ? {
-            type: selectedSong.backgroundType,
-            path: selectedSong.backgroundPath,
-            name: selectedSong.backgroundPath.split(/[\\/]/).pop() || 'Background',
-          }
-        : null
-    );
+    setSongBackground(buildSongBackgroundFromSong(selectedSong));
   }, [selectedSong?.id]);
 
   useEffect(() => {
@@ -558,83 +359,36 @@ function SongManager({
     }
   }, [songBackground]);
 
-  const persistSelectedSongBackground = useCallback(
-    async (bg) => {
-      if (!selectedSong) return;
-      const nextSong = {
-        ...selectedSong,
-        backgroundType: bg?.type || '',
-        backgroundPath: bg?.path || '',
-      };
-      setSelectedSong(nextSong);
+  const persistSongBackground = useCallback(
+    async (song, bg, options = {}) => {
+      if (!song) return null;
+      const nextSong = mergeSongWithBackground(song, bg);
+      const syncSelectedSong = options.syncSelectedSong !== false;
+      const syncSongBackground = options.syncSongBackground !== false;
+
+      if (syncSelectedSong) setSelectedSong(nextSong);
+      if (syncSongBackground) setSongBackground(bg || null);
       setSongs((prev) => prev.map((s) => (s.id === nextSong.id ? nextSong : s)));
+
       try {
         if (isElectron) {
-          await window.churchDisplay.songsSave({
-            id: nextSong.id,
-            title: nextSong.title || '',
-            author: nextSong.author || '',
-            lyrics: nextSong.lyrics || '',
-            backgroundType: nextSong.backgroundType,
-            backgroundPath: nextSong.backgroundPath,
-          });
+          const saveInput = buildSongSaveInput(nextSong);
+          if (saveInput) {
+            await window.churchDisplay.songsSave(saveInput);
+          }
         }
       } catch (err) {
         console.warn('[SongManager] persist background failed:', err?.message || err);
       }
+
       if (typeof onUpdateActiveQueueItem === 'function') {
-        const queuePayload = {
-          type: 'song',
-          songId: nextSong.id,
-          songTitle: nextSong.title,
-          background: bg ? { type: bg.type, path: bg.path } : null,
-        };
+        const queuePayload = buildSongQueuePayload({
+          song: nextSong,
+          background: bg,
+        });
         onUpdateActiveQueueItem(queuePayload, nextSong.title, 'songs');
       }
-    },
-    [selectedSong, isElectron, onUpdateActiveQueueItem]
-  );
-
-  const persistBackgroundForSong = useCallback(
-    async (song, bg) => {
-      if (!song) return;
-      const nextSong = {
-        ...song,
-        backgroundType: bg?.type || '',
-        backgroundPath: bg?.path || '',
-      };
-
-      setSelectedSong(nextSong);
-      setSongBackground(bg || null);
-      setSongs((prev) => prev.map((s) => (s.id === nextSong.id ? nextSong : s)));
-
-      try {
-        if (isElectron) {
-          await window.churchDisplay.songsSave({
-            id: nextSong.id,
-            title: nextSong.title || '',
-            author: nextSong.author || '',
-            lyrics: nextSong.lyrics || '',
-            backgroundType: nextSong.backgroundType,
-            backgroundPath: nextSong.backgroundPath,
-          });
-        }
-      } catch (err) {
-        console.warn('[SongManager] persist background failed:', err?.message || err);
-      }
-
-      if (typeof onUpdateActiveQueueItem === 'function') {
-        onUpdateActiveQueueItem(
-          {
-            type: 'song',
-            songId: nextSong.id,
-            songTitle: nextSong.title,
-            background: bg ? { type: bg.type, path: bg.path } : null,
-          },
-          nextSong.title,
-          'songs'
-        );
-      }
+      return nextSong;
     },
     [isElectron, onUpdateActiveQueueItem]
   );
@@ -659,14 +413,14 @@ function SongManager({
         (selectedSong.backgroundType || '') === (externalBackground.type || '') &&
         (selectedSong.backgroundPath || '') === (externalBackground.path || '');
       if (!unchanged) {
-        persistSelectedSongBackground(externalBackground);
+        persistSongBackground(selectedSong, externalBackground);
       }
     } else if (!editingSong && pickerSong?.id) {
       const unchanged =
         (pickerSong.backgroundType || '') === (externalBackground.type || '') &&
         (pickerSong.backgroundPath || '') === (externalBackground.path || '');
       if (!unchanged) {
-        persistBackgroundForSong(pickerSong, externalBackground);
+        persistSongBackground(pickerSong, externalBackground);
       } else {
         setSelectedSong(pickerSong);
       }
@@ -679,8 +433,7 @@ function SongManager({
     backgroundPickContext?.song,
     editingSong,
     selectedSong?.id,
-    persistBackgroundForSong,
-    persistSelectedSongBackground,
+    persistSongBackground,
   ]);
 
   // Import lyrics file (try UTF-8 first; fallback to GB18030 to avoid mojibake).
@@ -695,23 +448,8 @@ function SongManager({
     reader.onload = () => {
       const buffer = reader.result;
       const bytes = new Uint8Array(buffer);
-      let content = '';
-      try {
-        content = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
-      } catch (_) {
-        content = '';
-      }
-
-      // If replacement char appears, retry with GB18030
-      if (content.includes('\ufffd')) {
-        try {
-          content = new TextDecoder('gb18030', { fatal: false }).decode(bytes);
-        } catch (_) {
-          // ignore fallback failure, keep UTF-8 result
-        }
-      }
-
-      const title = file.name.replace(/\.(txt|lrc)$/i, '');
+      const content = decodeLyricsImportBytes(bytes);
+      const title = deriveSongTitleFromImportFile(file.name);
       setEditingSong({ id: null });
       setSelectedSong(null);
       setSelectedSectionIndex(-1);
@@ -889,7 +627,10 @@ function SongManager({
             Pick Background from Media
           </button>
           {songBackground && (
-            <button className="btn btn--ghost" onClick={() => persistSelectedSongBackground(null)}>
+            <button
+              className="btn btn--ghost"
+              onClick={() => persistSongBackground(selectedSong, null)}
+            >
               Clear Background
             </button>
           )}
