@@ -1,3 +1,4 @@
+// Convert persisted DB fields into UI background object shape.
 function buildSongBackgroundFromSong(song) {
   if (!song?.backgroundType || !song?.backgroundPath) return null;
   return {
@@ -7,6 +8,7 @@ function buildSongBackgroundFromSong(song) {
   };
 }
 
+// Apply a background pick onto a song record while preserving other fields.
 function mergeSongWithBackground(song, background) {
   if (!song) return null;
   return {
@@ -16,6 +18,7 @@ function mergeSongWithBackground(song, background) {
   };
 }
 
+// Build canonical payload accepted by songs-save IPC.
 function buildSongSaveInput(song) {
   if (!song) return null;
   return {
@@ -28,6 +31,7 @@ function buildSongSaveInput(song) {
   };
 }
 
+// Queue payload keeps only transport-safe fields (exclude UI-only name).
 function buildSongBackgroundForPayload(background) {
   if (!background?.type || !background?.path) return null;
   return {
@@ -36,6 +40,7 @@ function buildSongBackgroundForPayload(background) {
   };
 }
 
+// Shared queue payload builder for song card / section projection synchronization.
 function buildSongQueuePayload({ song, background = null, section = null, sectionIndex = null }) {
   if (!song) return null;
   return {
@@ -52,7 +57,7 @@ function buildSongQueuePayload({ song, background = null, section = null, sectio
 function parseSongLyricsSections(lyrics) {
   if (!lyrics) return [];
 
-  // compatibility: historical data may store literal "\n"
+  // Compatibility: historical data may contain literal "\n" instead of real newlines.
   const normalized = lyrics.replace(/\r\n/g, '\n').replace(/\\n/g, '\n').trim();
   if (!normalized) return [];
 
@@ -92,7 +97,8 @@ function parseSongLyricsSections(lyrics) {
     }));
   }
 
-  // Marker mode: supports [V1]/[C]/[B]/[P]/[E]
+  // Marker mode: supports [V1]/[C]/[B]/[P]/[E].
+  // Untagged non-empty lines continue the current section.
   const sections = [];
   let currentSection = { tag: '', title: 'Section 1', lines: [] };
 
@@ -137,7 +143,8 @@ function decodeLyricsImportBytes(bytes) {
     content = '';
   }
 
-  // If replacement char appears, retry with GB18030
+  // Retry legacy encoding for CN church lyric files exported by older tools.
+  // U+FFFD usually indicates decoding mismatch.
   if (content.includes('\ufffd')) {
     try {
       content = new TextDecoder('gb18030', { fatal: false }).decode(bytes);

@@ -1,4 +1,5 @@
 export function getPayloadTypeFromItem(item) {
+  // Some historical queue entries persisted type at item level, newer ones in payload.type.
   return String(item?.payload?.type || item?.type || '').toLowerCase();
 }
 
@@ -15,6 +16,7 @@ export function getQueueItemTitleFromPayload(payload) {
 }
 
 export function resolveSectionFromPayloadType(payloadType) {
+  // Keep this mapping as the single source of truth for sidebar section routing.
   if (payloadType === 'text') return 'text';
   if (payloadType === 'bible') return 'bible';
   if (payloadType === 'song' || payloadType === 'lyrics') return 'songs';
@@ -32,6 +34,7 @@ export function resolveSectionForQueueItem(item) {
 }
 
 export function getQueueTypeLabel(item) {
+  // Compact labels are used in dense queue cards where width is limited.
   const payloadType = getPayloadTypeFromItem(item);
   if (payloadType === 'song' || payloadType === 'lyrics') return 'SONG';
   if (payloadType === 'bible') return 'BIBLE';
