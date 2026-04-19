@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { useAppContext } from '../../contexts/AppContext';
 import { useQueueContext } from '../../contexts/QueueContext';
+import { getQueueTypeLabel } from '../../utils/queueItemMeta';
 
 function SidebarQueue({ openDisplays, openText, openSongs, openBible, openMedia }) {
   const [dropHint, setDropHint] = useState({ index: -1, position: 'before' });
@@ -25,20 +26,6 @@ function SidebarQueue({ openDisplays, openText, openSongs, openBible, openMedia 
     showQueueTypeTags,
     setShowQueueTypeTags,
   } = useQueueContext();
-
-  const getQueueTypeLabel = (item) => {
-    const section = item?.section || '';
-    const type = item?.type || item?.payload?.type || '';
-    if (section === 'songs' || type === 'song' || type === 'lyrics') return 'SONG';
-    if (section === 'bible' || type === 'bible') return 'BIBLE';
-    if (section === 'text' || type === 'text') return 'TEXT';
-    if (type === 'video') return 'VIDEO';
-    if (type === 'image') return 'IMAGE';
-    if (type === 'pdf') return 'PDF';
-    if (type === 'ppt') return 'PPT';
-    if (type === 'youtube') return 'YT';
-    return 'MEDIA';
-  };
 
   const getDisplayTitle = (rawTitle) =>
     String(rawTitle || '')

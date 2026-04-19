@@ -125,9 +125,24 @@ export function TextEditorProvider({ children }) {
   const handleSendToProjector = useCallback(
     (content) => {
       const data = buildCurrentTextPayload(content || textContent);
+      const rawLayout = data?.textLayout || textLayout || TEXT_EDITOR.LAYOUT_DEFAULT;
+      const x = Number(rawLayout?.xPercent);
+      const y = Number(rawLayout?.yPercent);
+      const scale = Number(rawLayout?.scale);
+      data.textLayout = {
+        xPercent: Number.isFinite(x)
+          ? Math.max(TEXT_EDITOR.LAYOUT_X_MIN, Math.min(TEXT_EDITOR.LAYOUT_X_MAX, x))
+          : TEXT_EDITOR.LAYOUT_DEFAULT.xPercent,
+        yPercent: Number.isFinite(y)
+          ? Math.max(TEXT_EDITOR.LAYOUT_Y_MIN, Math.min(TEXT_EDITOR.LAYOUT_Y_MAX, y))
+          : TEXT_EDITOR.LAYOUT_DEFAULT.yPercent,
+        scale: Number.isFinite(scale)
+          ? Math.max(TEXT_EDITOR.LAYOUT_SCALE_MIN, Math.min(TEXT_EDITOR.LAYOUT_SCALE_MAX, scale))
+          : TEXT_EDITOR.LAYOUT_DEFAULT.scale,
+      };
       pushToProjector(data);
     },
-    [textContent, buildCurrentTextPayload, pushToProjector]
+    [textContent, textLayout, buildCurrentTextPayload, pushToProjector]
   );
 
   const handleAddTextToQueue = useCallback(() => {

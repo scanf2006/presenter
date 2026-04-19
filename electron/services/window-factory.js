@@ -62,11 +62,12 @@ function createProjectorWindowInstance({ BrowserWindow, display, preloadPath }) 
   });
 }
 
-function createProjectorShellUrl({ isDev, timestamp }) {
+function createProjectorShellUrl({ isDev, devUrl, timestamp }) {
   if (isDev) {
+    const baseUrl = (devUrl || 'http://localhost:5199').replace(/\/$/, '');
     return {
       mode: 'url',
-      target: `http://localhost:5199/#/projector?v=${timestamp}`,
+      target: `${baseUrl}/#/projector?v=${timestamp}`,
       extraHeaders: 'pragma: no-cache\n',
     };
   }
@@ -80,9 +81,9 @@ function createProjectorShellUrl({ isDev, timestamp }) {
   };
 }
 
-function loadProjectorShellIntoWindow({ targetWindow, isDev, timestamp = Date.now() }) {
+function loadProjectorShellIntoWindow({ targetWindow, isDev, devUrl, timestamp = Date.now() }) {
   if (!targetWindow || targetWindow.isDestroyed()) return;
-  const shellTarget = createProjectorShellUrl({ isDev, timestamp });
+  const shellTarget = createProjectorShellUrl({ isDev, devUrl, timestamp });
   if (shellTarget.mode === 'url') {
     targetWindow.loadURL(shellTarget.target, {
       extraHeaders: shellTarget.extraHeaders,

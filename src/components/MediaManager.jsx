@@ -693,6 +693,7 @@ function MediaManager({
                   pdfDocument={activePdf.pdfDocument}
                   pageNumber={pageNumber}
                   isSelected={currentPdfPage === pageNumber}
+                  cacheKey={activePdf.path}
                   thumbRef={(el) => {
                     if (el) pdfThumbRefs.current.set(pageNumber, el);
                     else pdfThumbRefs.current.delete(pageNumber);

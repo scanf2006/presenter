@@ -1,5 +1,22 @@
 function createSessionHooks({ session, logger = console }) {
   let youtubeHeaderHookInstalled = false;
+  const devMode = !require('electron').app.isPackaged;
+
+  function resolveDevOrigins() {
+    const fallback = 'http://localhost:5199';
+    const candidate = process.env.ELECTRON_RENDERER_URL || process.env.VITE_DEV_SERVER_URL || fallback;
+    try {
+      const parsed = new URL(candidate);
+      const httpOrigin = `${parsed.protocol}//${parsed.host}`;
+      const wsProtocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsOrigin = `${wsProtocol}//${parsed.host}`;
+      return { httpOrigin, wsOrigin };
+    } catch (_) {
+      return { httpOrigin: fallback, wsOrigin: 'ws://localhost:5199' };
+    }
+  }
+
+  const { httpOrigin: devHttpOrigin, wsOrigin: devWsOrigin } = resolveDevOrigins();
 
   function setupYouTubeRequestHeaders() {
     if (youtubeHeaderHookInstalled) return;
@@ -66,7 +83,8 @@ function createSessionHooks({ session, logger = console }) {
         if (permission === 'media' || permission === 'camera' || permission === 'microphone') {
           try {
             const url = webContents.getURL();
-            const isLocalApp = url.startsWith('file://') || url.startsWith('http://localhost');
+            const isLocalApp =
+              url.startsWith('file://') || (devMode && url.startsWith(`${devHttpOrigin}/`));
             callback(isLocalApp);
           } catch (_) {
             callback(false);
@@ -88,8 +106,8 @@ function createSessionHooks({ session, logger = console }) {
       // In dev mode Vite injects inline scripts for React Fast Refresh preamble,
       // so 'unsafe-inline' is required for script-src. Production builds only use
       // external script files, so inline scripts can be blocked.
-      const devMode = !require('electron').app.isPackaged;
       const scriptSrc = devMode ? "script-src 'self' 'unsafe-inline'; " : "script-src 'self'; ";
+      const devConnectSrc = devMode ? `${devHttpOrigin} ${devWsOrigin} ` : '';
       ses.webRequest.onHeadersReceived((details, callback) => {
         callback({
           responseHeaders: {
@@ -101,7 +119,8 @@ function createSessionHooks({ session, logger = console }) {
                 "img-src 'self' local-media: data: https://i.ytimg.com https://*.ytimg.com; " +
                 "media-src 'self' local-media: https://*.googlevideo.com blob:; " +
                 "frame-src 'self' https://www.youtube.com; " +
-                "connect-src 'self' local-media: https://www.youtube.com https://*.youtube.com https://*.googlevideo.com; " +
+                `connect-src 'self' local-media: ${devConnectSrc}` +
+                'https://www.youtube.com https://*.youtube.com https://*.googlevideo.com; ' +
                 "font-src 'self' data:;",
             ],
           },
@@ -116,10 +135,13 @@ function createSessionHooks({ session, logger = console }) {
   function setupNavigationRestrictions(windowInstance) {
     if (!windowInstance || windowInstance.isDestroyed()) return;
     const wc = windowInstance.webContents;
+    const allowedDevOriginPrefixes = devMode
+      ? [devHttpOrigin, 'http://localhost', 'http://127.0.0.1']
+      : [];
     wc.on('will-navigate', (event, url) => {
       const allowed =
         url.startsWith('file://') ||
-        url.startsWith('http://localhost') ||
+        allowedDevOriginPrefixes.some((prefix) => url.startsWith(prefix)) ||
         url.startsWith('https://www.youtube.com/embed/');
       if (!allowed) {
         logger.warn('[Navigation] Blocked navigation to:', url);

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { resolveSectionForPayload } from '../utils/queueItemMeta';
 
 const DEFAULT_QUEUE_STORAGE_KEY = 'churchdisplay.projectorQueue.v1';
 
@@ -7,15 +8,6 @@ export default function useProjectorQueue({
   showToast,
   storageKey = DEFAULT_QUEUE_STORAGE_KEY,
 }) {
-  const resolveSectionForPayload = useCallback((payload) => {
-    if (!payload?.type) return 'media';
-    if (payload.type === 'text') return 'text';
-    if (payload.type === 'bible') return 'bible';
-    if (payload.type === 'lyrics') return 'songs';
-    if (payload.type === 'song') return 'songs';
-    return 'media';
-  }, []);
-
   const buildQueueItem = useCallback(
     (payload, title, section) => ({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -25,7 +17,7 @@ export default function useProjectorQueue({
       section: section || resolveSectionForPayload(payload),
       createdAt: Date.now(),
     }),
-    [resolveSectionForPayload]
+    []
   );
 
   const getQueueItemTitle = useCallback((payload) => {
@@ -110,7 +102,7 @@ export default function useProjectorQueue({
         return [...prev, buildQueueItem(payload, nextTitle, section)];
       });
     },
-    [activeQueueIndex, buildQueueItem, getQueueItemTitle, resolveSectionForPayload]
+    [activeQueueIndex, buildQueueItem, getQueueItemTitle]
   );
 
   const updateActiveQueueItem = useCallback(
@@ -161,7 +153,7 @@ export default function useProjectorQueue({
         showToast('Auto-saved to selected queue card');
       }
     },
-    [activeQueueIndex, getQueueItemTitle, resolveSectionForPayload, showToast]
+    [activeQueueIndex, getQueueItemTitle, showToast]
   );
 
   const moveQueueItem = useCallback((fromIndex, toIndex) => {
@@ -234,7 +226,6 @@ export default function useProjectorQueue({
     editingQueueId,
     editingQueueTitle,
     setEditingQueueTitle,
-    resolveSectionForPayload,
     getQueueItemTitle,
     addOrUpdateQueueItem,
     updateActiveQueueItem,

@@ -1,5 +1,18 @@
 const path = require('path');
 
+function resolveDevRendererUrl() {
+  const candidate =
+    process.env.ELECTRON_RENDERER_URL || process.env.VITE_DEV_SERVER_URL || 'http://localhost:5199';
+  try {
+    const parsed = new URL(candidate);
+    parsed.hash = '';
+    parsed.search = '';
+    return parsed.toString().replace(/\/$/, '');
+  } catch (_) {
+    return 'http://localhost:5199';
+  }
+}
+
 function buildWindowRuntimeDeps({
   BrowserWindow,
   createControlWindowInstance,
@@ -28,6 +41,8 @@ function buildWindowRuntimeDeps({
   notifyProjectorActive,
   setupNavigationRestrictions,
 }) {
+  const devUrl = resolveDevRendererUrl();
+
   const controlWindowDeps = {
     BrowserWindow,
     createControlWindowInstance,
@@ -36,7 +51,7 @@ function buildWindowRuntimeDeps({
     preloadPath: path.join(electronDir, 'preload.js'),
     iconPath: path.join(electronDir, '../public/icon.png'),
     isDev,
-    devUrl: 'http://localhost:5199',
+    devUrl,
     indexPath: path.join(electronDir, '../dist/index.html'),
     controlCloseController,
     bindControlWindowEvents,

@@ -1,14 +1,50 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useProjectorContext } from '../../../contexts/ProjectorContext';
+import { useAppContext } from '../../../contexts/AppContext';
 
 function DisplaysSection() {
+  const { showToast } = useAppContext();
   const {
     displays,
     projectorDisplayId,
     projectorActive,
     handleStartProjector,
     handleStopProjector,
+    obsModeEnabled,
+    setObsModeEnabled,
   } = useProjectorContext();
+  const prevObsModeRef = useRef(obsModeEnabled);
+  const rememberedProjectorDisplayIdRef = useRef(null);
+
+  useEffect(() => {
+    const prevObsMode = prevObsModeRef.current;
+
+    if (!prevObsMode && obsModeEnabled) {
+      const activeDisplay = displays.find((d) => d.id === projectorDisplayId);
+      if (projectorActive && activeDisplay && !activeDisplay.isPrimary) {
+        rememberedProjectorDisplayIdRef.current = projectorDisplayId;
+        handleStopProjector();
+      }
+    }
+
+    if (prevObsMode && !obsModeEnabled) {
+      const rememberedId = rememberedProjectorDisplayIdRef.current;
+      const rememberedDisplay = displays.find((d) => d.id === rememberedId);
+      if (!projectorActive && rememberedDisplay && !rememberedDisplay.isPrimary) {
+        handleStartProjector(rememberedId);
+      }
+    }
+
+    prevObsModeRef.current = obsModeEnabled;
+  }, [
+    obsModeEnabled,
+    projectorActive,
+    projectorDisplayId,
+    displays,
+    handleStartProjector,
+    handleStopProjector,
+  ]);
+  const canToggleObsMode = obsModeEnabled || projectorActive;
 
   return (
     <div className="animate-slide-in-up">
@@ -17,12 +53,50 @@ function DisplaysSection() {
         Select an external display to start projection. Content will be fullscreen on the selected
         screen.
       </p>
+      <div
+        className={`display-card ${obsModeEnabled ? 'display-card--active' : ''}`}
+        style={{
+          marginBottom: '14px',
+          opacity: canToggleObsMode ? 1 : 0.55,
+          cursor: canToggleObsMode ? 'pointer' : 'not-allowed',
+        }}
+        role="button"
+        tabIndex={0}
+        onClick={() => {
+          if (!canToggleObsMode) {
+            showToast('Start projector first, then enable OBS Mode.', 'warning');
+            return;
+          }
+          setObsModeEnabled(!obsModeEnabled);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            if (!canToggleObsMode) {
+              showToast('Start projector first, then enable OBS Mode.', 'warning');
+              return;
+            }
+            setObsModeEnabled(!obsModeEnabled);
+          }
+        }}
+      >
+        <span className="display-card__icon">OBS</span>
+        <div className="display-card__info">
+          <div className="display-card__name">OBS Mode</div>
+          <div className="display-card__resolution">
+            Use OBS window capture + Fullscreen Projector on external display.
+          </div>
+        </div>
+        <span className="display-card__badge display-card__badge--projecting">
+          {obsModeEnabled ? 'Enabled' : canToggleObsMode ? 'Disabled' : 'Unavailable'}
+        </span>
+      </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
         {displays.map((display) => (
           <div
             key={display.id}
             className={`display-card ${projectorDisplayId === display.id ? 'display-card--active' : ''}`}
-            onClick={() => !display.isPrimary && handleStartProjector(display.id)}
+            onClick={() => !obsModeEnabled && !display.isPrimary && handleStartProjector(display.id)}
           >
             <span className="display-card__icon">{display.isPrimary ? 'P' : 'E'}</span>
             <div className="display-card__info">
@@ -44,7 +118,7 @@ function DisplaysSection() {
         ))}
       </div>
 
-      {projectorActive && (
+      {projectorActive && !obsModeEnabled && (
         <button
           className="btn btn--danger btn--lg"
           style={{ marginTop: '24px', width: '100%' }}

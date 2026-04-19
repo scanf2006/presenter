@@ -6,6 +6,7 @@ function createMainUiRuntime({
   normalizeYouTubeWatchUrl,
   loadProjectorShellIntoWindow,
   isDev,
+  devUrl,
   BrowserWindow,
   screenManager,
   electronDir,
@@ -15,6 +16,7 @@ function createMainUiRuntime({
     loadProjectorShell: (win) => loadProjectorShellIntoWindow({
       targetWindow: win,
       isDev,
+      devUrl,
     }),
   });
 
