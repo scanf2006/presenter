@@ -42,6 +42,8 @@ export function ProjectorProvider({ children }) {
     setTransitionDurationMs,
     sceneConfig,
     setSceneConfig,
+    obsModeEnabled,
+    setObsModeEnabled,
   } = useProjectionSettings({ isElectron });
 
   const {
@@ -180,6 +182,8 @@ export function ProjectorProvider({ children }) {
       setTransitionDurationMs,
       sceneConfig,
       setSceneConfig,
+      obsModeEnabled,
+      setObsModeEnabled,
       // Preview geometry
       previewStageRef,
       previewStageWidth,
@@ -239,6 +243,8 @@ export function ProjectorProvider({ children }) {
       setTransitionDurationMs,
       sceneConfig,
       setSceneConfig,
+      obsModeEnabled,
+      setObsModeEnabled,
       previewStageWidth,
       previewAspectRatio,
       previewSplitEnabled,

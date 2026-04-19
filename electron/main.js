@@ -102,8 +102,22 @@ configureAppBootstrap({ app, protocol });
 
 const dbStore = createDatabaseStore();
 
+function resolveDevRendererUrl() {
+  const candidate =
+    process.env.ELECTRON_RENDERER_URL || process.env.VITE_DEV_SERVER_URL || 'http://localhost:5199';
+  try {
+    const parsed = new URL(candidate);
+    parsed.hash = '';
+    parsed.search = '';
+    return parsed.toString().replace(/\/$/, '');
+  } catch (_) {
+    return 'http://localhost:5199';
+  }
+}
+
 // Development mode flag.
 const isDev = process.env.NODE_ENV !== 'production' && !app.isPackaged;
+const devRendererUrl = resolveDevRendererUrl();
 if (isDev) {
   // Keep development data isolated from packaged installs so local dev
   // license/trial state cannot leak into installer builds on the same machine.
@@ -155,6 +169,7 @@ const { projectorChannel, splashController } = createMainUiRuntime({
   normalizeYouTubeWatchUrl,
   loadProjectorShellIntoWindow,
   isDev,
+  devUrl: devRendererUrl,
   BrowserWindow,
   screenManager,
   electronDir: __dirname,

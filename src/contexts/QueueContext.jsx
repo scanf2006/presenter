@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useMemo } from
 import useProjectorQueue from '../hooks/useProjectorQueue';
 import useQueueCrudActions from '../hooks/useQueueCrudActions';
 import useQueuePlayback from '../hooks/useQueuePlayback';
+import { isBibleQueueItem, isSongQueueItem } from '../utils/queueItemMeta';
 import { useAppContext } from './AppContext';
 import { useProjectorContext } from './ProjectorContext';
 
@@ -105,8 +106,7 @@ export function QueueProvider({ applyTextPayloadToEditor, children }) {
 
   const handleQueueItemSelected = useCallback(
     (item) => {
-      const isSongQueueItem = item?.section === 'songs';
-      if (isSongQueueItem && transitionEnabled) {
+      if ((isSongQueueItem(item) || isBibleQueueItem(item)) && transitionEnabled) {
         setTransitionEnabled(false);
       }
     },

@@ -1,4 +1,5 @@
 import { useCallback, useRef } from 'react';
+import { getPayloadTypeFromItem, resolveSectionForQueueItem } from '../utils/queueItemMeta';
 
 export default function useQueuePlayback({
   projectorQueue,
@@ -22,14 +23,14 @@ export default function useQueuePlayback({
       if (index < 0 || index >= projectorQueue.length) return;
 
       const item = projectorQueue[index];
+      const payloadType = getPayloadTypeFromItem(item);
+      const resolvedSection = resolveSectionForQueueItem(item);
       if (typeof onQueueItemSelected === 'function') {
         onQueueItemSelected(item);
       }
       setActiveQueueIndex(index);
-      if (item.section) {
-        setActiveSection(item.section);
-      }
-      if (item.section === 'media' && typeof onMediaQueueItemPlayed === 'function') {
+      setActiveSection(resolvedSection);
+      if (resolvedSection === 'media' && typeof onMediaQueueItemPlayed === 'function') {
         onMediaQueueItemPlayed(item);
       }
 
@@ -38,24 +39,24 @@ export default function useQueuePlayback({
       }
 
       if (
-        item.section === 'media' &&
-        (item.payload?.type === 'ppt' || item.payload?.type === 'pdf')
+        resolvedSection === 'media' &&
+        (payloadType === 'ppt' || payloadType === 'pdf')
       ) {
         pendingBibleClickIdRef.current = null;
         setActivePreloadItem({
           type: item.payload.type,
           payload: {
-            type: item.payload.type,
+            type: payloadType,
             path: item.payload.path,
             name: item.payload.name || item.title,
-            deferProject: item.payload.type === 'ppt' || item.payload.type === 'pdf',
+            deferProject: payloadType === 'ppt' || payloadType === 'pdf',
           },
           token: Date.now(),
         });
         return;
       }
 
-      if (item.section === 'songs' && item.payload?.type === 'song') {
+      if (resolvedSection === 'songs' && payloadType === 'song') {
         pendingBibleClickIdRef.current = null;
         setActivePreloadItem({
           type: 'song',
@@ -68,7 +69,7 @@ export default function useQueuePlayback({
         return;
       }
 
-      if (item.section === 'bible' && item.payload?.type === 'bible') {
+      if (resolvedSection === 'bible' && payloadType === 'bible') {
         const isSecondClickSameItem = pendingBibleClickIdRef.current === item.id;
         pendingBibleClickIdRef.current = isSecondClickSameItem ? null : item.id;
 

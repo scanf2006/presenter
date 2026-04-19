@@ -4,6 +4,7 @@ import { SCENE, TRANSITION } from '../constants/ui';
 
 const TRANSITION_STORAGE_KEY = 'churchdisplay.transition.v1';
 const SCENE_STORAGE_KEY = 'churchdisplay.scene.v1';
+const OBS_MODE_STORAGE_KEY = 'churchdisplay.obsMode.v1';
 
 const DEFAULT_SCENE_CONFIG = {
   mode: SCENE.DEFAULT_MODE,
@@ -20,9 +21,11 @@ export default function useProjectionSettings({ isElectron }) {
   const [transitionDelayMs, setTransitionDelayMs] = useState(TRANSITION.DEFAULT_DELAY_MS);
   const [transitionDurationMs, setTransitionDurationMs] = useState(TRANSITION.DEFAULT_DURATION_MS);
   const [sceneConfig, setSceneConfig] = useState(DEFAULT_SCENE_CONFIG);
+  const [obsModeEnabled, setObsModeEnabled] = useState(false);
   // R3-M: Guard to prevent persist effects from sending default values before hydration.
   const transitionHydrated = useRef(false);
   const sceneHydrated = useRef(false);
+  const obsModeHydrated = useRef(false);
 
   useEffect(() => {
     try {
@@ -131,6 +134,25 @@ export default function useProjectionSettings({ isElectron }) {
     }
   }, [sceneConfig, isElectron]);
 
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(OBS_MODE_STORAGE_KEY);
+      setObsModeEnabled(raw === '1');
+    } catch (err) {
+      console.warn('[OBSMode] restore failed:', err);
+    }
+    obsModeHydrated.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (!obsModeHydrated.current) return;
+    try {
+      window.localStorage.setItem(OBS_MODE_STORAGE_KEY, obsModeEnabled ? '1' : '0');
+    } catch (err) {
+      console.warn('[OBSMode] persist failed:', err);
+    }
+  }, [obsModeEnabled]);
+
   return {
     transitionEnabled,
     setTransitionEnabled,
@@ -140,5 +162,7 @@ export default function useProjectionSettings({ isElectron }) {
     setTransitionDurationMs,
     sceneConfig,
     setSceneConfig,
+    obsModeEnabled,
+    setObsModeEnabled,
   };
 }

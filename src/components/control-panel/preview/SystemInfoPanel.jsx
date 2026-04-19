@@ -11,6 +11,7 @@ function SystemInfoPanel() {
   const {
     displays,
     projectorActive,
+    obsModeEnabled,
     handleExportSetupBundle,
     handleImportSetupBundle,
     setupTransferBusy,
@@ -30,10 +31,14 @@ function SystemInfoPanel() {
           <span>Projector Status</span>
           <span
             style={{
-              color: projectorActive ? 'var(--color-success)' : 'var(--color-text-muted)',
+              color: obsModeEnabled
+                ? 'var(--color-warning)'
+                : projectorActive
+                  ? 'var(--color-success)'
+                  : 'var(--color-text-muted)',
             }}
           >
-            {projectorActive ? 'Running' : 'Stopped'}
+            {obsModeEnabled ? 'Managed by OBS' : projectorActive ? 'Running' : 'Stopped'}
           </span>
         </div>
         <div className="cp-meta-row">
