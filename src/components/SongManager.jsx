@@ -55,6 +55,8 @@ function SongManager({
   const [selectedSectionIndex, setSelectedSectionIndex] = useState(-1);
   // 搜索
   const [searchQuery, setSearchQuery] = useState('');
+  // Keep projection-selection continuity:
+  // when background changes, we can re-project the last section with new background.
   const lastProjectedSectionRef = useRef(null);
   const lastAppliedExternalPickRef = useRef(null);
   const lastHandledPreloadRef = useRef(null);
@@ -363,6 +365,8 @@ function SongManager({
     async (song, bg, options = {}) => {
       if (!song) return null;
       const nextSong = mergeSongWithBackground(song, bg);
+      // Options allow reuse in both selected-song and picker-song paths
+      // without forking logic into separate near-duplicate functions.
       const syncSelectedSong = options.syncSelectedSong !== false;
       const syncSongBackground = options.syncSongBackground !== false;
 
@@ -402,6 +406,7 @@ function SongManager({
     if (lastAppliedExternalPickRef.current === externalPickKey) return;
     lastAppliedExternalPickRef.current = externalPickKey;
 
+    // Optimistically reflect picker choice in UI immediately; persistence follows.
     setSongBackground(externalBackground);
 
     const pickerSong =

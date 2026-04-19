@@ -1,5 +1,14 @@
 import { useEffect } from 'react';
 
+/**
+ * Centralized song-section navigation behavior.
+ * Keeps card focus/scroll synced with selected index and handles keyboard traversal.
+ *
+ * Design rules kept here:
+ * - Navigation does not wrap at edges (first/last stay pinned).
+ * - Keyboard shortcuts are ignored while typing in form controls.
+ * - Selecting a card via keyboard triggers the same projection path as mouse click.
+ */
 function useSongSectionNavigation({
   isSongsSectionActive,
   selectedSong,
@@ -13,6 +22,8 @@ function useSongSectionNavigation({
   blankSectionIndex,
 }) {
   useEffect(() => {
+    // Ensure selected card stays visible when selection changes externally
+    // (keyboard, queue preload, or section programmatic updates).
     if (!isSongsSectionActive) return;
     if (!selectedSong) return;
     const sections = parseLyrics(selectedSong.lyrics);
@@ -89,6 +100,7 @@ function useSongSectionNavigation({
       } else if (goPrev) {
         nextPos = currentPos <= 0 ? 0 : currentPos - 1;
       } else if (goNext) {
+        // Edge-pinned behavior: do not jump into unrelated UI when reaching last card.
         nextPos = currentPos < 0 ? 0 : Math.min(totalCards - 1, currentPos + 1);
       }
       if (nextPos === currentPos) return;
