@@ -272,12 +272,35 @@ function MediaManager({
     });
   }, [youtubeUrl, parseYouTubeId, onProjectMedia, showToast]);
 
-  const handleQueueYouTube = useCallback(() => {
+  const handleQueueYouTube = useCallback(async () => {
     const id = parseYouTubeId(youtubeUrl);
     if (!id) {
       showToast('Please enter a valid YouTube URL', 'warning');
       return;
     }
+    const normalizedUrl = normalizeYouTubeWatchUrl(youtubeUrl) || youtubeUrl.trim();
+    let cachedMeta = null;
+
+    // Best-effort pre-cache at queue-time so first queue playback can start faster.
+    if (
+      typeof window !== 'undefined' &&
+      window.churchDisplay &&
+      typeof window.churchDisplay.youtubeCacheDownload === 'function'
+    ) {
+      try {
+        const resolved = await window.churchDisplay.youtubeCacheDownload(normalizedUrl);
+        if (resolved?.success && resolved?.localPath) {
+          cachedMeta = {
+            cachedLocalPath: resolved.localPath,
+            cachedAt: Date.now(),
+            cachedTitle: resolved.title || '',
+          };
+        }
+      } catch (_) {
+        // Ignore cache warm-up errors here; queue add should still succeed.
+      }
+    }
+
     if (onAddPlaylist) {
       onAddPlaylist({
         type: 'youtube',
@@ -285,10 +308,14 @@ function MediaManager({
         payload: {
           type: 'youtube',
           videoId: id,
-          url: normalizeYouTubeWatchUrl(youtubeUrl) || youtubeUrl.trim(),
-          name: `YouTube - ${id}`,
+          url: normalizedUrl,
+          name: cachedMeta?.cachedTitle || `YouTube - ${id}`,
+          ...cachedMeta,
         },
       });
+      if (cachedMeta?.cachedLocalPath) {
+        showToast('YouTube cached and added to queue');
+      }
     }
   }, [youtubeUrl, parseYouTubeId, onAddPlaylist, showToast]);
 

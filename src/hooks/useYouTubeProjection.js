@@ -18,6 +18,19 @@ export default function useYouTubeProjection({ isElectron }) {
   const resolveYouTubePayload = useCallback(async (payload) => {
     if (!payload || payload.type !== 'youtube') return payload;
 
+    // Queue items may carry a warm cache path from queue-time pre-download.
+    // Prefer this local file to avoid extra resolve/download roundtrips.
+    if (payload.cachedLocalPath) {
+      return {
+        type: 'video',
+        path: payload.cachedLocalPath,
+        name: payload.cachedTitle || payload.name || 'YouTube Video',
+        source: 'youtube-cache',
+        videoId: payload.videoId || '',
+        originalUrl: payload.url || '',
+      };
+    }
+
     const inputUrl = normalizeYouTubeUrl(payload);
     if (!inputUrl) return payload;
 
