@@ -346,7 +346,7 @@ function SongManager({
         lines: [],
       });
       if (queuePayload) {
-        onUpdateActiveQueueItem(queuePayload, `${selectedSong.title} - Blank`, 'songs');
+        onUpdateActiveQueueItem(queuePayload, selectedSong.title, 'songs');
       }
     }
   }, [

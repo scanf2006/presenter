@@ -1,9 +1,15 @@
 ﻿import React, { useEffect, useRef, useState } from 'react';
 
 /**
- * PdfRenderer - render one PDF page into a canvas with contain-fit behavior.
+ * PdfRenderer - render one PDF page into a canvas with configurable fit behavior.
  */
-const PdfRenderer = ({ path, pageNumber = 1, className = '', onLoadSuccess }) => {
+const PdfRenderer = ({
+  path,
+  pageNumber = 1,
+  fitMode = 'cover',
+  className = '',
+  onLoadSuccess,
+}) => {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [errorMsg, setErrorMsg] = useState(null);
@@ -120,7 +126,7 @@ const PdfRenderer = ({ path, pageNumber = 1, className = '', onLoadSuccess }) =>
         const unscaledViewport = page.getViewport({ scale: 1 });
         const scaleX = containerWidth / unscaledViewport.width;
         const scaleY = containerHeight / unscaledViewport.height;
-        const scale = Math.min(scaleX, scaleY);
+        const scale = fitMode === 'contain' ? Math.min(scaleX, scaleY) : Math.max(scaleX, scaleY);
 
         const viewport = page.getViewport({ scale });
         const dpr = window.devicePixelRatio || 1;
@@ -147,7 +153,7 @@ const PdfRenderer = ({ path, pageNumber = 1, className = '', onLoadSuccess }) =>
     return () => {
       cancelled = true;
     };
-  }, [pageNumber, containerVersion]);
+  }, [pageNumber, containerVersion, fitMode]);
 
   return (
     <div
@@ -180,7 +186,7 @@ const PdfRenderer = ({ path, pageNumber = 1, className = '', onLoadSuccess }) =>
       ) : (
         <canvas
           ref={canvasRef}
-          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+          style={{ display: 'block' }}
         />
       )}
     </div>

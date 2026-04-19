@@ -412,6 +412,7 @@ function MediaManager({
           path: slide.path,
           name: `PPT - Page ${nextIndex + 1}`,
           fitMode: 'contain',
+          originType: 'ppt',
         });
       }
     };
@@ -781,6 +782,7 @@ function MediaManager({
                     path: slide.path,
                     name: `PPT - Page ${index + 1}`,
                     fitMode: 'contain',
+                    originType: 'ppt',
                   });
                 }}
                 style={getSelectableThumbCardStyle(currentSlideIndex === index)}
