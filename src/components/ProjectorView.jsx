@@ -234,6 +234,13 @@ function ProjectorView() {
 
   const effectiveMedia =
     standaloneMedia || (backgroundMedia ? { ...backgroundMedia, standalone: false } : null);
+  const mediaPathForDetect = String(content?.path || effectiveMedia?.path || '');
+  const mediaNameForDetect = String(content?.name || '');
+  const isPptImage =
+    effectiveMedia?.type === 'image' &&
+    (content?.originType === 'ppt' ||
+      /ppt/i.test(mediaNameForDetect) ||
+      /[\\/]media[\\/]ppt[\\/]/i.test(mediaPathForDetect));
   const isTextualContent =
     content && (content.type === 'text' || content.type === 'bible' || content.type === 'lyrics');
   const hasVideoBackgroundForText = Boolean(
@@ -399,7 +406,7 @@ function ProjectorView() {
   const fullScreenMediaStyle = {
     width: '100%',
     height: '100%',
-    objectFit: (content?.fitMode || effectiveMedia?.fitMode) === 'contain' ? 'contain' : 'cover',
+    objectFit: isPptImage ? 'contain' : 'cover',
     objectPosition: 'center center',
     display: 'block',
     borderRadius: 0,
@@ -482,12 +489,38 @@ function ProjectorView() {
         )}
 
         {!isBlackout && effectiveMedia?.type === 'image' && (
-          <img
-            key={effectiveMedia.path}
-            src={getMediaUrl(effectiveMedia.path)}
-            alt="background"
-            style={fullScreenMediaStyle}
-          />
+          <>
+            {isPptImage && (
+              <img
+                key={`${effectiveMedia.path}-fill`}
+                src={getMediaUrl(effectiveMedia.path)}
+                alt=""
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  objectPosition: 'center center',
+                  display: 'block',
+                  borderRadius: 0,
+                  filter: 'blur(26px) brightness(0.58)',
+                  transform: 'scale(1.08)',
+                }}
+              />
+            )}
+            <img
+              key={effectiveMedia.path}
+              src={getMediaUrl(effectiveMedia.path)}
+              alt="background"
+              style={{
+                ...fullScreenMediaStyle,
+                position: isPptImage ? 'absolute' : 'static',
+                inset: isPptImage ? 0 : undefined,
+                zIndex: isPptImage ? 2 : undefined,
+                transform: isPptImage ? 'scale(1.05)' : undefined,
+                transformOrigin: isPptImage ? 'center center' : undefined,
+              }}
+            />
+          </>
         )}
       </div>
 

@@ -34,6 +34,13 @@ function PreviewStage() {
     previewMaskVisible,
     transitionDurationMs,
   } = useProjectorContext();
+  const previewPathForDetect = String(previewSlide?.path || '');
+  const previewNameForDetect = String(previewSlide?.name || '');
+  const isPreviewPptImage =
+    previewSlide?.type === 'image' &&
+    (previewSlide?.originType === 'ppt' ||
+      /ppt/i.test(previewNameForDetect) ||
+      /[\\/]media[\\/]ppt[\\/]/i.test(previewPathForDetect));
 
   return (
     <div
@@ -157,18 +164,41 @@ function PreviewStage() {
               )}
 
               {previewSlide.type === 'image' && (
-                <img
-                  src={getPreviewMediaUrl(previewSlide.path)}
-                  alt={previewSlide.name}
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: previewSlide?.fitMode === 'contain' ? 'contain' : 'cover',
-                    borderRadius: 0,
-                    display: 'block',
-                    background: '#000',
-                  }}
-                />
+                <>
+                  {isPreviewPptImage && (
+                    <img
+                      src={getPreviewMediaUrl(previewSlide.path)}
+                      alt=""
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        borderRadius: 0,
+                        display: 'block',
+                        filter: 'blur(16px) brightness(0.62)',
+                        transform: 'scale(1.08)',
+                      }}
+                    />
+                  )}
+                  <img
+                    src={getPreviewMediaUrl(previewSlide.path)}
+                    alt={previewSlide.name}
+                    style={{
+                      position: isPreviewPptImage ? 'relative' : 'static',
+                      zIndex: isPreviewPptImage ? 1 : 'auto',
+                      width: '100%',
+                      height: '100%',
+                      objectFit: isPreviewPptImage ? 'contain' : 'cover',
+                      borderRadius: 0,
+                      display: 'block',
+                      background: '#000',
+                      transform: isPreviewPptImage ? 'scale(1.05)' : undefined,
+                      transformOrigin: isPreviewPptImage ? 'center center' : undefined,
+                    }}
+                  />
+                </>
               )}
 
               {previewSlide.type === 'video' && (
