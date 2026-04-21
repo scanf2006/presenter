@@ -15,7 +15,20 @@ function SystemInfoPanel() {
     handleExportSetupBundle,
     handleImportSetupBundle,
     setupTransferBusy,
+    startupHealthBusy,
+    startupHealthReport,
+    runStartupHealthCheck,
   } = useProjectorContext();
+
+  const healthSummary = startupHealthReport?.summary || { okCount: 0, warnCount: 0, errorCount: 0 };
+  const healthStatusText = startupHealthReport
+    ? healthSummary.errorCount > 0
+      ? `${healthSummary.errorCount} Error(s)`
+      : healthSummary.warnCount > 0
+        ? `${healthSummary.warnCount} Warning(s)`
+        : 'Healthy'
+    : 'Not checked';
+  const topIssues = (startupHealthReport?.checks || []).filter((c) => c.status !== 'ok').slice(0, 2);
 
   return (
     <>
@@ -49,6 +62,41 @@ function SystemInfoPanel() {
           <span>Export Mode</span>
           <span className="cp-meta-value">Smart Minimal Bundle</span>
         </div>
+        <div className="cp-meta-row">
+          <span>Startup Check</span>
+          <span
+            style={{
+              color:
+                healthSummary.errorCount > 0
+                  ? 'var(--color-danger)'
+                  : healthSummary.warnCount > 0
+                    ? 'var(--color-warning)'
+                    : 'var(--color-success)',
+            }}
+          >
+            {healthStatusText}
+          </span>
+        </div>
+        <button
+          className="btn btn--ghost"
+          style={{ width: '100%', padding: '6px 8px', fontSize: '11px', marginTop: '6px' }}
+          onClick={() => runStartupHealthCheck()}
+          disabled={startupHealthBusy}
+        >
+          {startupHealthBusy ? 'Checking...' : 'Run Startup Check'}
+        </button>
+        {topIssues.map((issue) => (
+          <div
+            key={issue.id}
+            style={{
+              marginTop: '8px',
+              fontSize: '11px',
+              color: issue.status === 'error' ? 'var(--color-danger)' : 'var(--color-warning)',
+            }}
+          >
+            {issue.label}: {issue.detail}
+          </div>
+        ))}
         <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
           <button
             className="btn btn--ghost"

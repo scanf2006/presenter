@@ -5,11 +5,31 @@ export default function useProjectorPreviewDispatch({
   transitionEnabled,
   transitionDelayMs,
   transitionDurationMs,
+  showToast,
+  suppressDeliveryWarnings = false,
 }) {
   const [currentSlide, setCurrentSlide] = useState(null);
   const [previewSlide, setPreviewSlide] = useState(null);
   const [previewMaskVisible, setPreviewMaskVisible] = useState(false);
   const previewTimersRef = useRef([]);
+  const deliveryTimeoutMsRef = useRef(1800);
+
+  const waitForAckWithTimeout = useCallback(async (data) => {
+    if (!isElectron || !window.churchDisplay) return { ok: true, mode: 'browser' };
+    if (typeof window.churchDisplay.sendToProjectorWithAck !== 'function') {
+      window.churchDisplay.sendToProjector(data);
+      return { ok: true, mode: 'legacy-send' };
+    }
+
+    const ackPromise = window.churchDisplay.sendToProjectorWithAck(data);
+    const timeoutPromise = new Promise((resolve) =>
+      setTimeout(
+        () => resolve({ ok: false, reason: 'ack_timeout', message: 'Projector acknowledgment timeout.' }),
+        deliveryTimeoutMsRef.current
+      )
+    );
+    return Promise.race([ackPromise, timeoutPromise]);
+  }, [isElectron]);
 
   const clearPreviewTimers = useCallback(() => {
     previewTimersRef.current.forEach((t) => clearTimeout(t));
@@ -49,13 +69,34 @@ export default function useProjectorPreviewDispatch({
       setCurrentSlide(data);
       applyPreviewTransition(data);
       if (isElectron && window.churchDisplay) {
-        window.churchDisplay.sendToProjector(data);
+        // Reliability layer: await main-process ACK with timeout and retry once on failure.
+        Promise.resolve()
+          .then(async () => {
+            let ack = await waitForAckWithTimeout(data);
+            if (ack?.ok) return;
+            const firstReason = ack?.reason || 'unknown';
+            ack = await waitForAckWithTimeout(data);
+            if (!ack?.ok && !suppressDeliveryWarnings && typeof showToast === 'function') {
+              showToast(`Projector delivery delayed (${firstReason}).`, 'warning');
+            }
+          })
+          .catch((err) => {
+            if (!suppressDeliveryWarnings && typeof showToast === 'function') {
+              showToast(`Projector delivery failed: ${err?.message || 'Unknown error'}`, 'error');
+            }
+          });
         if (typeof window.churchDisplay.sendToProjectorBackground === 'function') {
           window.churchDisplay.sendToProjectorBackground(data?.background || null);
         }
       }
     },
-    [isElectron, applyPreviewTransition]
+    [
+      isElectron,
+      applyPreviewTransition,
+      waitForAckWithTimeout,
+      showToast,
+      suppressDeliveryWarnings,
+    ]
   );
 
   const blackout = useCallback(() => {

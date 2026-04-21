@@ -1,5 +1,6 @@
 const fsp = require('fs/promises');
 const path = require('path');
+const { buildQueueEnvelope, migrateQueuePayload } = require('../services/queue-schema');
 
 function registerQueueIPC({ ipcMain, app }) {
   // R3-M: Size limit to prevent unbounded queue growth.
@@ -13,7 +14,8 @@ function registerQueueIPC({ ipcMain, app }) {
       if (safeQueue.length > MAX_QUEUE_SIZE) {
         safeQueue = safeQueue.slice(0, MAX_QUEUE_SIZE);
       }
-      const json = JSON.stringify(safeQueue, null, 2);
+      const envelope = buildQueueEnvelope(safeQueue);
+      const json = JSON.stringify(envelope, null, 2);
       if (Buffer.byteLength(json, 'utf8') > MAX_QUEUE_BYTES) {
         return { success: false, error: 'Queue data exceeds maximum size.' };
       }
@@ -39,7 +41,7 @@ function registerQueueIPC({ ipcMain, app }) {
         throw readErr;
       }
       const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
+      return migrateQueuePayload(parsed).items;
     } catch (err) {
       console.warn('[Queue] load failed:', err.message);
       return [];

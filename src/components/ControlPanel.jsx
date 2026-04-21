@@ -21,7 +21,7 @@ const APP_VERSION = appPkg.version;
  * section-navigation orchestration that bridges them.
  */
 function ControlPanelInner() {
-  const { toast, dialog, closeDialog, setActiveSection } = useAppContext();
+  const { toast, autosaveToast, dialog, closeDialog, setActiveSection } = useAppContext();
   const { setActiveQueueIndex, activeQueueIndex, projectorQueue, mediaQueueHomeToken } =
     useQueueContext();
   const { handleClearProjector, resetFreeTextEditor } = useTextEditorContext();
@@ -72,6 +72,7 @@ function ControlPanelInner() {
       <PreviewPanel nextQueueTitle={nextQueueTitle} />
       <LegalModal />
       <ToastOverlay toast={toast} />
+      <ToastOverlay toast={autosaveToast} slot="autosave" />
       <AppDialog dialog={dialog} onClose={closeDialog} />
     </div>
   );

@@ -5,6 +5,7 @@ const { registerLicenseIPC } = require('./license');
 const { registerMediaIPC } = require('./media');
 const { registerSetupBundleIPC } = require('./setup-bundle');
 const { registerQueueIPC } = require('./queue');
+const { registerHealthIPC } = require('./health');
 
 function registerAllIPC(config) {
   const {
@@ -44,6 +45,8 @@ function registerAllIPC(config) {
     pptConvertTimeoutMs,
     getRuntimePptConvertScriptPath,
     app,
+    electronDir,
+    processResourcesPath,
     formatBackupStamp,
     collectReferencedMediaPathsFromQueue,
     copyDirectoryMerge,
@@ -125,6 +128,17 @@ function registerAllIPC(config) {
   });
 
   registerQueueIPC({ ipcMain, app });
+
+  registerHealthIPC({
+    ipcMain,
+    app,
+    screenManager,
+    mediaDir,
+    mediaYouTubeCacheDir,
+    getRuntimePptConvertScriptPath,
+    electronDir,
+    processResourcesPath,
+  });
 }
 
 module.exports = {
