@@ -29,6 +29,7 @@ const api = {
 
   // Content push
   sendToProjector: (data) => ipcRenderer.send('send-to-projector', data),
+  sendToProjectorWithAck: (data) => ipcRenderer.invoke('send-to-projector-ack', data),
   sendToProjectorBackground: (data) => ipcRenderer.send('send-to-projector-background', data),
   sendTransition: (transitionData) => ipcRenderer.send('projector-transition', transitionData),
   sendProjectorScene: (sceneData) => ipcRenderer.send('projector-scene', sceneData),
@@ -59,6 +60,7 @@ const api = {
   // Queue
   queueSave: (queue) => ipcRenderer.invoke('queue-save', queue),
   queueLoad: () => ipcRenderer.invoke('queue-load'),
+  startupHealthCheck: () => ipcRenderer.invoke('startup-health-check'),
 
   // YouTube
   youtubeResolve: (url) => ipcRenderer.invoke('youtube-resolve', url),

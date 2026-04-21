@@ -32,9 +32,41 @@ test('queue-save and queue-load persist queue file in userData', async () => {
 
   const queuePath = path.join(userData, 'projector-queue.json');
   assert.equal(fs.existsSync(queuePath), true);
+  const persisted = JSON.parse(fs.readFileSync(queuePath, 'utf8'));
+  assert.equal(persisted.schemaVersion, 2);
+  assert.ok(Array.isArray(persisted.items));
 
   const loaded = await invoke('queue-load');
-  assert.deepEqual(loaded, queue);
+  assert.equal(loaded.length, 1);
+  assert.equal(loaded[0].id, '1');
+  assert.equal(loaded[0].title, 'Song A');
+  assert.equal(loaded[0].type, 'lyrics');
+  assert.equal(loaded[0].section, 'songs');
+  assert.deepEqual(loaded[0].payload, { type: 'lyrics', text: 'hello' });
+  assert.ok(Number.isFinite(loaded[0].createdAt));
+
+  fs.rmSync(userData, { recursive: true, force: true });
+});
+
+test('queue-load migrates legacy v1 array payload', async () => {
+  const userData = makeTempDir('cdp-queue-v1-');
+  const { ipcMain, invoke } = createIpcHarness();
+  const app = { getPath: () => userData };
+  registerQueueIPC({ ipcMain, app });
+
+  const queuePath = path.join(userData, 'projector-queue.json');
+  fs.writeFileSync(
+    queuePath,
+    JSON.stringify([{ title: 'Legacy', type: 'bible', payload: { type: 'bible', reference: 'John 3:16' } }]),
+    'utf8'
+  );
+
+  const loaded = await invoke('queue-load');
+  assert.equal(loaded.length, 1);
+  assert.equal(loaded[0].title, 'Legacy');
+  assert.equal(loaded[0].section, 'bible');
+  assert.equal(loaded[0].type, 'bible');
+  assert.ok(Number.isFinite(loaded[0].createdAt));
 
   fs.rmSync(userData, { recursive: true, force: true });
 });

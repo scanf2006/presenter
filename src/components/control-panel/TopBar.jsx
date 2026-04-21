@@ -78,18 +78,18 @@ function TopBar({ appVersion, onClear }) {
   } = useProjectorContext();
 
   const { trialLabel, trialExpired, handleOpenLegal } = useLicenseContext();
+  const copyrightNotice =
+    '\u6b64\u7248\u672c\u4e3a\u591a\u4f26\u591a\u795e\u53ec\u4f1a\u6d3b\u77f3\u5802\u7279\u4f9b--\u7248\u6743\u5c5e\u4e8eAiden\u6240\u6709aiden2006.video@gmail.com';
 
   return (
     <div className="top-bar">
       <div className="top-bar__brand">
         <div className="top-bar__logo">CD</div>
-        <span className="top-bar__title">
-          ChurchDisplay Pro (
-          {
-            '\u6b64\u7248\u672c\u4e3a\u591a\u4f26\u591a\u795e\u53ec\u4f1a\u6d3b\u77f3\u5802\u7279\u4f9b--\u7248\u6743\u5c5e\u4e8eAiden\u6240\u6709aiden2006.video@gmail.com'
-          }
-          ) v{appVersion}
-        </span>
+        <div className="top-bar__brand-inline">
+          <span className="top-bar__title">ChurchDisplay Pro</span>
+          <span className="top-bar__notice-inline">{copyrightNotice}</span>
+          <span className="top-bar__version-inline">v{appVersion}</span>
+        </div>
       </div>
       <div className="top-bar__controls">
         <div className="cp-status-inline">

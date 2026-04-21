@@ -7,11 +7,15 @@ const TONE_CLASS = {
   error: 'cp-toast--error',
 };
 
-function ToastOverlay({ toast }) {
+function ToastOverlay({ toast, slot = 'default' }) {
   if (!toast) return null;
 
   return (
-    <div className={`cp-toast ${TONE_CLASS[toast.tone] || TONE_CLASS.info}`}>{toast.message}</div>
+    <div
+      className={`cp-toast ${slot === 'autosave' ? 'cp-toast--autosave-slot' : ''} ${TONE_CLASS[toast.tone] || TONE_CLASS.info}`}
+    >
+      {toast.message}
+    </div>
   );
 }
 

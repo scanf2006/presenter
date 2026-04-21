@@ -45,12 +45,20 @@ function registerProjectorEventIPC({
     return access;
   }
 
-  ipcMain.on('send-to-projector', (_event, data) => {
+  function dispatchToProjector(data, eventTag = 'send-to-projector') {
     const projectorWindow = getProjectorWindow();
-    if (!projectorWindow || projectorWindow.isDestroyed()) return;
+    if (!projectorWindow || projectorWindow.isDestroyed()) {
+      return { ok: false, reason: 'projector_unavailable', message: 'Projector window is not ready.' };
+    }
 
-    const access = gateProjection('send-to-projector');
-    if (!access.allowed) return;
+    const access = gateProjection(eventTag);
+    if (!access.allowed) {
+      return {
+        ok: false,
+        reason: access.reason || 'projection_blocked',
+        message: access.message || 'Projection is blocked.',
+      };
+    }
 
     appendBgDebug('send-to-projector', {
       type: data?.type,
@@ -73,11 +81,25 @@ function registerProjectorEventIPC({
           fontSize: 'medium',
           timestamp: Date.now(),
         });
+        return {
+          ok: false,
+          reason: 'youtube_open_failed',
+          message: 'Failed to open YouTube URL in projector.',
+        };
       }
-      return;
+      return { ok: true, mode: 'youtube' };
     }
 
     sendToProjectorShell(data);
+    return { ok: true, mode: 'shell' };
+  }
+
+  ipcMain.on('send-to-projector', (_event, data) => {
+    dispatchToProjector(data, 'send-to-projector');
+  });
+
+  ipcMain.handle('send-to-projector-ack', async (_event, data) => {
+    return dispatchToProjector(data, 'send-to-projector-ack');
   });
 
   ipcMain.on('send-to-projector-background', (_event, data) => {

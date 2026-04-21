@@ -79,6 +79,7 @@ body,
 
 body {
   font-family: var(--font-primary);
+  font-size: 17px;
   background: var(--color-bg-primary);
   color: var(--color-text-primary);
   line-height: 1.6;
@@ -118,7 +119,7 @@ body {
 .app-container {
   --ui-scale: 1;
   display: grid;
-  grid-template-columns: 280px 1fr 460px;
+  grid-template-columns: 340px 1fr 460px;
   grid-template-rows: 60px 1fr;
   width: calc(100% / var(--ui-scale));
   height: calc(100vh / var(--ui-scale));
@@ -175,7 +176,7 @@ body {
 }
 
 .top-bar__title {
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 600;
   letter-spacing: -0.3px;
   background: linear-gradient(135deg, #e8e8f0, #a0a0c0);
@@ -186,7 +187,42 @@ body {
 .top-bar__brand-stack {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
+}
+
+.top-bar__notice {
+  font-size: 10px;
+  line-height: 1.1;
+  color: #9aa1c7;
+  max-width: min(68vw, 980px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.top-bar__brand-inline {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+}
+
+.top-bar__notice-inline {
+  font-size: 12px;
+  line-height: 1;
+  color: #9aa1c7;
+  max-width: min(55vw, 880px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.top-bar__version-inline {
+  font-size: 12px;
+  line-height: 1;
+  color: #b6bde2;
+  margin-left: 24px;
+  white-space: nowrap;
 }
 
 .top-bar__meta {
@@ -226,7 +262,7 @@ body {
 }
 
 .sidebar__section-title {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 1px;
@@ -301,7 +337,7 @@ body {
 }
 
 .preview-panel__title {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.8px;
@@ -382,7 +418,7 @@ body {
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   font-family: var(--font-primary);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -492,13 +528,13 @@ body {
 }
 
 .display-card__name {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--color-text-primary);
 }
 
 .display-card__resolution {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--color-text-muted);
   margin-top: 2px;
 }
@@ -1292,13 +1328,13 @@ body {
 }
 .sidebar-nav .sidebar__section-title {
   padding: 8px 8px 6px;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 1px;
   color: #9ba4d8;
 }
 .sidebar-nav .sidebar__item {
   padding: 8px 10px;
-  font-size: 12px;
+  font-size: 13px;
   border-radius: 10px;
   border: 1px solid transparent;
   display: flex;
@@ -1327,13 +1363,13 @@ body {
   line-height: 1.15;
 }
 .sidebar__item-label {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: #dce2ff;
   letter-spacing: 0.1px;
 }
 .sidebar__item-hint {
-  font-size: 10px;
+  font-size: 11px;
   color: #97a1cc;
   margin-top: 2px;
   white-space: nowrap;
@@ -1519,7 +1555,7 @@ body {
   color: var(--color-text-primary);
 }
 .cp-meta-list {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--color-text-muted);
   display: flex;
   flex-direction: column;
@@ -1608,6 +1644,10 @@ body {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
   backdrop-filter: blur(4px);
 }
+.cp-toast--autosave-slot {
+  bottom: 58px;
+  opacity: 0.94;
+}
 .cp-toast--success {
   background: rgba(16, 185, 129, 0.18);
 }
@@ -1631,7 +1671,7 @@ body {
   overflow-y: auto;
 }
 .cp-queue-empty {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--color-text-muted);
   padding: 12px 6px;
 }
@@ -1706,7 +1746,7 @@ body {
   user-select: none;
 }
 .cp-queue-index {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--color-text-secondary);
   min-width: 16px;
 }
@@ -1722,7 +1762,7 @@ body {
 }
 .cp-queue-input {
   flex: 1;
-  font-size: 11px;
+  font-size: 12px;
   padding: 4px 6px;
   border-radius: 4px;
   border: 1px solid var(--color-primary);
@@ -1732,7 +1772,7 @@ body {
 }
 .cp-queue-title {
   flex: 1;
-  font-size: 11px;
+  font-size: 12px;
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
@@ -1772,7 +1812,7 @@ body {
   border: 1px solid rgba(148, 163, 184, 0.35);
   background: rgba(12, 16, 36, 0.74);
   color: #e9ecff;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   outline: none;
 }

@@ -20,7 +20,7 @@ export function useAppContext() {
 export function AppProvider({ children }) {
   const isElectron = typeof window.churchDisplay !== 'undefined';
   const [activeSection, setActiveSection] = useState('text');
-  const { toast, showToast } = useToastMessage();
+  const { toast, autosaveToast, showToast } = useToastMessage();
 
   // ── Dialog state (replaces native alert / confirm) ──
   const [dialog, setDialog] = useState(null);
@@ -86,13 +86,24 @@ export function AppProvider({ children }) {
       activeSection,
       setActiveSection,
       toast,
+      autosaveToast,
       showToast,
       dialog,
       closeDialog,
       showAlert,
       showConfirm,
     }),
-    [isElectron, activeSection, toast, showToast, dialog, closeDialog, showAlert, showConfirm]
+    [
+      isElectron,
+      activeSection,
+      toast,
+      autosaveToast,
+      showToast,
+      dialog,
+      closeDialog,
+      showAlert,
+      showConfirm,
+    ]
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useRef, useState, useMemo, useEffect } from 'react';
+import React, { createContext, useContext, useRef, useState, useMemo, useEffect, useCallback } from 'react';
 import useDisplayProjectorStatus from '../hooks/useDisplayProjectorStatus';
 import useProjectionSettings from '../hooks/useProjectionSettings';
 import useProjectorPreviewDispatch from '../hooks/useProjectorPreviewDispatch';
@@ -24,6 +24,8 @@ export function ProjectorProvider({ children }) {
 
   const previewStageRef = useRef(null);
   const [setupTransferBusy, setSetupTransferBusy] = useState(false);
+  const [startupHealthBusy, setStartupHealthBusy] = useState(false);
+  const [startupHealthReport, setStartupHealthReport] = useState(null);
 
   const {
     displays,
@@ -57,6 +59,8 @@ export function ProjectorProvider({ children }) {
     transitionEnabled,
     transitionDelayMs,
     transitionDurationMs,
+    showToast,
+    suppressDeliveryWarnings: obsModeEnabled,
   });
 
   const { normalizeYouTubeUrl, getYouTubeVideoId, getYouTubeEmbedUrl, resolveYouTubePayload } =
@@ -141,6 +145,36 @@ export function ProjectorProvider({ children }) {
     activeProjectorDisplay?.size?.height,
   ]);
 
+  const runStartupHealthCheck = useCallback(
+    async ({ silent = false } = {}) => {
+      if (!isElectron || typeof window.churchDisplay?.startupHealthCheck !== 'function') return null;
+      setStartupHealthBusy(true);
+      try {
+        const report = await window.churchDisplay.startupHealthCheck();
+        setStartupHealthReport(report || null);
+        if (!silent && report?.summary) {
+          const { errorCount = 0, warnCount = 0 } = report.summary;
+          if (errorCount > 0) {
+            showToast(`Health check found ${errorCount} critical issue(s).`, 'error');
+          } else if (warnCount > 0) {
+            showToast(`Health check found ${warnCount} warning(s).`, 'warning');
+          } else {
+            showToast('Health check passed.');
+          }
+        }
+        return report || null;
+      } catch (err) {
+        if (!silent) {
+          showToast(`Health check failed: ${err?.message || 'Unknown error'}`, 'error');
+        }
+        return null;
+      } finally {
+        setStartupHealthBusy(false);
+      }
+    },
+    [isElectron, showToast]
+  );
+
   // Scene mode sync effect (moved from ControlPanel)
   useEffect(() => {
     if (!isElectron) return;
@@ -154,6 +188,10 @@ export function ProjectorProvider({ children }) {
       window.churchDisplay.sendToProjectorBackground(currentSlide?.background || null);
     }
   }, [sceneConfig.mode, sceneConfig, currentSlide, isElectron]);
+
+  useEffect(() => {
+    runStartupHealthCheck({ silent: true });
+  }, [runStartupHealthCheck]);
 
   const value = useMemo(
     () => ({
@@ -220,6 +258,9 @@ export function ProjectorProvider({ children }) {
       handleExportSetupBundle,
       handleImportSetupBundle,
       setupTransferBusy,
+      startupHealthBusy,
+      startupHealthReport,
+      runStartupHealthCheck,
     }),
     [
       displays,
@@ -275,6 +316,9 @@ export function ProjectorProvider({ children }) {
       handleExportSetupBundle,
       handleImportSetupBundle,
       setupTransferBusy,
+      startupHealthBusy,
+      startupHealthReport,
+      runStartupHealthCheck,
     ]
   );
 

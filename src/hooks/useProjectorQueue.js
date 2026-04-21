@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getQueueItemTitleFromPayload, resolveSectionForPayload } from '../utils/queueItemMeta';
+import { buildQueueEnvelope, migrateQueuePayload } from '../utils/queueSchema';
 
 const DEFAULT_QUEUE_STORAGE_KEY = 'churchdisplay.projectorQueue.v1';
 
@@ -40,9 +41,7 @@ export default function useProjectorQueue({
         const raw = window.localStorage.getItem(storageKey);
         if (!raw) return;
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          setProjectorQueue(parsed);
-        }
+        setProjectorQueue(migrateQueuePayload(parsed).items);
       } catch (err) {
         console.warn('[Queue] restore failed:', err);
       } finally {
@@ -60,7 +59,7 @@ export default function useProjectorQueue({
           await window.churchDisplay.queueSave(projectorQueue);
           return;
         }
-        window.localStorage.setItem(storageKey, JSON.stringify(projectorQueue));
+        window.localStorage.setItem(storageKey, JSON.stringify(buildQueueEnvelope(projectorQueue)));
       } catch (err) {
         console.warn('[Queue] persist failed:', err);
       }
@@ -138,7 +137,7 @@ export default function useProjectorQueue({
       // In React 18 batched mode the updater runs synchronously within setState,
       // so updateFlagRef.current is set by the time we reach here.
       if (updateFlagRef.current && !silent && typeof showToast === 'function') {
-        showToast('Auto-saved to selected queue card');
+        showToast('Auto-saved to selected queue card', 'info', { channel: 'autosave' });
       }
     },
     [activeQueueIndex, showToast]
