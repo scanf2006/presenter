@@ -112,7 +112,6 @@ export function ProjectorProvider({ children }) {
   const previewStageWidth = useObservedWidth(previewStageRef, []);
 
   const previewSplitEnabled = false;
-  const activeProjectorDisplay = displays.find((d) => d.id === projectorDisplayId) || null;
 
   const previewRightPanePercent = Math.max(
     SCENE.CAMERA_PANE_MIN_PERCENT,
@@ -128,22 +127,7 @@ export function ProjectorProvider({ children }) {
       SCENE.CAMERA_CROP_DEFAULT_PERCENT
   );
 
-  const previewAspectRatio = useMemo(() => {
-    const w = activeProjectorDisplay?.bounds?.width || activeProjectorDisplay?.size?.width;
-    const h = activeProjectorDisplay?.bounds?.height || activeProjectorDisplay?.size?.height;
-    if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) {
-      const ratio = w / h;
-      if (ratio >= 1.45 && ratio <= 1.9) {
-        return `${w} / ${h}`;
-      }
-    }
-    return PREVIEW.ASPECT_RATIO_16_9;
-  }, [
-    activeProjectorDisplay?.bounds?.width,
-    activeProjectorDisplay?.bounds?.height,
-    activeProjectorDisplay?.size?.width,
-    activeProjectorDisplay?.size?.height,
-  ]);
+  const previewAspectRatio = PREVIEW.ASPECT_RATIO_16_9;
 
   const runStartupHealthCheck = useCallback(
     async ({ silent = false } = {}) => {

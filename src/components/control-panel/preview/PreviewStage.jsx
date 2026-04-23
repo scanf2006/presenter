@@ -194,8 +194,6 @@ function PreviewStage() {
                       borderRadius: 0,
                       display: 'block',
                       background: '#000',
-                      transform: isPreviewPptImage ? 'scale(1.05)' : undefined,
-                      transformOrigin: isPreviewPptImage ? 'center center' : undefined,
                     }}
                   />
                 </>

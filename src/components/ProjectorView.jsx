@@ -516,8 +516,6 @@ function ProjectorView() {
                 position: isPptImage ? 'absolute' : 'static',
                 inset: isPptImage ? 0 : undefined,
                 zIndex: isPptImage ? 2 : undefined,
-                transform: isPptImage ? 'scale(1.05)' : undefined,
-                transformOrigin: isPptImage ? 'center center' : undefined,
               }}
             />
           </>
