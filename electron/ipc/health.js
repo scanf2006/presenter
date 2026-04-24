@@ -28,16 +28,22 @@ function canWriteToDir(targetDir) {
 }
 
 function resolveBibleDataDir({ app, electronDir, processResourcesPath }) {
+  let appPath = '';
+  if (typeof app?.getAppPath === 'function') {
+    const resolved = app.getAppPath();
+    if (typeof resolved === 'string') appPath = resolved;
+  }
+
   if (app?.isPackaged) {
     const packagedBase =
       processResourcesPath ||
       (typeof process !== 'undefined' ? process.resourcesPath : '') ||
-      (typeof app?.getAppPath === 'function' ? path.dirname(app.getAppPath()) : '');
+      (appPath ? path.dirname(appPath) : '');
     if (packagedBase) return path.join(packagedBase, 'data');
     return '';
   }
   if (electronDir) return path.join(electronDir, '..', 'data');
-  if (typeof app?.getAppPath === 'function') return path.join(app.getAppPath(), 'data');
+  if (appPath) return path.join(appPath, 'data');
   return '';
 }
 
