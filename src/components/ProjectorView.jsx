@@ -611,6 +611,7 @@ function ProjectorView() {
                   textShadow: '3px 3px 10px rgba(0, 0, 0, 0.9)',
                   color: content.textColor || '#ffffff',
                   fontFamily: content.fontFamily || "'Noto Sans SC', 'Inter', sans-serif",
+                  fontWeight: Number(content?.fontWeight || 700),
                   fontSize: getProjectorTextSize(),
                 }}
               >
@@ -627,6 +628,8 @@ function ProjectorView() {
                   fontSize: 'clamp(22px, 2vw, 34px)',
                   fontStyle: 'italic',
                   color: 'rgba(255, 255, 255, 0.96)',
+                  fontFamily: content.fontFamily || "'Noto Sans SC', 'Inter', sans-serif",
+                  fontWeight: Number(content?.fontWeight || 700),
                   textAlign: 'right',
                   textShadow: '2px 2px 8px rgba(0, 0, 0, 0.9)',
                   pointerEvents: 'none',

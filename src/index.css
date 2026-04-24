@@ -1,3 +1,16 @@
+@import '@fontsource/noto-sans-sc/chinese-simplified-400.css';
+@import '@fontsource/noto-sans-sc/chinese-simplified-700.css';
+@import '@fontsource/noto-serif-sc/chinese-simplified-400.css';
+@import '@fontsource/noto-serif-sc/chinese-simplified-700.css';
+@import '@fontsource/lxgw-wenkai-tc/chinese-traditional-400.css';
+@import '@fontsource/lxgw-wenkai-mono-tc/chinese-traditional-400.css';
+@import '@fontsource/zcool-xiaowei/chinese-simplified-400.css';
+@import '@fontsource/zcool-qingke-huangyou/chinese-simplified-400.css';
+@import '@fontsource/zcool-kuaile/chinese-simplified-400.css';
+@import '@fontsource/ma-shan-zheng/chinese-simplified-400.css';
+@import '@fontsource/long-cang/chinese-simplified-400.css';
+@import '@fontsource/zhi-mang-xing/chinese-simplified-400.css';
+
 /* =========================================
    ChurchDisplay Pro - 全局样式系统
    ========================================= */
@@ -331,7 +344,8 @@ body {
   background: var(--color-bg-secondary);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .preview-panel__live-block {
@@ -343,20 +357,69 @@ body {
   border-bottom: 1px solid var(--glass-border);
 }
 
+.preview-panel__status-slot {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+}
+
 .preview-panel__rest-block {
   flex: 1 1 auto;
   min-height: 0;
-  padding: var(--spacing-md);
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-md);
-  overflow-y: auto;
+  gap: 10px;
+  overflow: visible;
 }
 
 .preview-panel__rest-content {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-md);
+  gap: 8px;
+  overflow: visible;
+}
+
+.preview-panel__rest-block .preview-screen {
+  flex: 0 0 auto;
+  min-height: 76px;
+  max-height: 76px;
+}
+
+.preview-panel__rest-content .preview-panel__title {
+  font-size: 11px;
+  letter-spacing: 0.6px;
+}
+
+.preview-panel__rest-content .cp-panel-box {
+  padding: 6px;
+  margin-bottom: 6px;
+  border-radius: 6px;
+}
+
+.preview-panel__rest-content .cp-label-row {
+  margin-bottom: 4px;
+  font-size: 10px;
+}
+
+.preview-panel__rest-content .cp-two-col-grid {
+  gap: 4px;
+}
+
+.preview-panel__rest-content .cp-field-label {
+  font-size: 9px;
+  margin-bottom: 2px;
+}
+
+.preview-panel__rest-content .cp-input-sm {
+  padding: 3px 5px;
+  font-size: 10px;
+  border-radius: 5px;
+}
+
+.preview-panel__rest-content .cp-meta-list {
+  font-size: 12px;
+  gap: 4px;
 }
 
 .preview-panel__title {
@@ -1951,12 +2014,14 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
-  padding: 6px 2px 4px;
+  flex-wrap: nowrap;
+  width: 100%;
+  overflow: hidden;
+  padding: 0 2px;
 }
 
 .preview-status-strip--compact {
-  padding: 4px 2px 2px;
+  padding: 0 2px;
   gap: 4px;
 }
 

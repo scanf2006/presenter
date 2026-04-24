@@ -18,8 +18,7 @@ import {
 } from '../utils/songMeta';
 import useSongSectionNavigation from '../hooks/useSongSectionNavigation';
 import { useAppContext } from '../contexts/AppContext';
-
-const TEXT_FONT_OPTIONS = ['Noto Sans SC', 'Microsoft YaHei', 'Arial', 'Times New Roman', 'SimHei'];
+import { PROJECTION_FONT_OPTIONS } from '../constants/fontOptions';
 const BLANK_SECTION_INDEX = -2;
 
 /**
@@ -50,6 +49,7 @@ function SongManager({
   const [fontSize, setFontSize] = useState('large');
   const [fontSizePx, setFontSizePx] = useState(72);
   const [fontFamily, setFontFamily] = useState('Noto Sans SC');
+  const [isBold, setIsBold] = useState(true);
   const [textColor, setTextColor] = useState('#ffffff');
   const [songBackground, setSongBackground] = useState(null);
   const [selectedSectionIndex, setSelectedSectionIndex] = useState(-1);
@@ -203,6 +203,7 @@ function SongManager({
         fontSize,
         fontSizePx,
         fontFamily,
+        fontWeight: isBold ? 700 : 400,
         textColor,
         background: songBackground,
       };
@@ -220,10 +221,11 @@ function SongManager({
     },
     [
       fontSize,
-      fontSizePx,
-      fontFamily,
-      textColor,
-      onProjectContent,
+        fontSizePx,
+        fontFamily,
+        isBold,
+        textColor,
+        onProjectContent,
       songBackground,
       isElectron,
       selectedSong,
@@ -234,15 +236,16 @@ function SongManager({
 
   // Project a blank lyrics page (background only, no text).
   const handleProjectBlankSection = useCallback(() => {
-    const payload = {
-      type: 'lyrics',
-      text: '',
-      fontSize,
-      fontSizePx,
-      fontFamily,
-      textColor,
-      background: songBackground,
-    };
+      const payload = {
+        type: 'lyrics',
+        text: '',
+        fontSize,
+        fontSizePx,
+        fontFamily,
+        fontWeight: isBold ? 700 : 400,
+        textColor,
+        background: songBackground,
+      };
     if (isElectron && typeof window.churchDisplay?.sendToProjectorBackground === 'function') {
       window.churchDisplay.sendToProjectorBackground(songBackground || null);
     }
@@ -268,6 +271,7 @@ function SongManager({
     fontSize,
     fontSizePx,
     fontFamily,
+    isBold,
     textColor,
     onProjectContent,
     songBackground,
@@ -649,8 +653,8 @@ function SongManager({
         <div className="text-settings-card" style={{ marginBottom: '16px' }}>
           <div className="text-settings-head">Song Text Controls</div>
 
-          <div className="text-settings-row">
-            <div className="text-settings-presets">
+        <div className="text-settings-row">
+          <div className="text-settings-presets">
               {[
                 { key: 'small', label: 'Small', px: 48 },
                 { key: 'medium', label: 'Medium', px: 60 },
@@ -666,9 +670,17 @@ function SongManager({
                 >
                   {s.label}
                 </button>
-              ))}
-            </div>
+            ))}
           </div>
+          <label className="cp-label-row" style={{ marginBottom: 0 }}>
+            <input
+              type="checkbox"
+              checked={isBold}
+              onChange={(e) => setIsBold(e.target.checked)}
+            />
+            Bold
+          </label>
+        </div>
 
           <div className="text-settings-grid">
             <label className="text-settings-field">
@@ -693,7 +705,7 @@ function SongManager({
                 onChange={(e) => setFontFamily(e.target.value)}
                 className="cp-input-md"
               >
-                {TEXT_FONT_OPTIONS.map((f) => (
+                {PROJECTION_FONT_OPTIONS.map((f) => (
                   <option key={f} value={f}>
                     {f}
                   </option>
@@ -840,12 +852,13 @@ function SongManager({
                     alignItems: 'center',
                     justifyContent: 'center',
                     whiteSpace: 'pre-line',
-                    textAlign: 'center',
-                    lineHeight: '1.6',
-                    color: textColor,
-                    fontFamily: fontFamily,
-                    // 320px is the baseline preview width mapped from 1920px projector width.
-                    fontSize: `${Math.max(9, Math.min(28, Math.round((Number(fontSizePx || 72) * 320) / 1920)))}px`,
+                      textAlign: 'center',
+                      lineHeight: '1.6',
+                      color: textColor,
+                      fontFamily: fontFamily,
+                      fontWeight: isBold ? 700 : 400,
+                      // 320px is the baseline preview width mapped from 1920px projector width.
+                      fontSize: `${Math.max(9, Math.min(28, Math.round((Number(fontSizePx || 72) * 320) / 1920)))}px`,
                     textShadow: '2px 2px 8px rgba(0, 0, 0, 0.85)',
                     overflow: 'hidden',
                   }}

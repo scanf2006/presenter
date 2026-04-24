@@ -60,7 +60,7 @@ export function ProjectorProvider({ children }) {
     transitionDelayMs,
     transitionDurationMs,
     showToast,
-    suppressDeliveryWarnings: obsModeEnabled,
+    suppressDeliveryWarnings: obsModeEnabled || !projectorActive,
   });
 
   const { normalizeYouTubeUrl, getYouTubeVideoId, getYouTubeEmbedUrl, resolveYouTubePayload } =
@@ -138,12 +138,20 @@ export function ProjectorProvider({ children }) {
         setStartupHealthReport(report || null);
         if (!silent && report?.summary) {
           const { errorCount = 0, warnCount = 0 } = report.summary;
+          const nonDisplayWarnings = (report?.checks || []).filter(
+            (check) => check?.status === 'warn' && check?.id !== 'display'
+          );
+          const shouldSuppressDisplayOnlyWarningToast =
+            errorCount === 0 && warnCount > 0 && nonDisplayWarnings.length === 0;
+
           if (errorCount > 0) {
             showToast(`Health check found ${errorCount} critical issue(s).`, 'error');
-          } else if (warnCount > 0) {
+          } else if (warnCount > 0 && !shouldSuppressDisplayOnlyWarningToast) {
             showToast(`Health check found ${warnCount} warning(s).`, 'warning');
           } else {
-            showToast('Health check passed.');
+            if (!shouldSuppressDisplayOnlyWarningToast) {
+              showToast('Health check passed.');
+            }
           }
         }
         return report || null;

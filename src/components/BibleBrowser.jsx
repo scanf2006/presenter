@@ -1,5 +1,6 @@
 ﻿import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { normalizeBibleLine, normalizeBibleText } from '../utils/bibleText';
+import { PROJECTION_FONT_OPTIONS } from '../constants/fontOptions';
 /* eslint-disable react-hooks/set-state-in-effect */
 /* eslint-disable react-hooks/exhaustive-deps */
 
@@ -36,6 +37,8 @@ function BibleBrowser({
   const [searching, setSearching] = useState(false);
   // 投屏字号
   const [fontSize, setFontSize] = useState('large'); // 投屏正文是否显示每节节号
+  const [fontFamily, setFontFamily] = useState('Noto Sans SC');
+  const [isBold, setIsBold] = useState(true);
   const [showVerseNumbers, setShowVerseNumbers] = useState(false);
   const [bibleBackground, setBibleBackground] = useState(null);
   const [pendingPreloadSelection, setPendingPreloadSelection] = useState(null);
@@ -68,6 +71,40 @@ function BibleBrowser({
       }
     };
   }, []);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem('churchdisplay.bible.fontFamily.v1');
+      if (saved) setFontFamily(saved);
+    } catch (_) {
+      // ignore restore failures
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('churchdisplay.bible.fontFamily.v1', fontFamily);
+    } catch (_) {
+      // ignore persist failures
+    }
+  }, [fontFamily]);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem('churchdisplay.bible.fontWeight.v1');
+      if (saved) setIsBold(Number(saved) >= 600);
+    } catch (_) {
+      // ignore restore failures
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('churchdisplay.bible.fontWeight.v1', isBold ? '700' : '400');
+    } catch (_) {
+      // ignore persist failures
+    }
+  }, [isBold]);
 
   // 中文书卷名缩写映射表（用于快速索引搜索）
   const BOOK_ABBR = {
@@ -287,9 +324,20 @@ function BibleBrowser({
       text,
       reference,
       fontSize,
+      fontFamily,
+      fontWeight: isBold ? 700 : 400,
       background: bibleBackground,
     };
-  }, [selectedVerses, selectedBook, selectedChapter, fontSize, bibleBackground, showVerseNumbers]);
+  }, [
+    selectedVerses,
+    selectedBook,
+    selectedChapter,
+    fontSize,
+    fontFamily,
+    isBold,
+    bibleBackground,
+    showVerseNumbers,
+  ]);
 
   // 投屏选中经文
   const handleProject = useCallback(() => {
@@ -320,13 +368,15 @@ function BibleBrowser({
   // 投屏搜索结果中的某节经文
   const handleProjectSearchResult = useCallback(
     (result) => {
-      const payload = {
-        type: 'bible',
-        text: showVerseNumbers
-          ? normalizeBibleText(`${result.verse} ${normalizeBibleLine(result.text)}`)
-          : normalizeBibleText(`${normalizeBibleLine(result.text)}`),
+        const payload = {
+          type: 'bible',
+          text: showVerseNumbers
+            ? normalizeBibleText(`${result.verse} ${normalizeBibleLine(result.text)}`)
+            : normalizeBibleText(`${normalizeBibleLine(result.text)}`),
         reference: `${result.fullName} ${result.chapter}:${result.verse}`,
         fontSize,
+        fontFamily,
+        fontWeight: isBold ? 700 : 400,
         background: bibleBackground,
       };
       onProjectContent(payload);
@@ -337,31 +387,35 @@ function BibleBrowser({
         onUpdateActiveQueueItem(payload, payload.reference, 'bible');
       }
     },
-    [
-      fontSize,
-      onProjectContent,
-      bibleBackground,
-      isElectron,
-      showVerseNumbers,
-      onUpdateActiveQueueItem,
+      [
+        fontSize,
+        fontFamily,
+        isBold,
+        onProjectContent,
+        bibleBackground,
+        isElectron,
+        showVerseNumbers,
+        onUpdateActiveQueueItem,
     ]
   );
 
   const handleQueueSearchResult = useCallback(
     (result) => {
       if (typeof onQueueContent !== 'function') return;
-      const payload = {
-        type: 'bible',
-        text: showVerseNumbers
-          ? normalizeBibleText(`${result.verse} ${normalizeBibleLine(result.text)}`)
-          : normalizeBibleText(`${normalizeBibleLine(result.text)}`),
+        const payload = {
+          type: 'bible',
+          text: showVerseNumbers
+            ? normalizeBibleText(`${result.verse} ${normalizeBibleLine(result.text)}`)
+            : normalizeBibleText(`${normalizeBibleLine(result.text)}`),
         reference: `${result.fullName} ${result.chapter}:${result.verse}`,
         fontSize,
+        fontFamily,
+        fontWeight: isBold ? 700 : 400,
         background: bibleBackground,
       };
       onQueueContent(payload, payload.reference);
     },
-    [onQueueContent, fontSize, bibleBackground, showVerseNumbers]
+    [onQueueContent, fontSize, fontFamily, isBold, bibleBackground, showVerseNumbers]
   );
 
   // Keep refs in sync via effects to avoid stale-closure: the background-change
@@ -422,6 +476,8 @@ function BibleBrowser({
     skipAutoProjectOnceRef.current = payload.deferProject === true;
     setSelectedVerses([]);
     if (payload.fontSize) setFontSize(payload.fontSize);
+    if (payload.fontFamily) setFontFamily(payload.fontFamily);
+    if (payload.fontWeight) setIsBold(Number(payload.fontWeight) >= 600);
     if (payload.background) setBibleBackground(payload.background);
 
     const parsed = parseReference(payload.reference);
@@ -495,6 +551,8 @@ function BibleBrowser({
         text: nextText,
         reference: nextReference,
         fontSize: sourcePayload.fontSize || fontSize,
+        fontFamily: sourcePayload.fontFamily || fontFamily,
+        fontWeight: Number(sourcePayload.fontWeight || (isBold ? 700 : 400)),
         background:
           sourcePayload.background !== undefined ? sourcePayload.background : bibleBackground,
       };
@@ -521,6 +579,8 @@ function BibleBrowser({
     versesContext,
     showVerseNumbers,
     fontSize,
+    fontFamily,
+    isBold,
     bibleBackground,
     onProjectContent,
     isElectron,
@@ -913,6 +973,44 @@ function BibleBrowser({
                   />
                   Show Verse Numbers
                 </label>
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontSize: '12px',
+                    color: 'var(--color-text-secondary)',
+                    marginLeft: '4px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isBold}
+                    onChange={(e) => setIsBold(e.target.checked)}
+                  />
+                  Bold
+                </label>
+                <select
+                  value={fontFamily}
+                  onChange={(e) => setFontFamily(e.target.value)}
+                  style={{
+                    padding: '4px 8px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--color-border)',
+                    background: 'var(--color-surface)',
+                    color: 'var(--color-text-primary)',
+                    fontSize: '12px',
+                    outline: 'none',
+                  }}
+                  title="Bible Font Family"
+                >
+                  {PROJECTION_FONT_OPTIONS.map((f) => (
+                    <option key={f} value={f}>
+                      {f}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {/* 经文列表 */}
