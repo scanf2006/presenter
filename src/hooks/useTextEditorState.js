@@ -6,6 +6,7 @@ export default function useTextEditorState() {
   const [textContent, setTextContent] = useState('');
   const [fontSize, setFontSize] = useState('large');
   const [textFontFamily, setTextFontFamily] = useState(TEXT_EDITOR.DEFAULT_FONT_FAMILY);
+  const [textBold, setTextBold] = useState(true);
   const [textColor, setTextColor] = useState(TEXT_EDITOR.DEFAULT_COLOR);
   const [textSizePx, setTextSizePx] = useState(TEXT_EDITOR.DEFAULT_SIZE_PX);
   const [textBackground, setTextBackground] = useState(null);
@@ -17,6 +18,7 @@ export default function useTextEditorState() {
     fontSize,
     fontSizePx: textSizePx,
     fontFamily: textFontFamily,
+    fontWeight: textBold ? 700 : 400,
     textColor,
     background: textBackground,
     textLayout,
@@ -25,6 +27,7 @@ export default function useTextEditorState() {
     fontSize,
     textSizePx,
     textFontFamily,
+    textBold,
     textColor,
     textBackground,
     textLayout,
@@ -35,6 +38,7 @@ export default function useTextEditorState() {
     setFontSize('large');
     setTextSizePx(TEXT_EDITOR.DEFAULT_SIZE_PX);
     setTextFontFamily(TEXT_EDITOR.DEFAULT_FONT_FAMILY);
+    setTextBold(true);
     setTextColor(TEXT_EDITOR.DEFAULT_COLOR);
     setTextBackground(null);
     setTextLayout(TEXT_EDITOR.LAYOUT_DEFAULT);
@@ -47,6 +51,7 @@ export default function useTextEditorState() {
     setFontSize(payload.fontSize || 'large');
     setTextSizePx(Math.max(TEXT_EDITOR.SIZE_INPUT_MIN_PX, Math.min(TEXT_EDITOR.SIZE_CLAMP_MAX_PX, Number(payload.fontSizePx || TEXT_EDITOR.DEFAULT_SIZE_PX))));
     setTextFontFamily(payload.fontFamily || TEXT_EDITOR.DEFAULT_FONT_FAMILY);
+    setTextBold(Number(payload.fontWeight || TEXT_EDITOR.DEFAULT_FONT_WEIGHT) >= 600);
     setTextColor(payload.textColor || TEXT_EDITOR.DEFAULT_COLOR);
     setTextBackground(payload.background || null);
     setTextLayout({
@@ -64,6 +69,8 @@ export default function useTextEditorState() {
     setFontSize,
     textFontFamily,
     setTextFontFamily,
+    textBold,
+    setTextBold,
     textColor,
     setTextColor,
     textSizePx,

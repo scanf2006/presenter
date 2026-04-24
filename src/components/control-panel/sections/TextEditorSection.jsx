@@ -1,10 +1,9 @@
 import React from 'react';
 import { getPreviewMediaUrl } from '../../../utils/preview';
 import { PREVIEW, TEXT_EDITOR } from '../../../constants/ui';
+import { PROJECTION_FONT_OPTIONS } from '../../../constants/fontOptions';
 import { useProjectorContext } from '../../../contexts/ProjectorContext';
 import { useTextEditorContext } from '../../../contexts/TextEditorContext';
-
-const TEXT_FONT_OPTIONS = ['Noto Sans SC', 'Microsoft YaHei', 'Arial', 'Times New Roman', 'SimHei'];
 
 function TextEditorSection() {
   const { previewAspectRatio } = useProjectorContext();
@@ -18,6 +17,7 @@ function TextEditorSection() {
     textEditableRef,
     setTextContent,
     textFontFamily,
+    textBold,
     textColor,
     textCanvasDisplayFontPx,
     textContent,
@@ -29,6 +29,7 @@ function TextEditorSection() {
     setTextSizePx,
     textSizePx,
     setTextFontFamily,
+    setTextBold,
     setTextColor,
     handleSendToProjector,
     handleAddTextToQueue,
@@ -174,9 +175,9 @@ function TextEditorSection() {
                 borderRadius: '8px',
                 background: 'rgba(0,0,0,0.08)',
                 fontFamily: textFontFamily,
+                fontWeight: textBold ? 700 : 400,
                 color: textColor,
                 fontSize: `${textCanvasDisplayFontPx}px`,
-                fontWeight: 700,
                 lineHeight: 1.6,
                 whiteSpace: 'pre-wrap',
                 textAlign: 'center',
@@ -242,6 +243,14 @@ function TextEditorSection() {
               </button>
             ))}
           </div>
+          <label className="cp-label-row" style={{ marginBottom: 0 }}>
+            <input
+              type="checkbox"
+              checked={textBold}
+              onChange={(e) => setTextBold(e.target.checked)}
+            />
+            Bold
+          </label>
         </div>
 
         <div className="text-settings-grid">
@@ -275,7 +284,7 @@ function TextEditorSection() {
               onChange={(e) => setTextFontFamily(e.target.value)}
               className="cp-input-md"
             >
-              {TEXT_FONT_OPTIONS.map((f) => (
+              {PROJECTION_FONT_OPTIONS.map((f) => (
                 <option key={f} value={f}>
                   {f}
                 </option>

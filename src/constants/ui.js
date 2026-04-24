@@ -30,6 +30,7 @@ export const SCENE = {
 
 export const TEXT_EDITOR = {
   DEFAULT_FONT_FAMILY: 'Noto Sans SC',
+  DEFAULT_FONT_WEIGHT: 700,
   DEFAULT_COLOR: '#ffffff',
   DEFAULT_SIZE_PX: 72,
   SIZE_SMALL_PX: 48,

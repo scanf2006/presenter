@@ -89,20 +89,22 @@ function PreviewPanel({ nextQueueTitle }) {
         </div>
         <PreviewStage />
 
-        {showPreviewStatusStrip && (
-          <div
-            className={`preview-status-strip ${compactPreviewStatusStrip ? 'preview-status-strip--compact' : ''}`}
-          >
-            <span className="preview-osd__pill">{previewTypeLabel}</span>
-            {!compactPreviewStatusStrip && previewPrimaryLabel && (
-              <span className="preview-osd__text">{previewPrimaryLabel}</span>
-            )}
-            <span className="preview-osd__text">Queue {projectorQueue.length}</span>
-            <span className="preview-osd__text">
-              {transitionEnabled ? `Fade ${transitionDelayMs}/${transitionDurationMs}` : 'Cut'}
-            </span>
-          </div>
-        )}
+        <div className="preview-panel__status-slot">
+          {showPreviewStatusStrip && (
+            <div
+              className={`preview-status-strip ${compactPreviewStatusStrip ? 'preview-status-strip--compact' : ''}`}
+            >
+              <span className="preview-osd__pill">{previewTypeLabel}</span>
+              {!compactPreviewStatusStrip && previewPrimaryLabel && (
+                <span className="preview-osd__text">{previewPrimaryLabel}</span>
+              )}
+              <span className="preview-osd__text">Queue {projectorQueue.length}</span>
+              <span className="preview-osd__text">
+                {transitionEnabled ? `Fade ${transitionDelayMs}/${transitionDurationMs}` : 'Cut'}
+              </span>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="preview-panel__rest-block">

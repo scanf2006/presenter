@@ -152,7 +152,7 @@ function PreviewStage() {
                             : 10,
                         previewStageWidth
                       ),
-                      fontWeight: 700,
+                      fontWeight: Number(previewSlide?.fontWeight || 700),
                       color: previewSlide.textColor || '#fff',
                       fontFamily: previewSlide.fontFamily || 'inherit',
                       textShadow: '2px 2px 6px rgba(0,0,0,0.9)',
@@ -335,6 +335,7 @@ function PreviewStage() {
                       letterSpacing: '0.012em',
                       wordBreak: 'break-word',
                       textAlign: 'left',
+                      fontWeight: Number(previewSlide?.fontWeight || 700),
                     }}
                   >
                     {previewSlide.text}
@@ -344,6 +345,8 @@ function PreviewStage() {
                       marginTop: '10px',
                       fontSize: '10px',
                       color: 'rgba(255,255,255,0.72)',
+                      fontFamily: previewSlide.fontFamily || 'inherit',
+                      fontWeight: Number(previewSlide?.fontWeight || 700),
                       textAlign: 'right',
                     }}
                   >
@@ -380,6 +383,7 @@ function PreviewStage() {
                       ),
                       color: previewSlide.textColor || '#fff',
                       fontFamily: previewSlide.fontFamily || 'inherit',
+                      fontWeight: Number(previewSlide?.fontWeight || 700),
                       whiteSpace: 'pre-line',
                       lineHeight: '1.8',
                       textAlign: 'center',
