@@ -35,6 +35,10 @@ const api = {
   sendProjectorScene: (sceneData) => ipcRenderer.send('projector-scene', sceneData),
   blackout: () => ipcRenderer.send('projector-blackout'),
   sendMediaCommand: (command) => ipcRenderer.send('projector-command', command),
+  ndiGetStatus: () => ipcRenderer.invoke('ndi-get-status'),
+  ndiStart: (options) => ipcRenderer.invoke('ndi-start', options),
+  ndiStop: () => ipcRenderer.invoke('ndi-stop'),
+  onNdiStatus: (callback) => onWithCleanup('ndi-status', (_e, status) => callback(status)),
 
   // Projector listeners
   onProjectorContent: (callback) =>

@@ -23,6 +23,8 @@ function createAndWireProjectorWindow({
   controlWindowRef,
   forceWindowZoom100,
   getProjectorScene,
+  getProjectorContent,
+  getProjectorBackground,
   notifyProjectorActive,
   onProjectorClosed,
   logger = console,
@@ -47,6 +49,8 @@ function createAndWireProjectorWindow({
     onClosed: onProjectorClosed,
     forceWindowZoom100,
     getProjectorScene,
+    getProjectorContent,
+    getProjectorBackground,
   });
 
   notifyProjectorActive(controlWindowRef, display);

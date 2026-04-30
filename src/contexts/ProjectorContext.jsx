@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useRef, useState, useMemo, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useRef, useState, useMemo } from 'react';
 import useDisplayProjectorStatus from '../hooks/useDisplayProjectorStatus';
 import useProjectionSettings from '../hooks/useProjectionSettings';
 import useProjectorPreviewDispatch from '../hooks/useProjectorPreviewDispatch';
@@ -8,8 +8,11 @@ import usePreviewVideoControls from '../hooks/usePreviewVideoControls';
 import useYouTubeProjection from '../hooks/useYouTubeProjection';
 import useObservedWidth from '../hooks/useObservedWidth';
 import useSetupBundleActions from '../hooks/useSetupBundleActions';
+import useStartupHealth from '../hooks/useStartupHealth';
+import useNdiOutput from '../hooks/useNdiOutput';
+import useProjectorSceneSync from '../hooks/useProjectorSceneSync';
+import usePreviewLayoutMetrics from '../hooks/usePreviewLayoutMetrics';
 import { useAppContext } from './AppContext';
-import { PREVIEW, SCENE } from '../constants/ui';
 
 const ProjectorContext = createContext(null);
 
@@ -24,8 +27,6 @@ export function ProjectorProvider({ children }) {
 
   const previewStageRef = useRef(null);
   const [setupTransferBusy, setSetupTransferBusy] = useState(false);
-  const [startupHealthBusy, setStartupHealthBusy] = useState(false);
-  const [startupHealthReport, setStartupHealthReport] = useState(null);
 
   const {
     displays,
@@ -44,8 +45,6 @@ export function ProjectorProvider({ children }) {
     setTransitionDurationMs,
     sceneConfig,
     setSceneConfig,
-    obsModeEnabled,
-    setObsModeEnabled,
   } = useProjectionSettings({ isElectron });
 
   const {
@@ -60,7 +59,7 @@ export function ProjectorProvider({ children }) {
     transitionDelayMs,
     transitionDurationMs,
     showToast,
-    suppressDeliveryWarnings: obsModeEnabled || !projectorActive,
+    suppressDeliveryWarnings: !projectorActive,
   });
 
   const { normalizeYouTubeUrl, getYouTubeVideoId, getYouTubeEmbedUrl, resolveYouTubePayload } =
@@ -110,80 +109,32 @@ export function ProjectorProvider({ children }) {
   } = usePreviewVideoControls();
 
   const previewStageWidth = useObservedWidth(previewStageRef, []);
+  const {
+    previewAspectRatio,
+    previewSplitEnabled,
+    previewContentPanePercent,
+    previewRightPanePercent,
+    previewCameraScale,
+  } = usePreviewLayoutMetrics({ sceneConfig });
 
-  const previewSplitEnabled = false;
+  const { startupHealthBusy, startupHealthReport, runStartupHealthCheck } = useStartupHealth({
+    isElectron,
+    showToast,
+  });
+  const { ndiStatus, refreshNdiStatus, startNdiOutput, stopNdiOutput, toggleNdiOutput } =
+    useNdiOutput({
+      isElectron,
+      showToast,
+      projectorActive,
+    });
 
-  const previewRightPanePercent = Math.max(
-    SCENE.CAMERA_PANE_MIN_PERCENT,
-    Math.min(
-      SCENE.CAMERA_PANE_MAX_PERCENT,
-      sceneConfig.cameraPanePercent || SCENE.CAMERA_PANE_DEFAULT_PERCENT
-    )
-  );
-  const previewContentPanePercent = 100 - previewRightPanePercent;
-  const previewCameraScale = Math.max(
-    1,
-    Number(sceneConfig.cameraCenterCropPercent || SCENE.CAMERA_CROP_DEFAULT_PERCENT) /
-      SCENE.CAMERA_CROP_DEFAULT_PERCENT
-  );
-
-  const previewAspectRatio = PREVIEW.ASPECT_RATIO_16_9;
-
-  const runStartupHealthCheck = useCallback(
-    async ({ silent = false } = {}) => {
-      if (!isElectron || typeof window.churchDisplay?.startupHealthCheck !== 'function') return null;
-      setStartupHealthBusy(true);
-      try {
-        const report = await window.churchDisplay.startupHealthCheck();
-        setStartupHealthReport(report || null);
-        if (!silent && report?.summary) {
-          const { errorCount = 0, warnCount = 0 } = report.summary;
-          const nonDisplayWarnings = (report?.checks || []).filter(
-            (check) => check?.status === 'warn' && check?.id !== 'display'
-          );
-          const shouldSuppressDisplayOnlyWarningToast =
-            errorCount === 0 && warnCount > 0 && nonDisplayWarnings.length === 0;
-
-          if (errorCount > 0) {
-            showToast(`Health check found ${errorCount} critical issue(s).`, 'error');
-          } else if (warnCount > 0 && !shouldSuppressDisplayOnlyWarningToast) {
-            showToast(`Health check found ${warnCount} warning(s).`, 'warning');
-          } else {
-            if (!shouldSuppressDisplayOnlyWarningToast) {
-              showToast('Health check passed.');
-            }
-          }
-        }
-        return report || null;
-      } catch (err) {
-        if (!silent) {
-          showToast(`Health check failed: ${err?.message || 'Unknown error'}`, 'error');
-        }
-        return null;
-      } finally {
-        setStartupHealthBusy(false);
-      }
-    },
-    [isElectron, showToast]
-  );
-
-  // Scene mode sync effect (moved from ControlPanel)
-  useEffect(() => {
-    if (!isElectron) return;
-    if (sceneConfig.mode !== 'normal') return;
-    if (!currentSlide) return;
-    if (typeof window.churchDisplay?.sendProjectorScene === 'function') {
-      window.churchDisplay.sendProjectorScene(sceneConfig);
-    }
-    window.churchDisplay.sendToProjector(currentSlide);
-    if (typeof window.churchDisplay?.sendToProjectorBackground === 'function') {
-      window.churchDisplay.sendToProjectorBackground(currentSlide?.background || null);
-    }
-  }, [sceneConfig.mode, sceneConfig, currentSlide, isElectron]);
-
-  useEffect(() => {
-    runStartupHealthCheck({ silent: true });
-  }, [runStartupHealthCheck]);
+  useProjectorSceneSync({
+    isElectron,
+    projectorActive,
+    projectorDisplayId,
+    sceneConfig,
+    currentSlide,
+  });
 
   const value = useMemo(
     () => ({
@@ -212,8 +163,11 @@ export function ProjectorProvider({ children }) {
       setTransitionDurationMs,
       sceneConfig,
       setSceneConfig,
-      obsModeEnabled,
-      setObsModeEnabled,
+      ndiStatus,
+      refreshNdiStatus,
+      startNdiOutput,
+      stopNdiOutput,
+      toggleNdiOutput,
       // Preview geometry
       previewStageRef,
       previewStageWidth,
@@ -276,8 +230,11 @@ export function ProjectorProvider({ children }) {
       setTransitionDurationMs,
       sceneConfig,
       setSceneConfig,
-      obsModeEnabled,
-      setObsModeEnabled,
+      ndiStatus,
+      refreshNdiStatus,
+      startNdiOutput,
+      stopNdiOutput,
+      toggleNdiOutput,
       previewStageWidth,
       previewAspectRatio,
       previewSplitEnabled,

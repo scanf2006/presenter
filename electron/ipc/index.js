@@ -6,6 +6,7 @@ const { registerMediaIPC } = require('./media');
 const { registerSetupBundleIPC } = require('./setup-bundle');
 const { registerQueueIPC } = require('./queue');
 const { registerHealthIPC } = require('./health');
+const { registerNdiIPC } = require('./ndi');
 
 function registerAllIPC(config) {
   const {
@@ -21,6 +22,8 @@ function registerAllIPC(config) {
     openYouTubeWatchInProjector,
     getLatestProjectorScene,
     setLatestProjectorScene,
+    setLatestProjectorContent,
+    setLatestProjectorBackground,
     resolveYouTubeStream,
     sanitizeFileName,
     mediaYouTubeCacheDir,
@@ -50,6 +53,7 @@ function registerAllIPC(config) {
     formatBackupStamp,
     collectReferencedMediaPathsFromQueue,
     copyDirectoryMerge,
+    ndiOutputService,
   } = config;
 
   registerWindowProjectorIPC({
@@ -75,6 +79,8 @@ function registerAllIPC(config) {
     getTrialStatus,
     getLatestProjectorScene,
     setLatestProjectorScene,
+    setLatestProjectorContent,
+    setLatestProjectorBackground,
   });
 
   registerYouTubeIPC({
@@ -128,6 +134,12 @@ function registerAllIPC(config) {
   });
 
   registerQueueIPC({ ipcMain, app });
+
+  registerNdiIPC({
+    ipcMain,
+    ndiOutputService,
+    getControlWindow,
+  });
 
   registerHealthIPC({
     ipcMain,

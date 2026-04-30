@@ -41,6 +41,21 @@ function PreviewStage() {
     (previewSlide?.originType === 'ppt' ||
       /ppt/i.test(previewNameForDetect) ||
       /[\\/]media[\\/]ppt[\\/]/i.test(previewPathForDetect));
+  const previewWidth = Number(previewStageWidth || PREVIEW.STAGE_FALLBACK_WIDTH_PX);
+  const projectorWidthRatio = Math.max(
+    PREVIEW.MIN_WIDTH_RATIO,
+    previewWidth / PREVIEW.STAGE_BASE_WIDTH_PX
+  );
+  const projectorFallbackPx =
+    previewSlide?.fontSize === 'small' ? 32 : previewSlide?.fontSize === 'medium' ? 48 : 72;
+  const previewBibleFontPx = Math.max(
+    PREVIEW.TEXT_MIN_PX,
+    Math.min(PREVIEW.TEXT_MAX_PX, Math.round(projectorFallbackPx * projectorWidthRatio))
+  );
+  const previewBibleReferencePx = Math.max(
+    PREVIEW.TEXT_MIN_PX,
+    Math.min(34, Math.round(24 * projectorWidthRatio))
+  );
 
   return (
     <div
@@ -316,26 +331,19 @@ function PreviewStage() {
               )}
 
               {previewSlide.type === 'bible' && (
-                <div style={{ width: '100%' }}>
+                <div style={{ width: '88%', margin: '0 auto' }}>
                   <div
                     style={{
-                      fontSize: getPreviewTextSize(
-                        previewSlide,
-                        previewSlide.fontSize === 'large'
-                          ? 14
-                          : previewSlide.fontSize === 'medium'
-                            ? 11
-                            : 9,
-                        previewStageWidth
-                      ),
+                      fontSize: `${previewBibleFontPx}px`,
                       color: previewSlide.textColor || '#fff',
                       fontFamily: previewSlide.fontFamily || 'inherit',
                       whiteSpace: 'pre-line',
                       lineHeight: '1.9',
-                      letterSpacing: '0.012em',
+                      letterSpacing: '0.015em',
                       wordBreak: 'break-word',
                       textAlign: 'left',
                       fontWeight: Number(previewSlide?.fontWeight || 700),
+                      textShadow: '2px 2px 6px rgba(0,0,0,0.9)',
                     }}
                   >
                     {previewSlide.text}
@@ -343,11 +351,13 @@ function PreviewStage() {
                   <div
                     style={{
                       marginTop: '10px',
-                      fontSize: '10px',
+                      fontSize: `${previewBibleReferencePx}px`,
                       color: 'rgba(255,255,255,0.72)',
                       fontFamily: previewSlide.fontFamily || 'inherit',
                       fontWeight: Number(previewSlide?.fontWeight || 700),
                       textAlign: 'right',
+                      fontStyle: 'italic',
+                      textShadow: '2px 2px 8px rgba(0, 0, 0, 0.9)',
                     }}
                   >
                     - {previewSlide.reference}

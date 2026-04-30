@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
 import { useProjectorContext } from '../../../contexts/ProjectorContext';
 import { useAppContext } from '../../../contexts/AppContext';
 
@@ -10,41 +10,9 @@ function DisplaysSection() {
     projectorActive,
     handleStartProjector,
     handleStopProjector,
-    obsModeEnabled,
-    setObsModeEnabled,
+    ndiStatus,
+    toggleNdiOutput,
   } = useProjectorContext();
-  const prevObsModeRef = useRef(obsModeEnabled);
-  const rememberedProjectorDisplayIdRef = useRef(null);
-
-  useEffect(() => {
-    const prevObsMode = prevObsModeRef.current;
-
-    if (!prevObsMode && obsModeEnabled) {
-      const activeDisplay = displays.find((d) => d.id === projectorDisplayId);
-      if (projectorActive && activeDisplay && !activeDisplay.isPrimary) {
-        rememberedProjectorDisplayIdRef.current = projectorDisplayId;
-        handleStopProjector();
-      }
-    }
-
-    if (prevObsMode && !obsModeEnabled) {
-      const rememberedId = rememberedProjectorDisplayIdRef.current;
-      const rememberedDisplay = displays.find((d) => d.id === rememberedId);
-      if (!projectorActive && rememberedDisplay && !rememberedDisplay.isPrimary) {
-        handleStartProjector(rememberedId);
-      }
-    }
-
-    prevObsModeRef.current = obsModeEnabled;
-  }, [
-    obsModeEnabled,
-    projectorActive,
-    projectorDisplayId,
-    displays,
-    handleStartProjector,
-    handleStopProjector,
-  ]);
-  const canToggleObsMode = obsModeEnabled || projectorActive;
 
   return (
     <div className="animate-slide-in-up">
@@ -54,41 +22,42 @@ function DisplaysSection() {
         screen.
       </p>
       <div
-        className={`display-card ${obsModeEnabled ? 'display-card--active' : ''}`}
+        className={`display-card ${ndiStatus?.active ? 'display-card--active' : ''}`}
         style={{
           marginBottom: '14px',
-          opacity: canToggleObsMode ? 1 : 0.55,
-          cursor: canToggleObsMode ? 'pointer' : 'not-allowed',
+          opacity: projectorActive ? 1 : 0.55,
+          cursor: projectorActive ? 'pointer' : 'not-allowed',
         }}
         role="button"
         tabIndex={0}
         onClick={() => {
-          if (!canToggleObsMode) {
-            showToast('Start projector first, then enable OBS Mode.', 'warning');
+          if (!projectorActive) {
+            showToast('Start projector first, then enable NDI output.', 'warning');
             return;
           }
-          setObsModeEnabled(!obsModeEnabled);
+          void toggleNdiOutput();
         }}
         onKeyDown={(event) => {
           if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
-            if (!canToggleObsMode) {
-              showToast('Start projector first, then enable OBS Mode.', 'warning');
+            if (!projectorActive) {
+              showToast('Start projector first, then enable NDI output.', 'warning');
               return;
             }
-            setObsModeEnabled(!obsModeEnabled);
+            void toggleNdiOutput();
           }
         }}
       >
-        <span className="display-card__icon">OBS</span>
+        <span className="display-card__icon">NDI</span>
         <div className="display-card__info">
-          <div className="display-card__name">OBS Mode</div>
+          <div className="display-card__name">NDI Output</div>
           <div className="display-card__resolution">
-            Use OBS window capture + Fullscreen Projector on external display.
+            Source: {ndiStatus?.sourceName || 'ChurchDisplay Pro NDI'} | Receivers:{' '}
+            {ndiStatus?.connections ?? 0}
           </div>
         </div>
         <span className="display-card__badge display-card__badge--projecting">
-          {obsModeEnabled ? 'Enabled' : canToggleObsMode ? 'Disabled' : 'Unavailable'}
+          {ndiStatus?.active ? 'Enabled' : projectorActive ? 'Disabled' : 'Unavailable'}
         </span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -96,7 +65,7 @@ function DisplaysSection() {
           <div
             key={display.id}
             className={`display-card ${projectorDisplayId === display.id ? 'display-card--active' : ''}`}
-            onClick={() => !obsModeEnabled && !display.isPrimary && handleStartProjector(display.id)}
+            onClick={() => !display.isPrimary && handleStartProjector(display.id)}
           >
             <span className="display-card__icon">{display.isPrimary ? 'P' : 'E'}</span>
             <div className="display-card__info">
@@ -118,7 +87,7 @@ function DisplaysSection() {
         ))}
       </div>
 
-      {projectorActive && !obsModeEnabled && (
+      {projectorActive && (
         <button
           className="btn btn--danger btn--lg"
           style={{ marginTop: '24px', width: '100%' }}

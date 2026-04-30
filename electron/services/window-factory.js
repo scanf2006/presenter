@@ -50,6 +50,9 @@ function createProjectorWindowInstance({ BrowserWindow, display, preloadPath }) 
     frame: false,
     alwaysOnTop: true,
     skipTaskbar: true,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
     backgroundColor: '#000000',
     webPreferences: {
       nodeIntegration: false,
