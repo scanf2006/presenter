@@ -9,6 +9,8 @@ function registerProjectorEventIPC({
   getTrialStatus,
   getLatestProjectorScene,
   setLatestProjectorScene,
+  setLatestProjectorContent,
+  setLatestProjectorBackground,
 }) {
   function notifyTrialWarning(payload) {
     const controlWindow = typeof getControlWindow === 'function' ? getControlWindow() : null;
@@ -66,6 +68,9 @@ function registerProjectorEventIPC({
       backgroundType: data?.background?.type,
       backgroundPath: data?.background?.path,
     });
+    if (typeof setLatestProjectorContent === 'function') {
+      setLatestProjectorContent(data || null);
+    }
 
     if (data?.type === 'youtube') {
       const youtubeUrl =
@@ -114,6 +119,9 @@ function registerProjectorEventIPC({
       backgroundType: data?.type,
       backgroundPath: data?.path,
     });
+    if (typeof setLatestProjectorBackground === 'function') {
+      setLatestProjectorBackground(data || null);
+    }
     projectorWindow.webContents.send('projector-background', data);
   });
 

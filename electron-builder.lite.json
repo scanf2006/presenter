@@ -14,7 +14,8 @@
     "EULA.md"
   ],
   "asarUnpack": [
-    "electron/ppt-convert.ps1"
+    "electron/ppt-convert.ps1",
+    "node_modules/@stagetimerio/grandiose/dist/**"
   ],
   "extraResources": [
     {

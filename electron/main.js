@@ -65,6 +65,7 @@ const { createMainUiRuntime } = require('./services/main-ui-runtime');
 const { createMainRuntimeCore } = require('./services/main-runtime-core');
 const { createProjectorControlBridge } = require('./services/projector-control-bridge');
 const { createProjectorRecoveryBridge } = require('./services/projector-recovery-bridge');
+const { createNdiOutputService } = require('./services/ndi-output');
 const {
   notifyProjectorUnavailable,
   notifyProjectorActive,
@@ -136,6 +137,7 @@ const {
   licenseRuntime,
   controlCloseController,
   projectorSceneState,
+  projectorLiveState,
 } = createMainRuntimeCore({
   session,
   logger: console,
@@ -221,6 +223,8 @@ const { controlWindowDeps, projectorWindowDeps } = buildWindowRuntimeDeps({
   projectorChannel,
   bindProjectorWindowEvents,
   getProjectorScene: projectorSceneState.getScene,
+  getProjectorContent: projectorLiveState.getLatestContent,
+  getProjectorBackground: projectorLiveState.getLatestBackground,
   notifyProjectorActive,
   setupNavigationRestrictions: sessionHooks.setupNavigationRestrictions,
 });
@@ -242,6 +246,12 @@ const windowRuntimeManager = createWindowRuntimeManager({
 const createControlWindow = () => windowRuntimeManager.createControlWindow();
 const createProjectorWindow = (targetDisplay) =>
   windowRuntimeManager.createProjectorWindow(targetDisplay);
+const ndiOutputService = createNdiOutputService({
+  getProjectorWindow: () => projectorWindow,
+  logger: console,
+  defaultSourceName: `${app.getName()} NDI`,
+  defaultFps: 30,
+});
 const setupIPC = createMainSetupIpc({
   registerAllIPC,
   ipcMain,
@@ -253,6 +263,7 @@ const setupIPC = createMainSetupIpc({
   getProjectorWindow: () => projectorWindow,
   appendBgDebug: (tag, payload) => bgDebug.append(tag, payload),
   projectorSceneState,
+  projectorLiveState,
   resolveYouTubeStream,
   sanitizeMediaFileName,
   mediaState,
@@ -275,6 +286,7 @@ const setupIPC = createMainSetupIpc({
   formatBackupStamp,
   collectReferencedMediaPathsFromQueue,
   copyDirectoryMerge,
+  ndiOutputService,
 });
 
 // =================  =================
@@ -353,6 +365,7 @@ setupLifecycleRuntime(
     controlWindowRef: () => controlWindow,
     createControlWindow,
     onBeforeQuitExtra: () => {
+      void ndiOutputService.stop();
       // M8: Close all SQLite databases before exit.
       dbStore.closeAll();
       bgDebug.close();

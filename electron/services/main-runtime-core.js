@@ -5,6 +5,7 @@ const { createYtDlpService } = require('./ytdlp-service');
 const { createControlWindowCloseController } = require('./control-window-close');
 const { createLicenseRuntimeBridge } = require('./license-runtime');
 const { createProjectorSceneState } = require('./projector-scene-state');
+const { createProjectorLiveState } = require('./projector-live-state');
 const { createMediaState } = require('./media-state');
 
 function createMainRuntimeCore({
@@ -39,6 +40,7 @@ function createMainRuntimeCore({
     cameraCenterCropPercent: 100,
     enableCameraTestMode: false,
   });
+  const projectorLiveState = createProjectorLiveState();
 
   return {
     mediaState,
@@ -49,6 +51,7 @@ function createMainRuntimeCore({
     licenseRuntime,
     controlCloseController,
     projectorSceneState,
+    projectorLiveState,
   };
 }
 

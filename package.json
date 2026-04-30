@@ -14,7 +14,8 @@
       "EULA.md"
     ],
     "asarUnpack": [
-      "electron/ppt-convert.ps1"
+      "electron/ppt-convert.ps1",
+      "node_modules/@stagetimerio/grandiose/dist/**"
     ],
     "extraResources": [
       {
@@ -49,7 +50,12 @@
     "test": "node --test \"tests/**/*.test.js\"",
     "lint": "eslint \"src/**/*.{js,jsx}\" \"electron/**/*.js\"",
     "format": "prettier --write .",
+    "ndi:prepare": "node scripts/prepare-ndi.js",
+    "ndi:verify:package": "node scripts/verify-ndi-package.js",
     "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5199 && electron .\"",
+    "electron:build:ndi": "npm run ndi:prepare && vite build && electron-builder",
+    "electron:build:ndi:unsigned": "npm run ndi:prepare && vite build && electron-builder --win nsis --x64 --config.win.signAndEditExecutable=false",
+    "electron:build:ndi:unsigned:verify": "npm run electron:build:ndi:unsigned && npm run ndi:verify:package",
     "electron:build": "vite build && electron-builder",
     "electron:build:unsigned": "vite build && electron-builder --win nsis --x64 --config.win.signAndEditExecutable=false",
     "electron:build:lite:unsigned": "vite build && electron-builder --win nsis --x64 --config electron-builder.lite.json --config.win.signAndEditExecutable=false",
@@ -70,6 +76,9 @@
     "play-dl": "^1.9.7",
     "sql.js": "^1.14.1",
     "yt-dlp-wrap": "^2.3.12"
+  },
+  "optionalDependencies": {
+    "@stagetimerio/grandiose": "^0.2.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",

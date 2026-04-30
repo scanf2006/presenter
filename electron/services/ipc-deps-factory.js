@@ -8,6 +8,7 @@ function buildMainIpcDeps({
   getProjectorWindow,
   appendBgDebug,
   projectorSceneState,
+  projectorLiveState,
   resolveYouTubeStream,
   sanitizeMediaFileName,
   mediaState,
@@ -30,6 +31,7 @@ function buildMainIpcDeps({
   formatBackupStamp,
   collectReferencedMediaPathsFromQueue,
   copyDirectoryMerge,
+  ndiOutputService,
 }) {
   return {
     ipcMain,
@@ -43,6 +45,10 @@ function buildMainIpcDeps({
     sendToProjectorShell: projectorControlBridge.sendToProjectorShell,
     openYouTubeWatchInProjector: projectorControlBridge.openYouTubeWatchInProjector,
     projectorSceneState,
+    getLatestProjectorContent: projectorLiveState.getLatestContent,
+    setLatestProjectorContent: projectorLiveState.setLatestContent,
+    getLatestProjectorBackground: projectorLiveState.getLatestBackground,
+    setLatestProjectorBackground: projectorLiveState.setLatestBackground,
     resolveYouTubeStream,
     sanitizeMediaFileName,
     mediaYouTubeCacheDir: mediaState.getMediaYouTubeCacheDir(),
@@ -70,6 +76,7 @@ function buildMainIpcDeps({
     formatBackupStamp,
     collectReferencedMediaPathsFromQueue,
     copyDirectoryMerge,
+    ndiOutputService,
   };
 }
 

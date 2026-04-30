@@ -13,6 +13,8 @@ function openProjectorWindowWithRuntime({
   bindProjectorWindowEvents,
   forceWindowZoom100,
   getProjectorScene,
+  getProjectorContent,
+  getProjectorBackground,
   notifyProjectorActive,
   setProjectorWindow,
   logger = console,
@@ -40,6 +42,8 @@ function openProjectorWindowWithRuntime({
     controlWindowRef,
     forceWindowZoom100,
     getProjectorScene,
+    getProjectorContent,
+    getProjectorBackground,
     notifyProjectorActive,
     onProjectorClosed: () => {
       setProjectorWindow(null);

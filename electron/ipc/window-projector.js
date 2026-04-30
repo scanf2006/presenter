@@ -27,6 +27,10 @@ function registerWindowProjectorIPC({
 
   ipcMain.handle('start-projector', (_event, displayId) => {
     try {
+      const allDisplays = screenManager.getAllDisplays();
+      const displayById =
+        displayId != null ? allDisplays.find((d) => String(d.id) === String(displayId)) : null;
+
       if (typeof ensureProjectionAccess === 'function') {
         const access = ensureProjectionAccess();
         if (!access.allowed) {
@@ -41,10 +45,7 @@ function registerWindowProjectorIPC({
           };
         }
       }
-      let targetDisplay = null;
-      if (displayId) {
-        targetDisplay = screenManager.getAllDisplays().find((d) => d.id === displayId);
-      }
+      const targetDisplay = displayById || null;
       createProjectorWindow(targetDisplay);
       return { success: true };
     } catch (err) {

@@ -21,6 +21,15 @@ class ScreenManager {
     return this.screen.getPrimaryDisplay();
   }
 
+  getDisplayMatching(bounds) {
+    if (!bounds) return this.getPrimaryDisplay();
+    try {
+      return this.screen.getDisplayMatching(bounds);
+    } catch (_) {
+      return this.getPrimaryDisplay();
+    }
+  }
+
   getExternalDisplays() {
     const primary = this.screen.getPrimaryDisplay();
     return this.screen.getAllDisplays().filter((d) => d.id !== primary.id);

@@ -11,7 +11,7 @@ function SystemInfoPanel() {
   const {
     displays,
     projectorActive,
-    obsModeEnabled,
+    ndiStatus,
     handleExportSetupBundle,
     handleImportSetupBundle,
     setupTransferBusy,
@@ -44,19 +44,29 @@ function SystemInfoPanel() {
           <span>Projector Status</span>
           <span
             style={{
-              color: obsModeEnabled
-                ? 'var(--color-warning)'
-                : projectorActive
-                  ? 'var(--color-success)'
-                  : 'var(--color-text-muted)',
+              color: projectorActive ? 'var(--color-success)' : 'var(--color-text-muted)',
             }}
           >
-            {obsModeEnabled ? 'Managed by OBS' : projectorActive ? 'Running' : 'Stopped'}
+            {projectorActive ? 'Running' : 'Stopped'}
           </span>
         </div>
         <div className="cp-meta-row">
           <span>Environment</span>
           <span className="cp-meta-value">{isElectron ? 'Electron' : 'Browser'}</span>
+        </div>
+        <div className="cp-meta-row">
+          <span>NDI Output</span>
+          <span
+            style={{
+              color: ndiStatus?.active ? 'var(--color-success)' : 'var(--color-text-muted)',
+            }}
+          >
+            {ndiStatus?.active ? 'Enabled' : 'Disabled'}
+          </span>
+        </div>
+        <div className="cp-meta-row">
+          <span>NDI Receivers</span>
+          <span className="cp-meta-value">{ndiStatus?.connections ?? 0}</span>
         </div>
         <div className="cp-meta-row">
           <span>Export Mode</span>
