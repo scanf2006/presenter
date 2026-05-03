@@ -1,6 +1,6 @@
 {
   "name": "churchdisplay-pro",
-  "version": "0.3.192",
+  "version": "0.3.193",
   "description": "ChurchDisplay Pro - Worship projection system",
   "main": "electron/main.js",
   "build": {
@@ -73,6 +73,7 @@
     "@fontsource/zcool-qingke-huangyou": "^5.2.8",
     "@fontsource/zcool-xiaowei": "^5.2.8",
     "@fontsource/zhi-mang-xing": "^5.2.8",
+    "iconv-lite": "^0.7.2",
     "play-dl": "^1.9.7",
     "sql.js": "^1.14.1",
     "yt-dlp-wrap": "^2.3.12"

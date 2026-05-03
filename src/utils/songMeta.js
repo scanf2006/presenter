@@ -160,6 +160,27 @@ function deriveSongTitleFromImportFile(fileName = '') {
   return String(fileName).replace(/\.(txt|lrc)$/i, '');
 }
 
+function normalizeImportedLyrics(rawLyrics) {
+  const normalized = String(rawLyrics || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n');
+
+  const cleanedLines = normalized
+    .split('\n')
+    .map((line) => line.trim())
+    .map((line) => line.replace(/[\p{P}\p{S}]/gu, ''))
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+
+  if (cleanedLines.length === 0) return '';
+
+  const grouped = [];
+  for (let i = 0; i < cleanedLines.length; i += 2) {
+    grouped.push(cleanedLines.slice(i, i + 2).join('\n'));
+  }
+  return grouped.join('\n\n');
+}
+
 export {
   buildSongBackgroundFromSong,
   mergeSongWithBackground,
@@ -169,4 +190,5 @@ export {
   parseSongLyricsSections,
   decodeLyricsImportBytes,
   deriveSongTitleFromImportFile,
+  normalizeImportedLyrics,
 };

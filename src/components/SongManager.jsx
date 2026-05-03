@@ -14,6 +14,7 @@ import {
   decodeLyricsImportBytes,
   deriveSongTitleFromImportFile,
   mergeSongWithBackground,
+  normalizeImportedLyrics,
   parseSongLyricsSections,
 } from '../utils/songMeta';
 import useSongSectionNavigation from '../hooks/useSongSectionNavigation';
@@ -55,6 +56,9 @@ function SongManager({
   const [selectedSectionIndex, setSelectedSectionIndex] = useState(-1);
   // 搜索
   const [searchQuery, setSearchQuery] = useState('');
+  const [webSearchResults, setWebSearchResults] = useState([]);
+  const [webSearching, setWebSearching] = useState(false);
+  const [webImportUrl, setWebImportUrl] = useState('');
   // Keep projection-selection continuity:
   // when background changes, we can re-project the last section with new background.
   const lastProjectedSectionRef = useRef(null);
@@ -458,17 +462,101 @@ function SongManager({
       const buffer = reader.result;
       const bytes = new Uint8Array(buffer);
       const content = decodeLyricsImportBytes(bytes);
+      const normalizedLyrics = normalizeImportedLyrics(content);
       const title = deriveSongTitleFromImportFile(file.name);
       setEditingSong({ id: null });
       setSelectedSong(null);
       setSelectedSectionIndex(-1);
       setFormTitle(title);
       setFormAuthor('');
-      setFormLyrics(content);
+      setFormLyrics(normalizedLyrics);
     };
     reader.readAsArrayBuffer(file);
     event.target.value = '';
   }, []);
+
+  const handleSiteSearch = useCallback(async () => {
+    if (!isElectron) {
+      showToast('Site search is available in Electron build only.', 'warning');
+      return;
+    }
+    const keyword = String(searchQuery || '').trim();
+    if (!keyword) {
+      showToast('Please enter keyword first.', 'warning');
+      return;
+    }
+    setWebSearchResults([]);
+    setWebSearching(true);
+    try {
+      const results = await window.churchDisplay.songsWebSiteSearch(keyword);
+      const safeResults = (Array.isArray(results) ? results : []).filter((item) =>
+        /^https?:\/\/(www\.)?christianstudy\.com\//i.test(String(item?.url || ''))
+      );
+      setWebSearchResults(safeResults);
+      if (!safeResults.length) {
+        showToast('No matched pages from site search.', 'info');
+      }
+    } catch (err) {
+      console.warn('[SongManager] site search failed:', err?.message || err);
+      showToast('Site search failed', 'error');
+    } finally {
+      setWebSearching(false);
+    }
+  }, [isElectron, searchQuery, showToast]);
+
+  const handleImportWebResult = useCallback(
+    async (item, options = {}) => {
+      if (!isElectron || !item?.url) return;
+      const allowForce = options?.allowBlogMirror === true;
+      if (
+        !allowForce &&
+        !/^https?:\/\/www\.christianstudy\.com\/data\/hymns\/text\//i.test(String(item.url))
+      ) {
+        showToast('Blocked non-hymn source', 'warning');
+        return;
+      }
+      try {
+        const data = await window.churchDisplay.songsWebFetchLyrics(item.url, options);
+        const fallbackTitle = String(item.title || '').replace(/[【】]/g, '').trim();
+        const importTitle = String(data?.title || fallbackTitle).trim();
+        const importLyrics = String(data?.lyrics || '').trim();
+        if (!importTitle || !importLyrics) {
+          showToast('Failed to parse lyrics from selected page', 'warning');
+          return;
+        }
+        setEditingSong({ id: null });
+        setSelectedSong(null);
+        setSelectedSectionIndex(-1);
+        setFormTitle(importTitle);
+        setFormAuthor('');
+        setFormLyrics(importLyrics);
+        showToast('Web lyrics imported. Please review then save.', 'success');
+      } catch (err) {
+        console.warn('[SongManager] import web song failed:', err?.message || err);
+        showToast('Import failed', 'error');
+      }
+    },
+    [isElectron, showToast]
+  );
+
+  const handleImportByUrl = useCallback(async () => {
+    if (!isElectron) return;
+    const url = String(webImportUrl || '').trim();
+    if (!url) {
+      showToast('Please paste christianstudy song URL first.', 'warning');
+      return;
+    }
+    if (!/^https?:\/\/(www\.)?christianstudy\.com\//i.test(url)) {
+      showToast('Only christianstudy.com URL is supported.', 'warning');
+      return;
+    }
+    const data = await window.churchDisplay.songsWebFetchLyrics(url, { allowBlogMirror: false });
+    if (data?.title && data?.lyrics) {
+      await handleImportWebResult({ url, title: '' }, { allowBlogMirror: false });
+      return;
+    }
+    await handleImportWebResult({ url, title: '' }, { allowBlogMirror: true });
+  }, [isElectron, webImportUrl, showToast, handleImportWebResult]);
 
   // 过滤歌曲
   // R3-M: Memoize filtered songs to avoid re-filtering on every render.
@@ -915,6 +1003,84 @@ function SongManager({
             outline: 'none',
           }}
         />
+        <button className="btn btn--ghost" onClick={handleSiteSearch} disabled={webSearching}>
+          {webSearching ? 'Searching...' : 'Search'}
+        </button>
+      </div>
+
+      {!!webSearchResults.length && (
+        <div
+          style={{
+            marginBottom: '12px',
+            padding: '10px',
+            borderRadius: '8px',
+            border: '1px solid var(--color-border)',
+            background: 'rgba(59,130,246,0.08)',
+          }}
+        >
+          <div
+            style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: '8px' }}
+          >
+            christianstudy.com results ({webSearchResults.length})
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '180px', overflow: 'auto' }}>
+            {webSearchResults.map((item) => (
+              <div
+                key={item.url}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '8px',
+                  padding: '6px 8px',
+                  borderRadius: '6px',
+                  background: 'var(--color-surface)',
+                }}
+                >
+                  <span style={{ fontSize: '13px' }}>{item.title}</span>
+                  <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {item.url}
+                  </span>
+                  <button className="btn btn--ghost" onClick={() => handleImportWebResult(item)}>
+                    Import
+                  </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div
+        style={{
+          marginBottom: '12px',
+          padding: '10px',
+          borderRadius: '8px',
+          border: '1px solid var(--color-border)',
+          background: 'rgba(16,185,129,0.08)',
+          display: 'flex',
+          gap: '8px',
+          alignItems: 'center',
+        }}
+      >
+        <input
+          type="text"
+          placeholder="Paste christianstudy song URL and import directly..."
+          value={webImportUrl}
+          onChange={(e) => setWebImportUrl(e.target.value)}
+          style={{
+            flex: 1,
+            padding: '8px 10px',
+            borderRadius: '6px',
+            border: '1px solid var(--color-border)',
+            background: 'var(--color-surface)',
+            color: 'var(--color-text-primary)',
+            fontSize: '12px',
+            outline: 'none',
+          }}
+        />
+        <button className="btn btn--ghost" onClick={handleImportByUrl}>
+          Import URL
+        </button>
       </div>
 
       {/* 歌曲列表 */}
