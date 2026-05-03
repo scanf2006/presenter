@@ -10,6 +10,7 @@ function runStartupUiRuntime({
   screen,
   controlWindowRef,
   screenManager,
+  onStabilizeProjector,
   onRecover,
   logger = console,
   splashController,
@@ -29,6 +30,7 @@ function runStartupUiRuntime({
     screen,
     controlWindowRef,
     screenManager,
+    onStabilizeProjector,
     onRecover,
     logger,
   });

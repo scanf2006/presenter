@@ -246,6 +246,38 @@ const windowRuntimeManager = createWindowRuntimeManager({
 const createControlWindow = () => windowRuntimeManager.createControlWindow();
 const createProjectorWindow = (targetDisplay) =>
   windowRuntimeManager.createProjectorWindow(targetDisplay);
+
+function stabilizeProjectorWindowAfterDisplayChange(reason = 'display-change') {
+  const current = projectorWindow;
+  if (!current || current.isDestroyed()) return false;
+  const display = screenManager.getDisplayMatching(current.getBounds());
+  if (!display || !display.bounds) return false;
+  try {
+    current.setBounds(
+      {
+        x: display.bounds.x,
+        y: display.bounds.y,
+        width: display.bounds.width,
+        height: display.bounds.height,
+      },
+      false
+    );
+    current.setFullScreen(true);
+    current.setKiosk(true);
+    forceWindowZoom100(current);
+    console.log(
+      `[ProjectorStabilize] ${reason} -> display ${display.id} (${display.bounds.width}x${display.bounds.height})`
+    );
+    return true;
+  } catch (err) {
+    console.warn(
+      `[ProjectorStabilize] ${reason} failed:`,
+      err?.message || err
+    );
+    return false;
+  }
+}
+
 const ndiOutputService = createNdiOutputService({
   getProjectorWindow: () => projectorWindow,
   logger: console,
@@ -330,6 +362,7 @@ app
         screen,
         controlWindowRef: () => controlWindow,
         screenManager,
+        onStabilizeProjector: stabilizeProjectorWindowAfterDisplayChange,
         onRecover: projectorRecoveryBridge.recoverDesktopAfterDisplaySwitch,
         splashController,
         createControlWindow,

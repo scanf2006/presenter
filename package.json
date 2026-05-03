@@ -9,6 +9,8 @@
     "files": [
       "electron/**/*",
       "dist/**/*",
+      "!node_modules/@stagetimerio/grandiose/build/**",
+      "!node_modules/@stagetimerio/grandiose/ndi/**",
       "package.json",
       "LICENSE",
       "EULA.md"
@@ -23,13 +25,6 @@
         "to": "data",
         "filter": [
           "bible_*.db"
-        ]
-      },
-      {
-        "from": "data/seed",
-        "to": "data-seed",
-        "filter": [
-          "**/*"
         ]
       }
     ],
