@@ -92,6 +92,10 @@ const api = {
   songsList: () => ipcRenderer.invoke('songs-list'),
   songsSave: (song) => ipcRenderer.invoke('songs-save', song),
   songsDelete: (songId) => ipcRenderer.invoke('songs-delete', songId),
+  songsWebSearch: (keyword) => ipcRenderer.invoke('songs-web-search', keyword),
+  songsWebSiteSearch: (keyword) => ipcRenderer.invoke('songs-web-site-search', keyword),
+  songsWebFetchLyrics: (sourceUrl, options) =>
+    ipcRenderer.invoke('songs-web-fetch-lyrics', sourceUrl, options),
 };
 
 contextBridge.exposeInMainWorld('churchDisplay', api);
