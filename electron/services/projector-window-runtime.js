@@ -25,8 +25,6 @@ function bindProjectorWindowEvents({
   onClosed,
   forceWindowZoom100,
   getProjectorScene,
-  getProjectorContent,
-  getProjectorBackground,
 }) {
   projectorWindow.on('closed', () => {
     onClosed();
@@ -39,30 +37,10 @@ function bindProjectorWindowEvents({
   try {
     projectorWindow.webContents.setAudioMuted(false);
     projectorWindow.webContents.on('did-finish-load', () => {
-      const replayProjectionState = () => {
-        try {
-          projectorWindow?.webContents?.send('projector-scene', getProjectorScene());
-          const latestContent =
-            typeof getProjectorContent === 'function' ? getProjectorContent() : null;
-          const latestBackground =
-            typeof getProjectorBackground === 'function' ? getProjectorBackground() : null;
-          if (latestContent) {
-            projectorWindow?.webContents?.send('projector-content', latestContent);
-          }
-          // Always replay background as well so background-only states can recover.
-          projectorWindow?.webContents?.send('projector-background', latestBackground || null);
-        } catch (err) {
-          console.warn('[ProjectorWindow] replay projection state failed:', err?.message || err);
-        }
-      };
-
       try {
         forceWindowZoom100(projectorWindow);
         projectorWindow?.webContents?.setAudioMuted(false);
-        // Renderer may still be mounting React listeners at did-finish-load.
-        // Replay immediately and once more shortly after as a reliability guard.
-        replayProjectionState();
-        setTimeout(replayProjectionState, 120);
+        projectorWindow?.webContents?.send('projector-scene', getProjectorScene());
       } catch (err) {
         console.warn('[ProjectorWindow] did-finish-load post setup failed:', err?.message || err);
       }
