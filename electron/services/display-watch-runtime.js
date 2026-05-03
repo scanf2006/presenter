@@ -3,6 +3,7 @@ function registerDisplayWatchRuntime({
   screen,
   controlWindowRef,
   screenManager,
+  onStabilizeProjector,
   onRecover,
   logger = console,
 }) {
@@ -14,6 +15,7 @@ function registerDisplayWatchRuntime({
         controlWindow.webContents.send('displays-changed', screenManager.getDisplaysInfo());
       }
     },
+    onStabilizeProjector,
     onRecover,
     logger,
   });
