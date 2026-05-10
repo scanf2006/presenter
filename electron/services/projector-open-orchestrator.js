@@ -15,6 +15,7 @@ function openProjectorWindowWithRuntime({
   getProjectorScene,
   getProjectorContent,
   getProjectorBackground,
+  onProjectorDisplayResolved,
   notifyProjectorActive,
   setProjectorWindow,
   logger = console,
@@ -44,6 +45,7 @@ function openProjectorWindowWithRuntime({
     getProjectorScene,
     getProjectorContent,
     getProjectorBackground,
+    onProjectorDisplayResolved,
     notifyProjectorActive,
     onProjectorClosed: () => {
       setProjectorWindow(null);

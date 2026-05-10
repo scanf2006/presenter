@@ -21,6 +21,7 @@ function notifyProjectorActive(controlWindowRef, display) {
 
 function bindProjectorWindowEvents({
   projectorWindow,
+  display,
   controlWindowRef,
   onClosed,
   forceWindowZoom100,
@@ -38,6 +39,19 @@ function bindProjectorWindowEvents({
     projectorWindow.webContents.setAudioMuted(false);
     projectorWindow.webContents.on('did-finish-load', () => {
       try {
+        if (display?.bounds) {
+          projectorWindow.setBounds(
+            {
+              x: display.bounds.x,
+              y: display.bounds.y,
+              width: display.bounds.width,
+              height: display.bounds.height,
+            },
+            false
+          );
+        }
+        projectorWindow.setFullScreen(true);
+        projectorWindow.setKiosk(true);
         forceWindowZoom100(projectorWindow);
         projectorWindow?.webContents?.setAudioMuted(false);
         projectorWindow?.webContents?.send('projector-scene', getProjectorScene());
