@@ -40,6 +40,7 @@ function buildWindowRuntimeDeps({
   getProjectorScene,
   getProjectorContent,
   getProjectorBackground,
+  onProjectorDisplayResolved,
   notifyProjectorActive,
   setupNavigationRestrictions,
 }) {
@@ -83,6 +84,7 @@ function buildWindowRuntimeDeps({
     getProjectorScene,
     getProjectorContent,
     getProjectorBackground,
+    onProjectorDisplayResolved,
     notifyProjectorActive,
     logger,
     setupNavigationRestrictions,

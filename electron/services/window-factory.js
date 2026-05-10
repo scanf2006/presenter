@@ -47,6 +47,7 @@ function createProjectorWindowInstance({ BrowserWindow, display, preloadPath }) 
     width: display.bounds.width,
     height: display.bounds.height,
     fullscreen: true,
+    kiosk: true,
     frame: false,
     alwaysOnTop: true,
     skipTaskbar: true,

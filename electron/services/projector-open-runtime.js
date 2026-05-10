@@ -24,6 +24,7 @@ function createAndWireProjectorWindow({
   forceWindowZoom100,
   getProjectorScene,
   notifyProjectorActive,
+  onProjectorDisplayResolved,
   onProjectorClosed,
   logger = console,
   setupNavigationRestrictions,
@@ -43,11 +44,16 @@ function createAndWireProjectorWindow({
 
   bindProjectorWindowEvents({
     projectorWindow,
+    display,
     controlWindowRef,
     onClosed: onProjectorClosed,
     forceWindowZoom100,
     getProjectorScene,
   });
+
+  if (typeof onProjectorDisplayResolved === 'function') {
+    onProjectorDisplayResolved(display);
+  }
 
   notifyProjectorActive(controlWindowRef, display);
   logger.log(

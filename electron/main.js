@@ -178,6 +178,7 @@ const { projectorChannel, splashController } = createMainUiRuntime({
 });
 let controlWindow = null; // Control window
 let projectorWindow = null; // Projector window
+let projectorDisplayId = null; // Locked target display for projector window
 const projectorControlBridge = createProjectorControlBridge({
   controlCloseController,
   controlWindowRef: () => controlWindow,
@@ -225,6 +226,9 @@ const { controlWindowDeps, projectorWindowDeps } = buildWindowRuntimeDeps({
   getProjectorScene: projectorSceneState.getScene,
   getProjectorContent: projectorLiveState.getLatestContent,
   getProjectorBackground: projectorLiveState.getLatestBackground,
+  onProjectorDisplayResolved: (display) => {
+    projectorDisplayId = display?.id ?? null;
+  },
   notifyProjectorActive,
   setupNavigationRestrictions: sessionHooks.setupNavigationRestrictions,
 });
@@ -239,6 +243,7 @@ const windowRuntimeManager = createWindowRuntimeManager({
   projectorWindowRef: () => projectorWindow,
   setProjectorWindow: (nextWindow) => {
     projectorWindow = nextWindow;
+    if (!nextWindow) projectorDisplayId = null;
   },
   projectorWindowDeps,
 });
@@ -250,7 +255,12 @@ const createProjectorWindow = (targetDisplay) =>
 function stabilizeProjectorWindowAfterDisplayChange(reason = 'display-change') {
   const current = projectorWindow;
   if (!current || current.isDestroyed()) return false;
-  const display = screenManager.getDisplayMatching(current.getBounds());
+  const allDisplays = screenManager.getAllDisplays();
+  const displayById =
+    projectorDisplayId !== null && projectorDisplayId !== undefined
+      ? allDisplays.find((d) => String(d.id) === String(projectorDisplayId))
+      : null;
+  const display = displayById || screenManager.getDisplayMatching(current.getBounds());
   if (!display || !display.bounds) return false;
   try {
     current.setBounds(
