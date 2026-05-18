@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { I18nProvider } from './contexts/I18nContext';
 import './index.css';
 
 // 注入 Polyfill 解决最新版 pdfjs-dist 在当前 Electron 版本的兼容性问题
@@ -14,6 +15,8 @@ console.log("%c [DIAGNOSTIC] main.jsx Loaded", "color: red; font-size: 20px; fon
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <App />
+    <I18nProvider>
+      <App />
+    </I18nProvider>
   </React.StrictMode>
 );

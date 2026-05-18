@@ -1,0 +1,36 @@
+{
+  "appId": "com.aiden.churchdisplaypro.zh",
+  "productName": "churchdisplay-pro-zh",
+  "artifactName": "${productName} Setup ${version}.${ext}",
+  "files": [
+    "electron/**/*",
+    "dist/**/*",
+    "!node_modules/@stagetimerio/grandiose/build/**",
+    "!node_modules/@stagetimerio/grandiose/ndi/**",
+    "package.json",
+    "LICENSE",
+    "EULA.md"
+  ],
+  "asarUnpack": [
+    "electron/ppt-convert.ps1",
+    "node_modules/@stagetimerio/grandiose/dist/**"
+  ],
+  "extraResources": [
+    {
+      "from": "data",
+      "to": "data",
+      "filter": [
+        "bible_*.db"
+      ]
+    }
+  ],
+  "win": {
+    "target": [
+      "nsis"
+    ]
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true
+  }
+}

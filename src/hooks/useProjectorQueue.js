@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getQueueItemTitleFromPayload, resolveSectionForPayload } from '../utils/queueItemMeta';
 import { buildQueueEnvelope, migrateQueuePayload } from '../utils/queueSchema';
+import { useI18n } from '../contexts/I18nContext';
 
 const DEFAULT_QUEUE_STORAGE_KEY = 'churchdisplay.projectorQueue.v1';
 
@@ -9,16 +10,18 @@ export default function useProjectorQueue({
   showToast,
   storageKey = DEFAULT_QUEUE_STORAGE_KEY,
 }) {
+  const { t } = useI18n();
   const buildQueueItem = useCallback(
     (payload, title, section) => ({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      title: title || payload?.name || payload?.reference || payload?.type || 'Untitled Content',
+      title:
+        title || payload?.name || payload?.reference || payload?.type || t('queue.untitled', 'Untitled Content'),
       type: payload?.type || 'text',
       payload,
       section: section || resolveSectionForPayload(payload),
       createdAt: Date.now(),
     }),
-    []
+    [t]
   );
 
   const [projectorQueue, setProjectorQueue] = useState([]);
@@ -137,10 +140,12 @@ export default function useProjectorQueue({
       // In React 18 batched mode the updater runs synchronously within setState,
       // so updateFlagRef.current is set by the time we reach here.
       if (updateFlagRef.current && !silent && typeof showToast === 'function') {
-        showToast('Auto-saved to selected queue card', 'info', { channel: 'autosave' });
+        showToast(t('queue.autoSaved', 'Auto-saved to selected queue card'), 'info', {
+          channel: 'autosave',
+        });
       }
     },
-    [activeQueueIndex, showToast]
+    [activeQueueIndex, showToast, t]
   );
 
   const moveQueueItem = useCallback((fromIndex, toIndex) => {

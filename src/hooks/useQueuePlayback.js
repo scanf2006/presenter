@@ -63,6 +63,7 @@ export default function useQueuePlayback({
           payload: {
             songId: item.payload.songId,
             songTitle: item.payload.songTitle || item.title,
+            songStyle: item.payload.songStyle || null,
           },
           token: Date.now(),
         });

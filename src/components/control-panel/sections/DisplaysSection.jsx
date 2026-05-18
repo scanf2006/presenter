@@ -1,8 +1,10 @@
 import React from 'react';
 import { useProjectorContext } from '../../../contexts/ProjectorContext';
 import { useAppContext } from '../../../contexts/AppContext';
+import { useI18n } from '../../../contexts/I18nContext';
 
 function DisplaysSection() {
+  const { t } = useI18n();
   const { showToast } = useAppContext();
   const {
     displays,
@@ -16,10 +18,14 @@ function DisplaysSection() {
 
   return (
     <div className="animate-slide-in-up">
-      <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>Displays</h2>
+      <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>
+        {t('displays.title', 'Displays')}
+      </h2>
       <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '24px' }}>
-        Select an external display to start projection. Content will be fullscreen on the selected
-        screen.
+        {t(
+          'displays.intro',
+          'Select an external display to start projection. Content will be fullscreen on the selected screen.'
+        )}
       </p>
       <div
         className={`display-card ${ndiStatus?.active ? 'display-card--active' : ''}`}
@@ -32,7 +38,7 @@ function DisplaysSection() {
         tabIndex={0}
         onClick={() => {
           if (!projectorActive) {
-            showToast('Start projector first, then enable NDI output.', 'warning');
+            showToast(t('displays.startProjectorFirst', 'Start projector first, then enable NDI output.'), 'warning');
             return;
           }
           void toggleNdiOutput();
@@ -41,7 +47,7 @@ function DisplaysSection() {
           if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
             if (!projectorActive) {
-              showToast('Start projector first, then enable NDI output.', 'warning');
+              showToast(t('displays.startProjectorFirst', 'Start projector first, then enable NDI output.'), 'warning');
               return;
             }
             void toggleNdiOutput();
@@ -50,14 +56,18 @@ function DisplaysSection() {
       >
         <span className="display-card__icon">NDI</span>
         <div className="display-card__info">
-          <div className="display-card__name">NDI Output</div>
+          <div className="display-card__name">{t('displays.ndiOutput', 'NDI Output')}</div>
           <div className="display-card__resolution">
-            Source: {ndiStatus?.sourceName || 'ChurchDisplay Pro NDI'} | Receivers:{' '}
+            {t('displays.source', 'Source')}: {ndiStatus?.sourceName || 'ChurchDisplay Pro NDI'} | {t('displays.receivers', 'Receivers')}:{' '}
             {ndiStatus?.connections ?? 0}
           </div>
         </div>
         <span className="display-card__badge display-card__badge--projecting">
-          {ndiStatus?.active ? 'Enabled' : projectorActive ? 'Disabled' : 'Unavailable'}
+          {ndiStatus?.active
+            ? t('displays.enabled', 'Enabled')
+            : projectorActive
+              ? t('displays.disabled', 'Disabled')
+              : t('displays.unavailable', 'Unavailable')}
         </span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -69,18 +79,23 @@ function DisplaysSection() {
           >
             <span className="display-card__icon">{display.isPrimary ? 'P' : 'E'}</span>
             <div className="display-card__info">
-              <div className="display-card__name">{display.label || `Display ${display.id}`}</div>
+              <div className="display-card__name">
+                {display.label || `${t('displays.displayLabel', 'Display')} ${display.id}`}
+              </div>
               <div className="display-card__resolution">
                 {display.size?.width ?? '?'} x {display.size?.height ?? '?'}
-                {display.bounds && ` | Position (${display.bounds.x}, ${display.bounds.y})`}
+                {display.bounds &&
+                  ` | ${t('displays.position', 'Position')} (${display.bounds.x}, ${display.bounds.y})`}
               </div>
             </div>
             {display.isPrimary && (
-              <span className="display-card__badge display-card__badge--primary">Primary</span>
+              <span className="display-card__badge display-card__badge--primary">
+                {t('displays.primary', 'Primary')}
+              </span>
             )}
             {projectorDisplayId === display.id && (
               <span className="display-card__badge display-card__badge--projecting">
-                Projecting
+                {t('displays.projecting', 'Projecting')}
               </span>
             )}
           </div>
@@ -93,7 +108,7 @@ function DisplaysSection() {
           style={{ marginTop: '24px', width: '100%' }}
           onClick={handleStopProjector}
         >
-          Stop Projector
+          {t('displays.stopProjector', 'Stop Projector')}
         </button>
       )}
 
@@ -109,7 +124,10 @@ function DisplaysSection() {
             fontSize: '13px',
           }}
         >
-          No external display detected. Connect a projector/monitor and try again.
+          {t(
+            'displays.noExternalDisplay',
+            'No external display detected. Connect a projector/monitor and try again.'
+          )}
         </div>
       )}
     </div>

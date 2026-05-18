@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useI18n } from '../contexts/I18nContext';
 
 const INITIAL_NDI_STATUS = {
   active: false,
@@ -12,6 +13,7 @@ const INITIAL_NDI_STATUS = {
 };
 
 export default function useNdiOutput({ isElectron, showToast, projectorActive }) {
+  const { t } = useI18n();
   const [ndiStatus, setNdiStatus] = useState(INITIAL_NDI_STATUS);
 
   const refreshNdiStatus = useCallback(async () => {
@@ -30,7 +32,7 @@ export default function useNdiOutput({ isElectron, showToast, projectorActive })
 
   const startNdiOutput = useCallback(async () => {
     if (!isElectron || typeof window.churchDisplay?.ndiStart !== 'function') {
-      showToast('NDI is available only in Electron desktop build.', 'warning');
+      showToast(t('ndi.electronOnly', 'NDI is available only in Electron desktop build.'), 'warning');
       return { success: false };
     }
     const result = await window.churchDisplay.ndiStart();
@@ -40,12 +42,15 @@ export default function useNdiOutput({ isElectron, showToast, projectorActive })
       await refreshNdiStatus();
     }
     if (!result?.success) {
-      showToast(`NDI start failed: ${result?.error || 'Unknown error'}`, 'error');
+      showToast(`${t('ndi.startFailed', 'NDI start failed')}: ${result?.error || t('media.unknownError', 'Unknown error')}`, 'error');
       return result || { success: false };
     }
-    showToast(`NDI started. OBS source: ${result?.status?.sourceName || 'ChurchDisplay Pro NDI'}.`, 'success');
+    showToast(
+      `${t('ndi.started', 'NDI started. OBS source')}: ${result?.status?.sourceName || 'ChurchDisplay Pro NDI'}.`,
+      'success'
+    );
     return result;
-  }, [isElectron, refreshNdiStatus, showToast]);
+  }, [isElectron, refreshNdiStatus, showToast, t]);
 
   const stopNdiOutput = useCallback(async () => {
     if (!isElectron || typeof window.churchDisplay?.ndiStop !== 'function') {
@@ -58,12 +63,12 @@ export default function useNdiOutput({ isElectron, showToast, projectorActive })
       await refreshNdiStatus();
     }
     if (!result?.success) {
-      showToast(`NDI stop failed: ${result?.error || 'Unknown error'}`, 'error');
+      showToast(`${t('ndi.stopFailed', 'NDI stop failed')}: ${result?.error || t('media.unknownError', 'Unknown error')}`, 'error');
       return result || { success: false };
     }
-    showToast('NDI stopped.', 'info');
+    showToast(t('ndi.stopped', 'NDI stopped.'), 'info');
     return result;
-  }, [isElectron, refreshNdiStatus, showToast]);
+  }, [isElectron, refreshNdiStatus, showToast, t]);
 
   const toggleNdiOutput = useCallback(async () => {
     if (ndiStatus.active || ndiStatus.enabled) {

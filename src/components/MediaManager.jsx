@@ -7,6 +7,7 @@ import {
   getSelectableThumbSelectedTagStyle,
 } from '../utils/thumbnail';
 import { useAppContext } from '../contexts/AppContext';
+import { useI18n } from '../contexts/I18nContext';
 
 const MEDIA_TYPE_ORDER = ['image', 'video', 'pdf', 'ppt'];
 
@@ -19,6 +20,7 @@ function MediaManager({
   onPickBackground,
   onCancelBackgroundPick,
 }) {
+  const { t } = useI18n();
   const [mediaFiles, setMediaFiles] = useState([]);
   const [activeFilter, setActiveFilter] = useState('all');
   const [isDragging, setIsDragging] = useState(false);
@@ -185,12 +187,12 @@ function MediaManager({
         }
       } catch (err) {
         console.error('[MediaManager] PDF load failed:', err);
-        showToast(`Failed to load PDF thumbnails: ${err.message}`, 'error');
+      showToast(`${t('media.pdfLoadFailed', 'Failed to load PDF thumbnails')}: ${err.message}`, 'error');
       } finally {
         setPdfLoading(false);
       }
     },
-    [onProjectMedia, showToast]
+    [onProjectMedia, showToast, t]
   );
 
   const handleConvertPpt = useCallback(
@@ -211,15 +213,18 @@ function MediaManager({
       if (result.error === 'TIMEOUT') {
         setPptSourcePath('');
         showToast(
-          'PPT conversion timed out (over 2 minutes). Please close PowerPoint popups and retry.',
+          t(
+            'media.pptTimeout',
+            'PPT conversion timed out (over 2 minutes). Please close PowerPoint popups and retry.'
+          ),
           'error'
         );
       } else {
         setPptSourcePath('');
-        showToast(`PPT conversion failed: ${result.error || 'Unknown error'}`, 'error');
+        showToast(`${t('media.pptFailed', 'PPT conversion failed')}: ${result.error || t('media.unknownError', 'Unknown error')}`, 'error');
       }
     },
-    [isElectron, showToast]
+    [isElectron, showToast, t]
   );
 
   const handleProjectMedia = useCallback(
@@ -228,7 +233,7 @@ function MediaManager({
         if (file.type === 'image' || file.type === 'video') {
           onPickBackground?.({ type: file.type, path: file.path, name: file.name });
         } else {
-          showToast('Background only supports image or video', 'warning');
+          showToast(t('media.bgOnlyImageVideo', 'Background only supports image or video'), 'warning');
         }
         return;
       }
@@ -250,6 +255,7 @@ function MediaManager({
       handleLoadPdfGrid,
       handleConvertPpt,
       showToast,
+      t,
     ]
   );
 
@@ -261,7 +267,7 @@ function MediaManager({
   const handleProjectYouTube = useCallback(() => {
     const id = parseYouTubeId(youtubeUrl);
     if (!id) {
-      showToast('Please enter a valid YouTube URL', 'warning');
+      showToast(t('media.invalidYoutubeUrl', 'Please enter a valid YouTube URL'), 'warning');
       return;
     }
     onProjectMedia({
@@ -270,12 +276,12 @@ function MediaManager({
       url: normalizeYouTubeWatchUrl(youtubeUrl) || youtubeUrl.trim(),
       name: `YouTube - ${id}`,
     });
-  }, [youtubeUrl, parseYouTubeId, onProjectMedia, showToast]);
+  }, [youtubeUrl, parseYouTubeId, onProjectMedia, showToast, t]);
 
   const handleQueueYouTube = useCallback(async () => {
     const id = parseYouTubeId(youtubeUrl);
     if (!id) {
-      showToast('Please enter a valid YouTube URL', 'warning');
+      showToast(t('media.invalidYoutubeUrl', 'Please enter a valid YouTube URL'), 'warning');
       return;
     }
     const normalizedUrl = normalizeYouTubeWatchUrl(youtubeUrl) || youtubeUrl.trim();
@@ -314,10 +320,10 @@ function MediaManager({
         },
       });
       if (cachedMeta?.cachedLocalPath) {
-        showToast('YouTube cached and added to queue');
+        showToast(t('media.youtubeCached', 'YouTube cached and added to queue'));
       }
     }
-  }, [youtubeUrl, parseYouTubeId, onAddPlaylist, showToast]);
+  }, [youtubeUrl, parseYouTubeId, onAddPlaylist, showToast, t]);
 
   useEffect(() => {
     if (!activePreloadItem) return;
@@ -474,22 +480,22 @@ function MediaManager({
   const getTypeLabel = (type) => {
     switch (type) {
       case 'image':
-        return 'Images';
+        return t('media.images', 'Images');
       case 'video':
-        return 'Videos';
+        return t('media.videos', 'Videos');
       case 'pdf':
         return 'PDF';
       case 'ppt':
         return 'PPT';
       default:
-        return 'Files';
+        return t('media.files', 'Files');
     }
   };
 
   const filterOptions = [
-    { key: 'all', label: 'All', icon: 'ALL' },
-    { key: 'image', label: 'Image', icon: 'IMG' },
-    { key: 'video', label: 'Video', icon: 'VID' },
+    { key: 'all', label: t('media.all', 'All'), icon: 'ALL' },
+    { key: 'image', label: t('media.image', 'Image'), icon: 'IMG' },
+    { key: 'video', label: t('media.video', 'Video'), icon: 'VID' },
     { key: 'pdf', label: 'PDF', icon: 'PDF' },
     { key: 'ppt', label: 'PPT', icon: 'PPT' },
   ];
@@ -532,9 +538,9 @@ function MediaManager({
 
   return (
     <div className="media-manager animate-slide-in-up">
-      <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px' }}>Media</h2>
+      <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px' }}>{t('media.title', 'Media')}</h2>
       <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '16px' }}>
-        Import image, video, PDF and PPT files. Click to project.
+        {t('media.intro', 'Import image, video, PDF and PPT files. Click to project.')}
       </p>
 
       {!isViewingDetail && (
@@ -554,9 +560,9 @@ function MediaManager({
                 fontSize: '12px',
               }}
             >
-              <span>Background picker mode: click an image/video to apply and return.</span>
+              <span>{t('media.backgroundPickerMode', 'Background picker mode: click an image/video to apply and return.')}</span>
               <button className="btn btn--ghost" onClick={() => onCancelBackgroundPick?.()}>
-                Cancel
+                {t('media.cancel', 'Cancel')}
               </button>
             </div>
           )}
@@ -564,7 +570,7 @@ function MediaManager({
           <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
             <input
               type="text"
-              placeholder="Paste YouTube URL (e.g. https://youtu.be/...)"
+              placeholder={t('media.youtubePlaceholder', 'Paste YouTube URL (e.g. https://youtu.be/...)')}
               value={youtubeUrl}
               onChange={(e) => setYoutubeUrl(e.target.value)}
               style={{
@@ -579,10 +585,10 @@ function MediaManager({
               }}
             />
             <button className="btn btn--primary" onClick={handleProjectYouTube}>
-              Play
+              {t('media.play', 'Play')}
             </button>
             <button className="btn btn--ghost" onClick={handleQueueYouTube}>
-              Queue
+              {t('media.queue', 'Queue')}
             </button>
           </div>
 
@@ -601,13 +607,13 @@ function MediaManager({
 
           <div className="media-import-actions">
             <button className="btn btn--primary" onClick={() => handleSelectFiles()}>
-              Import Files
+              {t('media.importFiles', 'Import Files')}
             </button>
             <button className="btn btn--ghost" onClick={() => handleSelectFiles('image')}>
-              Image
+              {t('media.image', 'Image')}
             </button>
             <button className="btn btn--ghost" onClick={() => handleSelectFiles('video')}>
-              Video
+              {t('media.video', 'Video')}
             </button>
             <button className="btn btn--ghost" onClick={() => handleSelectFiles('pdf')}>
               PDF
@@ -628,13 +634,13 @@ function MediaManager({
             {importing ? (
               <div className="media-drop-zone__importing">
                 <div className="spinner"></div>
-                <span>Importing files...</span>
+                <span>{t('media.importingFiles', 'Importing files...')}</span>
               </div>
             ) : (
               <>
                 <span className="media-drop-zone__icon">FILE</span>
-                <span className="media-drop-zone__text">Drag files here to import</span>
-                <span className="media-drop-zone__hint">Supports image, video, PDF and PPT</span>
+                <span className="media-drop-zone__text">{t('media.dragToImport', 'Drag files here to import')}</span>
+                <span className="media-drop-zone__hint">{t('media.supportsHint', 'Supports image, video, PDF and PPT')}</span>
               </>
             )}
           </div>
@@ -644,14 +650,14 @@ function MediaManager({
       {pptConverting && (
         <div className="media-converting">
           <div className="spinner"></div>
-          <span>Converting PPT to images, please wait...</span>
+          <span>{t('media.convertingPpt', 'Converting PPT to images, please wait...')}</span>
         </div>
       )}
 
       {pdfLoading && (
         <div className="media-converting">
           <div className="spinner"></div>
-          <span>Parsing PDF and building thumbnails...</span>
+          <span>{t('media.parsingPdf', 'Parsing PDF and building thumbnails...')}</span>
         </div>
       )}
 
@@ -675,7 +681,7 @@ function MediaManager({
             }}
           >
             <h3 style={{ fontSize: '15px', fontWeight: 'bold' }}>
-              PDF {activePdf.name} - Thumbnails{' '}
+              PDF {activePdf.name} - {t('media.thumbnails', 'Thumbnails')}{' '}
               <span
                 style={{
                   color: 'var(--color-text-secondary)',
@@ -698,7 +704,7 @@ function MediaManager({
                   });
                 }}
               >
-                Close
+                {t('media.close', 'Close')}
               </button>
             )}
           </div>
@@ -761,7 +767,7 @@ function MediaManager({
             }}
           >
             <h3 style={{ fontSize: '15px', fontWeight: 'bold' }}>
-              PPT Slides{' '}
+              PPT {t('media.slides', 'Slides')}{' '}
               <span
                 style={{
                   color: 'var(--color-text-secondary)',
@@ -782,7 +788,7 @@ function MediaManager({
                   setPptSourcePath('');
                 }}
               >
-                Close
+                {t('media.close', 'Close')}
               </button>
             )}
           </div>
@@ -848,15 +854,15 @@ function MediaManager({
               marginBottom: '16px',
             }}
           >
-            Media Library
+            {t('media.mediaLibrary', 'Media Library')}
           </h3>
 
           {displayFiles.length === 0 ? (
             <div className="empty-state" style={{ padding: '40px 0' }}>
               <div className="empty-state__icon">FILE</div>
-              <div className="empty-state__title">No media files</div>
+              <div className="empty-state__title">{t('media.noMediaFiles', 'No media files')}</div>
               <div className="empty-state__desc">
-                Click "Import Files" or drag files into the drop zone above.
+                {t('media.noMediaHint', 'Click "Import Files" or drag files into the drop zone above.')}
               </div>
             </div>
           ) : (
@@ -1027,19 +1033,19 @@ function MediaManager({
                                     });
                                   }
                                 }}
-                                title="Add to queue"
+                                title={t('media.addToQueue', 'Add to queue')}
                               >
                                 +
                               </span>
                               <span
                                 style={{ color: 'var(--color-primary)' }}
-                                title="Project now"
+                                title={t('media.projectNow', 'Project now')}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleProjectMedia(file);
                                 }}
                               >
-                                Play
+                                {t('media.play', 'Play')}
                               </span>
                             </div>
                           </div>

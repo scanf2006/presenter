@@ -19,8 +19,16 @@ import {
 } from '../utils/songMeta';
 import useSongSectionNavigation from '../hooks/useSongSectionNavigation';
 import { useAppContext } from '../contexts/AppContext';
+import { useI18n } from '../contexts/I18nContext';
 import { PROJECTION_FONT_OPTIONS } from '../constants/fontOptions';
 const BLANK_SECTION_INDEX = -2;
+const SONG_STYLE_DEFAULTS = {
+  fontSize: 'large',
+  fontSizePx: 72,
+  fontFamily: 'Noto Sans SC',
+  fontWeight: 700,
+  textColor: '#ffffff',
+};
 
 /**
  * 诗歌歌词管理组件
@@ -70,6 +78,7 @@ function SongManager({
   const isElectron = typeof window.churchDisplay !== 'undefined';
   const fileInputRef = useRef(null);
   const { showToast, showConfirm, activeSection } = useAppContext();
+  const { t } = useI18n();
   const isSongsSectionActive = activeSection === 'songs';
 
   // 加载歌曲列表
@@ -110,7 +119,7 @@ function SongManager({
   // 保存歌曲
   const handleSave = useCallback(async () => {
     if (!formTitle.trim() || !formLyrics.trim()) {
-      showToast('Please enter song title and lyrics', 'warning');
+      showToast(t('songs.enterTitleLyrics', 'Please enter song title and lyrics'), 'warning');
       return;
     }
     const song = {
@@ -150,7 +159,7 @@ function SongManager({
   // 删除歌曲
   const handleDelete = useCallback(
     async (songId) => {
-      if (!(await showConfirm('Delete this song?'))) return;
+      if (!(await showConfirm(t('songs.deleteConfirm', 'Delete this song?')))) return;
       try {
         if (isElectron) {
           await window.churchDisplay.songsDelete(songId);
@@ -180,7 +189,10 @@ function SongManager({
     setFormTitle('');
     setFormAuthor('');
     setFormLyrics(
-      '(Enter first section)\n(Continue lines in same section)\n\n(Blank line starts next section)'
+      t(
+        'songs.defaultTemplate',
+        '(Enter first section)\n(Continue lines in same section)\n\n(Blank line starts next section)'
+      )
     );
     setSongBackground(null);
     setSelectedSong(null);
@@ -193,9 +205,16 @@ function SongManager({
         background: songBackground,
         section,
         sectionIndex,
+        style: {
+          fontSize,
+          fontSizePx,
+          fontFamily,
+          fontWeight: isBold ? 700 : 400,
+          textColor,
+        },
       });
     },
-    [songBackground]
+    [songBackground, fontSize, fontSizePx, fontFamily, isBold, textColor]
   );
 
   // Project one section (lyrics text only)
@@ -211,9 +230,6 @@ function SongManager({
         textColor,
         background: songBackground,
       };
-      if (isElectron && typeof window.churchDisplay?.sendToProjectorBackground === 'function') {
-        window.churchDisplay.sendToProjectorBackground(songBackground || null);
-      }
       lastProjectedSectionRef.current = { section };
       onProjectContent(payload);
       if (selectedSong && typeof onUpdateActiveQueueItem === 'function') {
@@ -231,7 +247,6 @@ function SongManager({
         textColor,
         onProjectContent,
       songBackground,
-      isElectron,
       selectedSong,
       onUpdateActiveQueueItem,
       buildSelectedSongQueuePayload,
@@ -250,9 +265,6 @@ function SongManager({
         textColor,
         background: songBackground,
       };
-    if (isElectron && typeof window.churchDisplay?.sendToProjectorBackground === 'function') {
-      window.churchDisplay.sendToProjectorBackground(songBackground || null);
-    }
     lastProjectedSectionRef.current = {
       section: {
         tag: 'BLANK',
@@ -279,7 +291,6 @@ function SongManager({
     textColor,
     onProjectContent,
     songBackground,
-    isElectron,
     selectedSong,
     onUpdateActiveQueueItem,
     buildSelectedSongQueuePayload,
@@ -304,6 +315,7 @@ function SongManager({
       const payload = buildSongQueuePayload({
         song,
         background: buildSongBackgroundFromSong(song),
+        style: SONG_STYLE_DEFAULTS,
       });
       onQueueContent(payload, song.title);
     },
@@ -323,7 +335,8 @@ function SongManager({
     // Do not interrupt editor mode while user is creating/editing a song.
     if (editingSong) return;
     if (!activePreloadItem || activePreloadItem.type !== 'song') return;
-    const targetSongId = activePreloadItem.payload?.songId;
+    const preloadPayload = activePreloadItem.payload || {};
+    const targetSongId = preloadPayload.songId;
     if (!targetSongId) return;
     // Avoid re-opening the same song after save/delete triggers a songs or editingSong change.
     const preloadKey = `${targetSongId}|${activePreloadItem.payload?.token || ''}`;
@@ -331,6 +344,25 @@ function SongManager({
     lastHandledPreloadRef.current = preloadKey;
     const target = songs.find((s) => s.id === targetSongId);
     if (target) {
+      const preloadStyle = preloadPayload.songStyle || null;
+      if (preloadStyle) {
+        const nextFontSize =
+          preloadStyle.fontSize === 'small' ||
+          preloadStyle.fontSize === 'medium' ||
+          preloadStyle.fontSize === 'large'
+            ? preloadStyle.fontSize
+            : SONG_STYLE_DEFAULTS.fontSize;
+        setFontSize(nextFontSize);
+        setFontSizePx(
+          Math.max(
+            24,
+            Math.min(180, Number(preloadStyle.fontSizePx || SONG_STYLE_DEFAULTS.fontSizePx))
+          )
+        );
+        setFontFamily(preloadStyle.fontFamily || SONG_STYLE_DEFAULTS.fontFamily);
+        setIsBold(Number(preloadStyle.fontWeight || SONG_STYLE_DEFAULTS.fontWeight) >= 600);
+        setTextColor(preloadStyle.textColor || SONG_STYLE_DEFAULTS.textColor);
+      }
       openSongWithoutAutoProject(target);
     }
   }, [activePreloadItem, songs, editingSong, openSongWithoutAutoProject]);
@@ -397,12 +429,19 @@ function SongManager({
         const queuePayload = buildSongQueuePayload({
           song: nextSong,
           background: bg,
+          style: {
+            fontSize,
+            fontSizePx,
+            fontFamily,
+            fontWeight: isBold ? 700 : 400,
+            textColor,
+          },
         });
         onUpdateActiveQueueItem(queuePayload, nextSong.title, 'songs');
       }
       return nextSong;
     },
-    [isElectron, onUpdateActiveQueueItem]
+    [isElectron, onUpdateActiveQueueItem, fontSize, fontSizePx, fontFamily, isBold, textColor]
   );
 
   useEffect(() => {
@@ -477,12 +516,12 @@ function SongManager({
 
   const handleSiteSearch = useCallback(async () => {
     if (!isElectron) {
-      showToast('Site search is available in Electron build only.', 'warning');
+      showToast(t('songs.siteSearchElectronOnly', 'Site search is available in Electron build only.'), 'warning');
       return;
     }
     const keyword = String(searchQuery || '').trim();
     if (!keyword) {
-      showToast('Please enter keyword first.', 'warning');
+      showToast(t('songs.enterKeywordFirst', 'Please enter keyword first.'), 'warning');
       return;
     }
     setWebSearchResults([]);
@@ -494,11 +533,11 @@ function SongManager({
       );
       setWebSearchResults(safeResults);
       if (!safeResults.length) {
-        showToast('No matched pages from site search.', 'info');
+        showToast(t('songs.noSiteSearchResult', 'No matched pages from site search.'), 'info');
       }
     } catch (err) {
       console.warn('[SongManager] site search failed:', err?.message || err);
-      showToast('Site search failed', 'error');
+      showToast(t('songs.siteSearchFailed', 'Site search failed'), 'error');
     } finally {
       setWebSearching(false);
     }
@@ -512,7 +551,7 @@ function SongManager({
         !allowForce &&
         !/^https?:\/\/www\.christianstudy\.com\/data\/hymns\/text\//i.test(String(item.url))
       ) {
-        showToast('Blocked non-hymn source', 'warning');
+        showToast(t('songs.blockedNonHymn', 'Blocked non-hymn source'), 'warning');
         return;
       }
       try {
@@ -521,7 +560,7 @@ function SongManager({
         const importTitle = String(data?.title || fallbackTitle).trim();
         const importLyrics = String(data?.lyrics || '').trim();
         if (!importTitle || !importLyrics) {
-          showToast('Failed to parse lyrics from selected page', 'warning');
+          showToast(t('songs.parseLyricsFailed', 'Failed to parse lyrics from selected page'), 'warning');
           return;
         }
         setEditingSong({ id: null });
@@ -530,10 +569,10 @@ function SongManager({
         setFormTitle(importTitle);
         setFormAuthor('');
         setFormLyrics(importLyrics);
-        showToast('Web lyrics imported. Please review then save.', 'success');
+        showToast(t('songs.webImportSuccess', 'Web lyrics imported. Please review then save.'), 'success');
       } catch (err) {
         console.warn('[SongManager] import web song failed:', err?.message || err);
-        showToast('Import failed', 'error');
+        showToast(t('songs.importFailed', 'Import failed'), 'error');
       }
     },
     [isElectron, showToast]
@@ -543,11 +582,11 @@ function SongManager({
     if (!isElectron) return;
     const url = String(webImportUrl || '').trim();
     if (!url) {
-      showToast('Please paste christianstudy song URL first.', 'warning');
+      showToast(t('songs.pasteUrlFirst', 'Please paste christianstudy song URL first.'), 'warning');
       return;
     }
     if (!/^https?:\/\/(www\.)?christianstudy\.com\//i.test(url)) {
-      showToast('Only christianstudy.com URL is supported.', 'warning');
+      showToast(t('songs.onlyChristianstudy', 'Only christianstudy.com URL is supported.'), 'warning');
       return;
     }
     const data = await window.churchDisplay.songsWebFetchLyrics(url, { allowBlogMirror: false });
@@ -581,17 +620,17 @@ function SongManager({
           }}
         >
           <h2 style={{ fontSize: '18px', fontWeight: '600' }}>
-            {editingSong.id ? 'Edit Song' : 'New Song'}
+            {editingSong.id ? t('songs.edit', 'Edit') : t('songs.newSong', '+ New Song')}
           </h2>
           <button className="btn btn--ghost" onClick={() => setEditingSong(null)}>
-            Cancel
+            {t('media.cancel', 'Cancel')}
           </button>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <input
             type="text"
-            placeholder="Song Title"
+            placeholder={t('songs.songTitle', 'Song Title')}
             value={formTitle}
             onChange={(e) => setFormTitle(e.target.value)}
             style={{
@@ -606,7 +645,7 @@ function SongManager({
           />
           <input
             type="text"
-            placeholder="Author (optional)"
+            placeholder={t('songs.authorOptional', 'Author (optional)')}
             value={formAuthor}
             onChange={(e) => setFormAuthor(e.target.value)}
             style={{
@@ -628,10 +667,13 @@ function SongManager({
               borderRadius: '6px',
             }}
           >
-            Use blank lines to auto-split sections, or optional tags [V1]/[C]/[B]/[P]/[E].
+            {t(
+              'songs.splitHint',
+              'Use blank lines to auto-split sections, or optional tags [V1]/[C]/[B]/[P]/[E].'
+            )}
           </div>
           <textarea
-            placeholder="Enter lyrics here..."
+            placeholder={t('songs.enterLyrics', 'Enter lyrics here...')}
             value={formLyrics}
             onChange={(e) => setFormLyrics(e.target.value)}
             rows={15}
@@ -650,7 +692,7 @@ function SongManager({
           />
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <button className="btn btn--ghost" onClick={() => onOpenBackgroundPicker?.()}>
-              Pick Background from Media
+              {t('songs.pickBackground', 'Pick Background from Media')}
             </button>
             {songBackground && (
               <button
@@ -659,12 +701,12 @@ function SongManager({
                   setSongBackground(null);
                 }}
               >
-                Clear Background
+                {t('songs.clearBackground', 'Clear Background')}
               </button>
             )}
           </div>
           <button className="btn btn--primary" onClick={handleSave} style={{ padding: '12px' }}>
-            Save Song
+            {t('songs.saveSong', 'Save Song')}
           </button>
         </div>
       </div>
@@ -690,7 +732,7 @@ function SongManager({
               onClick={() => setSelectedSong(null)}
               style={{ padding: '4px 8px', fontSize: '12px' }}
             >
-              ← Back
+              ← {t('songs.back', 'Back')}
             </button>
             <h2 style={{ fontSize: '18px', fontWeight: '600' }}>{selectedSong.title}</h2>
           </div>
@@ -699,7 +741,7 @@ function SongManager({
             onClick={() => handleEdit(selectedSong)}
             style={{ fontSize: '12px' }}
           >
-            Edit
+            {t('songs.edit', 'Edit')}
           </button>
         </div>
 
@@ -707,7 +749,7 @@ function SongManager({
           <p
             style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: '16px' }}
           >
-            Author: {selectedSong.author}
+            {t('songs.authorPrefix', 'Author')}: {selectedSong.author}
           </p>
         )}
 
@@ -721,25 +763,25 @@ function SongManager({
               })
             }
           >
-            Pick Background from Media
+            {t('songs.pickBackground', 'Pick Background from Media')}
           </button>
           {songBackground && (
             <button
               className="btn btn--ghost"
               onClick={() => persistSongBackground(selectedSong, null)}
             >
-              Clear Background
+              {t('songs.clearBackground', 'Clear Background')}
             </button>
           )}
           <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
             {songBackground
-              ? `Selected: ${songBackground.name || songBackground.path}`
-              : 'No background selected'}
+              ? `${t('common.selected', 'Selected')}: ${songBackground.name || songBackground.path}`
+              : t('common.noBackgroundSelected', 'No background selected')}
           </span>
         </div>
 
         <div className="text-settings-card" style={{ marginBottom: '16px' }}>
-          <div className="text-settings-head">Song Text Controls</div>
+          <div className="text-settings-head">{t('songs.songTextControls', 'Song Text Controls')}</div>
 
         <div className="text-settings-row">
           <div className="text-settings-presets">
@@ -766,13 +808,13 @@ function SongManager({
               checked={isBold}
               onChange={(e) => setIsBold(e.target.checked)}
             />
-            Bold
+            {t('textEditor.bold', 'Bold')}
           </label>
         </div>
 
           <div className="text-settings-grid">
             <label className="text-settings-field">
-              <span className="text-settings-label">Size (px)</span>
+              <span className="text-settings-label">{t('songs.sizePx', 'Size (px)')}</span>
               <input
                 type="number"
                 min={24}
@@ -787,7 +829,7 @@ function SongManager({
             </label>
 
             <label className="text-settings-field">
-              <span className="text-settings-label">Font Family</span>
+              <span className="text-settings-label">{t('songs.fontFamily', 'Font Family')}</span>
               <select
                 value={fontFamily}
                 onChange={(e) => setFontFamily(e.target.value)}
@@ -802,7 +844,7 @@ function SongManager({
             </label>
 
             <label className="text-settings-field">
-              <span className="text-settings-label">Text Color</span>
+              <span className="text-settings-label">{t('songs.textColor', 'Text Color')}</span>
               <div className="text-color-control">
                 <input
                   type="color"
@@ -820,7 +862,7 @@ function SongManager({
         </div>
 
         <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: '12px' }}>
-          Slide-style section cards (in order). Click a card to project.
+          {t('songs.slideStyleHint', 'Slide-style section cards (in order). Click a card to project.')}
         </p>
 
         {/* 歌词段落卡片（PPT 风格） */}
@@ -854,9 +896,9 @@ function SongManager({
               }}
             >
               <span style={{ fontSize: '11px', fontWeight: '700', color: 'var(--color-primary)' }}>
-                Slide Blank
+                {t('songs.slideBlank', 'Slide Blank')}
               </span>
-              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>No text</span>
+              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{t('songs.noText', 'No text')}</span>
             </div>
             <div
               style={{
@@ -916,7 +958,7 @@ function SongManager({
                 <span
                   style={{ fontSize: '11px', fontWeight: '700', color: 'var(--color-primary)' }}
                 >
-                  Slide {idx + 1}
+                  {t('songs.slide', 'Slide')} {idx + 1}
                 </span>
                 <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>
                   {section.title}
@@ -967,18 +1009,18 @@ function SongManager({
   // 歌曲列表视图
   return (
     <div className="song-manager animate-slide-in-up">
-      <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px' }}>Songs</h2>
+      <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px' }}>{t('songs.title', 'Songs')}</h2>
       <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '16px' }}>
-        Manage worship songs with section-based projection.
+        {t('songs.intro', 'Manage worship songs with section-based projection.')}
       </p>
 
       {/* Actions */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
         <button className="btn btn--primary" onClick={handleNew}>
-          + New Song
+          {t('songs.newSong', '+ New Song')}
         </button>
         <button className="btn btn--ghost" onClick={() => fileInputRef.current?.click()}>
-          Import Lyrics
+          {t('songs.importLyrics', 'Import Lyrics')}
         </button>
         <input
           ref={fileInputRef}
@@ -989,7 +1031,7 @@ function SongManager({
         />
         <input
           type="text"
-          placeholder="Search songs..."
+          placeholder={t('songs.searchSongs', 'Search songs...')}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           style={{
@@ -1004,7 +1046,7 @@ function SongManager({
           }}
         />
         <button className="btn btn--ghost" onClick={handleSiteSearch} disabled={webSearching}>
-          {webSearching ? 'Searching...' : 'Search'}
+          {webSearching ? t('songs.searching', 'Searching...') : t('songs.search', 'Search')}
         </button>
       </div>
 
@@ -1021,7 +1063,7 @@ function SongManager({
           <div
             style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: '8px' }}
           >
-            christianstudy.com results ({webSearchResults.length})
+            christianstudy.com {t('songs.results', 'results')} ({webSearchResults.length})
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '180px', overflow: 'auto' }}>
             {webSearchResults.map((item) => (
@@ -1042,7 +1084,7 @@ function SongManager({
                     {item.url}
                   </span>
                   <button className="btn btn--ghost" onClick={() => handleImportWebResult(item)}>
-                    Import
+                    {t('songs.importAction', 'Import')}
                   </button>
               </div>
             ))}
@@ -1064,7 +1106,7 @@ function SongManager({
       >
         <input
           type="text"
-          placeholder="Paste christianstudy song URL and import directly..."
+          placeholder={t('songs.directImportByUrl', 'Paste christianstudy song URL and import directly...')}
           value={webImportUrl}
           onChange={(e) => setWebImportUrl(e.target.value)}
           style={{
@@ -1079,7 +1121,7 @@ function SongManager({
           }}
         />
         <button className="btn btn--ghost" onClick={handleImportByUrl}>
-          Import URL
+          {t('songs.importUrl', 'Import URL')}
         </button>
       </div>
 
@@ -1088,9 +1130,9 @@ function SongManager({
         <div
           style={{ textAlign: 'center', padding: '40px 0', color: 'var(--color-text-secondary)' }}
         >
-          <div style={{ fontSize: '40px', marginBottom: '12px' }}>Songs</div>
-          <div style={{ fontSize: '14px', marginBottom: '8px' }}>No songs yet</div>
-          <div style={{ fontSize: '12px' }}>Click "New Song" or "Import Lyrics" to start</div>
+          <div style={{ fontSize: '40px', marginBottom: '12px' }}>{t('songs.title', 'Songs')}</div>
+          <div style={{ fontSize: '14px', marginBottom: '8px' }}>{t('songs.noSongsYet', 'No songs yet')}</div>
+          <div style={{ fontSize: '12px' }}>{t('songs.startHint', 'Click "New Song" or "Import Lyrics" to start')}</div>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -1140,7 +1182,7 @@ function SongManager({
                     handleQueueSong(song);
                   }}
                   style={{ padding: '4px 8px', fontSize: '12px', color: 'var(--color-primary)' }}
-                  title="Add whole song to queue"
+                  title={t('songs.addWholeSongToQueue', 'Add whole song to queue')}
                 >
                   +{' '}
                 </button>
@@ -1152,7 +1194,7 @@ function SongManager({
                   }}
                   style={{ padding: '4px 8px', fontSize: '12px' }}
                 >
-                  Edit
+                  {t('songs.edit', 'Edit')}
                 </button>
                 <button
                   className="btn btn--ghost"
@@ -1162,7 +1204,7 @@ function SongManager({
                   }}
                   style={{ padding: '4px 8px', fontSize: '12px', color: '#ff4d4f' }}
                 >
-                  Delete
+                  {t('songs.deleteSong', 'Delete')}
                 </button>
               </div>
             </div>

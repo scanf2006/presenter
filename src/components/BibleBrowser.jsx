@@ -1,6 +1,7 @@
 ﻿import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { normalizeBibleLine, normalizeBibleText } from '../utils/bibleText';
 import { PROJECTION_FONT_OPTIONS } from '../constants/fontOptions';
+import { useI18n } from '../contexts/I18nContext';
 /* eslint-disable react-hooks/set-state-in-effect */
 /* eslint-disable react-hooks/exhaustive-deps */
 
@@ -17,6 +18,7 @@ function BibleBrowser({
   activePreloadItem,
   forceShowBibleCatalogToken,
 }) {
+  const { t } = useI18n();
   // 圣经版本
   const [version, setVersion] = useState('cuvs');
   // 书卷列表
@@ -344,17 +346,12 @@ function BibleBrowser({
     const payload = buildSelectedPayload();
     if (!payload) return;
     onProjectContent(payload);
-    if (isElectron && typeof window.churchDisplay?.sendToProjectorBackground === 'function') {
-      window.churchDisplay.sendToProjectorBackground(bibleBackground || null);
-    }
     if (typeof onUpdateActiveQueueItem === 'function') {
       onUpdateActiveQueueItem(payload, payload.reference, 'bible');
     }
   }, [
     buildSelectedPayload,
     onProjectContent,
-    bibleBackground,
-    isElectron,
     onUpdateActiveQueueItem,
   ]);
 
@@ -380,9 +377,6 @@ function BibleBrowser({
         background: bibleBackground,
       };
       onProjectContent(payload);
-      if (isElectron && typeof window.churchDisplay?.sendToProjectorBackground === 'function') {
-        window.churchDisplay.sendToProjectorBackground(bibleBackground || null);
-      }
       if (typeof onUpdateActiveQueueItem === 'function') {
         onUpdateActiveQueueItem(payload, payload.reference, 'bible');
       }
@@ -393,7 +387,6 @@ function BibleBrowser({
         isBold,
         onProjectContent,
         bibleBackground,
-        isElectron,
         showVerseNumbers,
         onUpdateActiveQueueItem,
     ]
@@ -560,9 +553,6 @@ function BibleBrowser({
       // Queue preload can request "show first, project on second click".
       if (sourcePayload.deferProject !== true) {
         onProjectContent(projectedPayload);
-        if (isElectron && typeof window.churchDisplay?.sendToProjectorBackground === 'function') {
-          window.churchDisplay.sendToProjectorBackground(projectedPayload.background || null);
-        }
         if (typeof onUpdateActiveQueueItem === 'function') {
           onUpdateActiveQueueItem(projectedPayload, projectedPayload.reference, 'bible');
         }
@@ -583,7 +573,6 @@ function BibleBrowser({
     isBold,
     bibleBackground,
     onProjectContent,
-    isElectron,
     onUpdateActiveQueueItem,
     endQueuePreload,
   ]);
@@ -604,7 +593,7 @@ function BibleBrowser({
 
   return (
     <div className="bible-browser animate-slide-in-up">
-      <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px' }}>Bible</h2>
+      <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px' }}>{t('bible.title', 'Bible')}</h2>
 
       {/* Version switch + search */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
@@ -621,20 +610,20 @@ function BibleBrowser({
             style={{ borderRadius: 0, padding: '6px 12px', fontSize: '12px' }}
             onClick={() => setVersion('cuvs')}
           >
-            Chinese CUV
+            {t('bible.versionChinese', 'Chinese CUV')}
           </button>
           <button
             className={`btn ${version === 'kjv' ? 'btn--primary' : 'btn--ghost'}`}
             style={{ borderRadius: 0, padding: '6px 12px', fontSize: '12px' }}
             onClick={() => setVersion('kjv')}
           >
-            English KJV
+            {t('bible.versionEnglish', 'English KJV')}
           </button>
         </div>
         <input
           type="text"
           className="bible-search-input"
-          placeholder="Search Bible (e.g. 创1:1, 约3:16, or keywords)"
+          placeholder={t('bible.searchPlaceholder', 'Search Bible (e.g. 创1:1, 约3:16, or keywords)')}
           value={searchQuery}
           onChange={(e) => handleSearch(e.target.value)}
           style={{
@@ -652,17 +641,17 @@ function BibleBrowser({
 
       <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px' }}>
         <button className="btn btn--ghost" onClick={() => onOpenBackgroundPicker?.()}>
-          🎬 Pick Background from Media
+          🎬 {t('bible.pickBackground', 'Pick Background from Media')}
         </button>
         {bibleBackground && (
           <button className="btn btn--ghost" onClick={() => setBibleBackground(null)}>
-            Clear Background
+            {t('bible.clearBackground', 'Clear Background')}
           </button>
         )}
         <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
           {bibleBackground
-            ? `Selected: ${bibleBackground.name || bibleBackground.path}`
-            : 'No background selected'}
+            ? `${t('common.selected', 'Selected')}: ${bibleBackground.name || bibleBackground.path}`
+            : t('common.noBackgroundSelected', 'No background selected')}
         </span>
       </div>
       {/* 搜索结果 */}
@@ -671,7 +660,7 @@ function BibleBrowser({
           <h3
             style={{ fontSize: '14px', marginBottom: '8px', color: 'var(--color-text-secondary)' }}
           >
-            🔍 Search Results ({searchResults.length})
+            🔍 {t('bible.searchResults', 'Search Results')} ({searchResults.length})
           </h3>
           {searchResults.map((r, idx) => (
             <div
@@ -719,7 +708,7 @@ function BibleBrowser({
                     handleQueueSearchResult(r);
                   }}
                 >
-                  + Queue
+                  + {t('bible.queue', 'Queue')}
                 </button>
               </div>
             </div>
@@ -730,7 +719,7 @@ function BibleBrowser({
       {searching && (
         <div style={{ textAlign: 'center', padding: '20px', color: 'var(--color-text-secondary)' }}>
           <div className="spinner" style={{ margin: '0 auto 8px' }}></div>
-          Searching...
+          {t('bible.searching', 'Searching...')}
         </div>
       )}
 
@@ -747,7 +736,7 @@ function BibleBrowser({
                   color: 'var(--color-text-secondary)',
                 }}
               >
-                Old Testament ({oldTestament.length})
+                {t('bible.oldTestament', 'Old Testament')} ({oldTestament.length})
               </h3>
               <div
                 style={{
@@ -797,7 +786,7 @@ function BibleBrowser({
                   color: 'var(--color-text-secondary)',
                 }}
               >
-                New Testament ({newTestament.length})
+                {t('bible.newTestament', 'New Testament')} ({newTestament.length})
               </h3>
               <div
                 style={{
@@ -852,10 +841,10 @@ function BibleBrowser({
                   onClick={() => setSelectedBook(null)}
                   style={{ padding: '4px 8px', fontSize: '12px' }}
                 >
-                  ← Back
+                  ← {t('bible.back', 'Back')}
                 </button>
                 <h3 style={{ fontSize: '15px', fontWeight: 'bold' }}>
-                  📗 {selectedBook.fullName} ({selectedBook.chapterCount} chapters)
+                  📗 {selectedBook.fullName} ({selectedBook.chapterCount} {t('bible.chapters', 'chapters')})
                 </h3>
               </div>
               <div
@@ -913,19 +902,19 @@ function BibleBrowser({
                     onClick={() => setSelectedChapter(null)}
                     style={{ padding: '4px 8px', fontSize: '12px' }}
                   >
-                    ← Back
+                    ← {t('bible.back', 'Back')}
                   </button>
                   <h3 style={{ fontSize: '15px', fontWeight: 'bold' }}>
-                    📗 {selectedBook.fullName} Chapter {selectedChapter}
+                    📗 {selectedBook.fullName} {t('bible.chapterLabel', 'Chapter')} {selectedChapter}
                   </h3>
                 </div>
                 {selectedVerses.length > 0 && (
                   <div style={{ display: 'flex', gap: '6px' }}>
                     <button className="btn btn--ghost" onClick={handleQueueSelected}>
-                      + Queue ({selectedVerses.length} verses)
+                      {t('bible.queueSelected', '+ Queue')} ({selectedVerses.length} {t('bible.versesUnit', 'verses')})
                     </button>
                     <button className="btn btn--primary" onClick={handleProject}>
-                      📤 Project Selection ({selectedVerses.length} verses)
+                      📤 {t('bible.projectSelected', 'Project Selection')} ({selectedVerses.length} {t('bible.versesUnit', 'verses')})
                     </button>
                   </div>
                 )}
@@ -942,9 +931,9 @@ function BibleBrowser({
                 }}
               >
                 {[
-                  { key: 'small', label: 'Small' },
-                  { key: 'medium', label: 'Medium' },
-                  { key: 'large', label: 'Large' },
+                  { key: 'small', label: t('bible.small', 'Small') },
+                  { key: 'medium', label: t('bible.medium', 'Medium') },
+                  { key: 'large', label: t('bible.large', 'Large') },
                 ].map((s) => (
                   <button
                     key={s.key}
@@ -971,7 +960,7 @@ function BibleBrowser({
                     checked={showVerseNumbers}
                     onChange={(e) => setShowVerseNumbers(e.target.checked)}
                   />
-                  Show Verse Numbers
+                  {t('bible.showVerseNumbers', 'Show Verse Numbers')}
                 </label>
                 <label
                   style={{
@@ -989,7 +978,7 @@ function BibleBrowser({
                     checked={isBold}
                     onChange={(e) => setIsBold(e.target.checked)}
                   />
-                  Bold
+                  {t('bible.bold', 'Bold')}
                 </label>
                 <select
                   value={fontFamily}
