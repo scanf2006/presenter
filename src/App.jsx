@@ -1,6 +1,7 @@
 import React from 'react';
 import ControlPanel from './components/ControlPanel';
 import ProjectorView from './components/ProjectorView';
+import { useI18n } from './contexts/I18nContext';
 
 /**
  * C3: Global error boundary — prevents white screen on React errors.
@@ -20,6 +21,7 @@ class ErrorBoundary extends React.Component {
   }
 
   render() {
+    const t = this.props.t || ((key, fallback) => fallback || key);
     if (this.state.hasError) {
       return (
         <div
@@ -35,11 +37,13 @@ class ErrorBoundary extends React.Component {
             padding: '2rem',
           }}
         >
-          <h1 style={{ color: '#ff6b6b', marginBottom: '1rem' }}>Something went wrong</h1>
+          <h1 style={{ color: '#ff6b6b', marginBottom: '1rem' }}>
+            {t('topBar.somethingWentWrong', 'Something went wrong')}
+          </h1>
           <p
             style={{ color: '#aaa', marginBottom: '1rem', maxWidth: '600px', textAlign: 'center' }}
           >
-            {this.state.error?.message || 'An unexpected error occurred.'}
+            {this.state.error?.message || t('topBar.unexpectedError', 'An unexpected error occurred.')}
           </p>
           <button
             onClick={() => this.setState({ hasError: false, error: null })}
@@ -53,7 +57,7 @@ class ErrorBoundary extends React.Component {
               fontSize: '1rem',
             }}
           >
-            Try Again
+            {t('topBar.tryAgain', 'Try Again')}
           </button>
         </div>
       );
@@ -68,20 +72,21 @@ class ErrorBoundary extends React.Component {
  * 投影: #/projector
  */
 function App() {
+  const { t } = useI18n();
   const hash = window.location.hash || '';
   const pathname = window.location.pathname || '';
   const isProjector = hash.includes('projector') || pathname.includes('/projector');
 
   if (isProjector) {
     return (
-      <ErrorBoundary>
+      <ErrorBoundary t={t}>
         <ProjectorView />
       </ErrorBoundary>
     );
   }
 
   return (
-    <ErrorBoundary>
+    <ErrorBoundary t={t}>
       <ControlPanel />
     </ErrorBoundary>
   );

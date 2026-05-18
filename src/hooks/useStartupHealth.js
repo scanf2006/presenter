@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useI18n } from '../contexts/I18nContext';
 
 export default function useStartupHealth({ isElectron, showToast }) {
+  const { t } = useI18n();
   const [startupHealthBusy, setStartupHealthBusy] = useState(false);
   const [startupHealthReport, setStartupHealthReport] = useState(null);
 
@@ -20,24 +22,33 @@ export default function useStartupHealth({ isElectron, showToast }) {
             errorCount === 0 && warnCount > 0 && nonDisplayWarnings.length === 0;
 
           if (errorCount > 0) {
-            showToast(`Health check found ${errorCount} critical issue(s).`, 'error');
+            showToast(
+              `${t('health.criticalFound', 'Health check found critical issue(s)')}: ${errorCount}`,
+              'error'
+            );
           } else if (warnCount > 0 && !shouldSuppressDisplayOnlyWarningToast) {
-            showToast(`Health check found ${warnCount} warning(s).`, 'warning');
+            showToast(
+              `${t('health.warningFound', 'Health check found warning(s)')}: ${warnCount}`,
+              'warning'
+            );
           } else if (!shouldSuppressDisplayOnlyWarningToast) {
-            showToast('Health check passed.');
+            showToast(t('health.passed', 'Health check passed.'));
           }
         }
         return report || null;
       } catch (err) {
         if (!silent) {
-          showToast(`Health check failed: ${err?.message || 'Unknown error'}`, 'error');
+          showToast(
+            `${t('health.failed', 'Health check failed')}: ${err?.message || t('media.unknownError', 'Unknown error')}`,
+            'error'
+          );
         }
         return null;
       } finally {
         setStartupHealthBusy(false);
       }
     },
-    [isElectron, showToast]
+    [isElectron, showToast, t]
   );
 
   useEffect(() => {

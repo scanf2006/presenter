@@ -4,8 +4,10 @@ import { PREVIEW, TEXT_EDITOR } from '../../../constants/ui';
 import { PROJECTION_FONT_OPTIONS } from '../../../constants/fontOptions';
 import { useProjectorContext } from '../../../contexts/ProjectorContext';
 import { useTextEditorContext } from '../../../contexts/TextEditorContext';
+import { useI18n } from '../../../contexts/I18nContext';
 
 function TextEditorSection() {
+  const { t } = useI18n();
   const { previewAspectRatio } = useProjectorContext();
   const {
     textCanvasRef,
@@ -38,10 +40,10 @@ function TextEditorSection() {
   return (
     <div className="text-editor animate-slide-in-up">
       <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px' }}>
-        Free Text Projection
+        {t('textEditor.title', 'Free Text Projection')}
       </h2>
       <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '16px' }}>
-        Type any text and click &quot;Send to Projector&quot;.
+        {t('textEditor.intro', 'Type any text and click "Send to Projector".')}
       </p>
 
       <div
@@ -136,7 +138,7 @@ function TextEditorSection() {
           >
             <div
               onMouseDown={startTextDrag}
-              title="Drag to move"
+              title={t('textEditor.move', 'MOVE')}
               style={{
                 position: 'absolute',
                 top: '-24px',
@@ -154,7 +156,7 @@ function TextEditorSection() {
                 userSelect: 'none',
               }}
             >
-              MOVE
+              {t('textEditor.move', 'MOVE')}
             </div>
             <div
               ref={textEditableRef}
@@ -209,22 +211,22 @@ function TextEditorSection() {
 
       <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
         <button className="btn btn--ghost" onClick={() => handleOpenBackgroundPicker('text')}>
-          Pick Background from Media
+          {t('textEditor.pickBackgroundFromMedia', 'Pick Background from Media')}
         </button>
         {textBackground && (
           <button className="btn btn--ghost" onClick={() => setTextBackground(null)}>
-            Clear Background
+            {t('textEditor.clearBackground', 'Clear Background')}
           </button>
         )}
         <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
           {textBackground
-            ? `Selected: ${textBackground.name || textBackground.path}`
-            : 'No background selected'}
+            ? `${t('common.selected', 'Selected')}: ${textBackground.name || textBackground.path}`
+            : t('common.noBackgroundSelected', 'No background selected')}
         </span>
       </div>
 
       <div className="text-settings-card">
-        <div className="text-settings-head">Text Style Controls</div>
+        <div className="text-settings-head">{t('textEditor.textStyleControls', 'Text Style Controls')}</div>
 
         <div className="text-settings-row">
           <div className="text-settings-presets">
@@ -239,7 +241,11 @@ function TextEditorSection() {
                   else setTextSizePx(TEXT_EDITOR.SIZE_LARGE_PX);
                 }}
               >
-                {size === 'small' ? 'Small' : size === 'medium' ? 'Medium' : 'Large'}
+                {size === 'small'
+                  ? t('textEditor.small', 'Small')
+                  : size === 'medium'
+                    ? t('textEditor.medium', 'Medium')
+                    : t('textEditor.large', 'Large')}
               </button>
             ))}
           </div>
@@ -249,13 +255,13 @@ function TextEditorSection() {
               checked={textBold}
               onChange={(e) => setTextBold(e.target.checked)}
             />
-            Bold
+            {t('textEditor.bold', 'Bold')}
           </label>
         </div>
 
         <div className="text-settings-grid">
           <label className="text-settings-field">
-            <span className="text-settings-label">Size (px)</span>
+            <span className="text-settings-label">{t('textEditor.sizePx', 'Size (px)')}</span>
             <input
               type="number"
               min={TEXT_EDITOR.SIZE_INPUT_MIN_PX}
@@ -273,12 +279,12 @@ function TextEditorSection() {
                 )
               }
               className="cp-input-md"
-              title="Text Size (px)"
+              title={t('textEditor.sizePx', 'Size (px)')}
             />
           </label>
 
           <label className="text-settings-field">
-            <span className="text-settings-label">Font Family</span>
+            <span className="text-settings-label">{t('textEditor.fontFamily', 'Font Family')}</span>
             <select
               value={textFontFamily}
               onChange={(e) => setTextFontFamily(e.target.value)}
@@ -293,14 +299,14 @@ function TextEditorSection() {
           </label>
 
           <label className="text-settings-field">
-            <span className="text-settings-label">Text Color</span>
+            <span className="text-settings-label">{t('textEditor.textColor', 'Text Color')}</span>
             <div className="text-color-control">
               <input
                 type="color"
                 value={textColor}
                 onChange={(e) => setTextColor(e.target.value)}
                 className="text-color-input"
-                title="Text Color"
+                title={t('textEditor.textColor', 'Text Color')}
               />
               <span className="text-color-value">
                 {String(textColor || '#ffffff').toUpperCase()}
@@ -315,7 +321,7 @@ function TextEditorSection() {
         onClick={() => handleSendToProjector()}
         disabled={!textContent.trim()}
       >
-        Send to Projector
+        {t('textEditor.sendToProjector', 'Send to Projector')}
       </button>
       <button
         className="btn btn--ghost"
@@ -323,7 +329,7 @@ function TextEditorSection() {
         onClick={handleAddTextToQueue}
         disabled={!textContent.trim()}
       >
-        + Add to Queue
+        {t('textEditor.addToQueue', '+ Add to Queue')}
       </button>
     </div>
   );

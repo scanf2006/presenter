@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { useI18n } from '../contexts/I18nContext';
 
 export default function useSetupBundleActions({
   isElectron,
@@ -7,9 +8,10 @@ export default function useSetupBundleActions({
   showAlert,
   showConfirm,
 }) {
+  const { t } = useI18n();
   const exportSetupBundle = useCallback(async () => {
     if (!isElectron || typeof window.churchDisplay?.exportSetupBundle !== 'function') {
-      showToast('Export is available in the desktop app only.', 'warning');
+      showToast(t('setup.exportDesktopOnly', 'Export is available in the desktop app only.'), 'warning');
       return;
     }
     try {
@@ -20,31 +22,34 @@ export default function useSetupBundleActions({
         const mb = Number((Number(res.totalBytes || 0) / (1024 * 1024)).toFixed(2));
         const missingCount = Array.isArray(res.missingRefs) ? res.missingRefs.length : 0;
         showAlert(
-          'Export Complete',
-          `Export completed (${res.mode || 'minimal'}).\n` +
-            `Copied files: ${res.copiedCount || 0}\n` +
-            `Bundle size: ${mb} MB\n` +
-            `Missing refs: ${missingCount}\n\n` +
-            `Folder:\n${res.backupDir}`
+          t('setup.exportCompleteTitle', 'Export Complete'),
+          `${t('setup.exportCompleted', 'Export completed')} (${res.mode || 'minimal'}).\n` +
+            `${t('setup.copiedFiles', 'Copied files')}: ${res.copiedCount || 0}\n` +
+            `${t('setup.bundleSize', 'Bundle size')}: ${mb} MB\n` +
+            `${t('setup.missingRefs', 'Missing refs')}: ${missingCount}\n\n` +
+            `${t('setup.folder', 'Folder')}:\n${res.backupDir}`
         );
       } else {
-        showToast(`Export failed: ${res?.error || 'Unknown error'}`, 'error');
+        showToast(`${t('setup.exportFailed', 'Export failed')}: ${res?.error || t('media.unknownError', 'Unknown error')}`, 'error');
       }
     } catch (err) {
-      showToast(`Export failed: ${err?.message || 'Unknown error'}`, 'error');
+      showToast(`${t('setup.exportFailed', 'Export failed')}: ${err?.message || t('media.unknownError', 'Unknown error')}`, 'error');
     } finally {
       setSetupTransferBusy(false);
     }
-  }, [isElectron, setSetupTransferBusy, showToast, showAlert]);
+  }, [isElectron, setSetupTransferBusy, showToast, showAlert, t]);
 
   const importSetupBundle = useCallback(async () => {
     if (!isElectron || typeof window.churchDisplay?.importSetupBundle !== 'function') {
-      showToast('Import is available in the desktop app only.', 'warning');
+      showToast(t('setup.importDesktopOnly', 'Import is available in the desktop app only.'), 'warning');
       return;
     }
     const ok = await showConfirm(
-      'Import Setup Bundle',
-      'Import will overwrite queue/config/songs, and merge media files without deleting existing local media. Continue?'
+      t('setup.importConfirmTitle', 'Import Setup Bundle'),
+      t(
+        'setup.importConfirmBody',
+        'Import will overwrite queue/config/songs, and merge media files without deleting existing local media. Continue?'
+      )
     );
     if (!ok) return;
     try {
@@ -55,25 +60,25 @@ export default function useSetupBundleActions({
         const mb = Number((Number(res.totalBytes || 0) / (1024 * 1024)).toFixed(2));
         const warningText =
           Array.isArray(res.warnings) && res.warnings.length > 0
-            ? `\nWarnings: ${res.warnings.length}`
+            ? `\n${t('setup.warnings', 'Warnings')}: ${res.warnings.length}`
             : '';
         showAlert(
-          'Import Complete',
-          `Import completed (${res.mode || 'minimal'}).\n` +
-            `Copied: ${res.copiedCount || 0}\n` +
-            `Skipped existing: ${res.skippedCount || 0}\n` +
-            `Data size: ${mb} MB${warningText}\n\n` +
-            'Please restart the app now.'
+          t('setup.importCompleteTitle', 'Import Complete'),
+          `${t('setup.importCompleted', 'Import completed')} (${res.mode || 'minimal'}).\n` +
+            `${t('setup.copied', 'Copied')}: ${res.copiedCount || 0}\n` +
+            `${t('setup.skippedExisting', 'Skipped existing')}: ${res.skippedCount || 0}\n` +
+            `${t('setup.dataSize', 'Data size')}: ${mb} MB${warningText}\n\n` +
+            t('setup.restartNow', 'Please restart the app now.')
         );
       } else {
-        showToast(`Import failed: ${res?.error || 'Unknown error'}`, 'error');
+        showToast(`${t('setup.importFailed', 'Import failed')}: ${res?.error || t('media.unknownError', 'Unknown error')}`, 'error');
       }
     } catch (err) {
-      showToast(`Import failed: ${err?.message || 'Unknown error'}`, 'error');
+      showToast(`${t('setup.importFailed', 'Import failed')}: ${err?.message || t('media.unknownError', 'Unknown error')}`, 'error');
     } finally {
       setSetupTransferBusy(false);
     }
-  }, [isElectron, setSetupTransferBusy, showToast, showAlert, showConfirm]);
+  }, [isElectron, setSetupTransferBusy, showToast, showAlert, showConfirm, t]);
 
   return {
     exportSetupBundle,

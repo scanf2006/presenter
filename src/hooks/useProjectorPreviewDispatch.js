@@ -13,6 +13,7 @@ export default function useProjectorPreviewDispatch({
   const [previewMaskVisible, setPreviewMaskVisible] = useState(false);
   const previewTimersRef = useRef([]);
   const deliveryTimeoutMsRef = useRef(1800);
+  const lastBackgroundSignatureRef = useRef('__init__');
 
   const waitForAckWithTimeout = useCallback(async (data) => {
     if (!isElectron || !window.churchDisplay) return { ok: true, mode: 'browser' };
@@ -34,6 +35,13 @@ export default function useProjectorPreviewDispatch({
   const clearPreviewTimers = useCallback(() => {
     previewTimersRef.current.forEach((t) => clearTimeout(t));
     previewTimersRef.current = [];
+  }, []);
+
+  const getBackgroundSignature = useCallback((bg) => {
+    if (!bg) return '__none__';
+    const type = String(bg.type || '');
+    const path = String(bg.path || '');
+    return `${type}|${path}`;
   }, []);
 
   const applyPreviewTransition = useCallback(
@@ -86,7 +94,11 @@ export default function useProjectorPreviewDispatch({
             }
           });
         if (typeof window.churchDisplay.sendToProjectorBackground === 'function') {
-          window.churchDisplay.sendToProjectorBackground(data?.background || null);
+          const nextSig = getBackgroundSignature(data?.background || null);
+          if (nextSig !== lastBackgroundSignatureRef.current) {
+            lastBackgroundSignatureRef.current = nextSig;
+            window.churchDisplay.sendToProjectorBackground(data?.background || null);
+          }
         }
       }
     },
@@ -96,6 +108,7 @@ export default function useProjectorPreviewDispatch({
       waitForAckWithTimeout,
       showToast,
       suppressDeliveryWarnings,
+      getBackgroundSignature,
     ]
   );
 

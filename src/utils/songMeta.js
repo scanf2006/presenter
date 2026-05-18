@@ -41,13 +41,28 @@ function buildSongBackgroundForPayload(background) {
 }
 
 // Shared queue payload builder for song card / section projection synchronization.
-function buildSongQueuePayload({ song, background = null, section = null, sectionIndex = null }) {
+function buildSongQueuePayload({
+  song,
+  background = null,
+  section = null,
+  sectionIndex = null,
+  style = null,
+}) {
   if (!song) return null;
   return {
     type: 'song',
     songId: song.id,
     songTitle: song.title,
     background: buildSongBackgroundForPayload(background),
+    songStyle: style
+      ? {
+          fontSize: style.fontSize || 'large',
+          fontSizePx: Number(style.fontSizePx || 72),
+          fontFamily: style.fontFamily || 'Noto Sans SC',
+          fontWeight: Number(style.fontWeight || 700),
+          textColor: style.textColor || '#ffffff',
+        }
+      : null,
     lastSectionIndex: Number.isFinite(sectionIndex) ? sectionIndex : null,
     lastSectionTitle: section?.title || '',
     lastSectionTag: section?.tag || '',

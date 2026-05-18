@@ -1,9 +1,11 @@
 import React, { useRef, useState } from 'react';
 import { useAppContext } from '../../contexts/AppContext';
 import { useQueueContext } from '../../contexts/QueueContext';
+import { useI18n } from '../../contexts/I18nContext';
 import { getQueueTypeLabel } from '../../utils/queueItemMeta';
 
 function SidebarQueue({ openDisplays, openText, openSongs, openBible, openMedia }) {
+  const { t } = useI18n();
   const [dropHint, setDropHint] = useState({ index: -1, position: 'before' });
   const queueListRef = useRef(null);
   const draggingQueueIdRef = useRef('');
@@ -34,11 +36,11 @@ function SidebarQueue({ openDisplays, openText, openSongs, openBible, openMedia 
       .trim();
 
   const navItems = [
-    { key: 'displays', icon: 'D', label: 'Displays', hint: 'Screen output', onClick: openDisplays },
-    { key: 'text', icon: 'T', label: 'Free Text', hint: 'Custom words', onClick: openText },
-    { key: 'songs', icon: 'S', label: 'Songs', hint: 'Lyrics cards', onClick: openSongs },
-    { key: 'bible', icon: 'B', label: 'Bible', hint: 'Verses and refs', onClick: openBible },
-    { key: 'media', icon: 'M', label: 'Media', hint: 'Image/Video/PDF/PPT', onClick: openMedia },
+    { key: 'displays', icon: 'D', label: t('sidebar.displays', 'Displays'), hint: t('sidebar.displaysHint', 'Screen output'), onClick: openDisplays },
+    { key: 'text', icon: 'T', label: t('sidebar.text', 'Free Text'), hint: t('sidebar.textHint', 'Custom words'), onClick: openText },
+    { key: 'songs', icon: 'S', label: t('sidebar.songs', 'Songs'), hint: t('sidebar.songsHint', 'Lyrics cards'), onClick: openSongs },
+    { key: 'bible', icon: 'B', label: t('sidebar.bible', 'Bible'), hint: t('sidebar.bibleHint', 'Verses and refs'), onClick: openBible },
+    { key: 'media', icon: 'M', label: t('sidebar.media', 'Media'), hint: t('sidebar.mediaHint', 'Image/Video/PDF/PPT'), onClick: openMedia },
   ];
 
   const resolveDropTargetIndex = (fromIndex, targetIndex, position) => {
@@ -75,7 +77,7 @@ function SidebarQueue({ openDisplays, openText, openSongs, openBible, openMedia 
     <div className="sidebar">
       <div className="sidebar-nav">
         <div className="sidebar-nav-card">
-          <div className="sidebar__section-title">Main Menu</div>
+          <div className="sidebar__section-title">{t('sidebar.mainMenu', 'Main Menu')}</div>
           {navItems.map((item) => {
             const isActive = activeSection === item.key;
             return (
@@ -101,14 +103,20 @@ function SidebarQueue({ openDisplays, openText, openSongs, openBible, openMedia 
       <div className="sidebar-playlist">
         <div className="cp-queue-head">
           <div className="sidebar__section-title" style={{ paddingTop: 0 }}>
-            Queue
+            {t('sidebar.queue', 'Queue')}
           </div>
           <button
             className="btn btn--ghost cp-queue-head-btn"
             onClick={() => setShowQueueTypeTags((v) => !v)}
-            title={showQueueTypeTags ? 'Hide queue type tags' : 'Show queue type tags'}
+            title={
+              showQueueTypeTags
+                ? t('sidebar.hideQueueTypeTags', 'Hide queue type tags')
+                : t('sidebar.showQueueTypeTags', 'Show queue type tags')
+            }
           >
-            {showQueueTypeTags ? 'Hide Tags' : 'Show Tags'}
+            {showQueueTypeTags
+              ? t('sidebar.hideTags', 'Hide Tags')
+              : t('sidebar.showTags', 'Show Tags')}
           </button>
         </div>
         <div
@@ -138,7 +146,7 @@ function SidebarQueue({ openDisplays, openText, openSongs, openBible, openMedia 
           }}
         >
           {projectorQueue.length === 0 && (
-            <div className="cp-queue-empty">Add items from Media or Free Text.</div>
+            <div className="cp-queue-empty">{t('sidebar.queueEmpty', 'Add items from Media or Free Text.')}</div>
           )}
           {projectorQueue.map((item, index) => (
             <div
@@ -218,7 +226,7 @@ function SidebarQueue({ openDisplays, openText, openSongs, openBible, openMedia 
                       startRenameSelectedQueueItem(item);
                     }}
                     className="cp-queue-title"
-                    title="Click to project; double-click to rename"
+                    title={t('sidebar.queueClickRenameHint', 'Click to project; double-click to rename')}
                   >
                     {getDisplayTitle(item.title)}
                   </span>
@@ -230,9 +238,9 @@ function SidebarQueue({ openDisplays, openText, openSongs, openBible, openMedia 
                       e.stopPropagation();
                       startRenameSelectedQueueItem(item);
                     }}
-                    title="Rename card"
+                    title={t('sidebar.renameCard', 'Rename card')}
                   >
-                    Edit
+                    {t('sidebar.edit', 'Edit')}
                   </button>
                 )}
               </div>
@@ -243,16 +251,16 @@ function SidebarQueue({ openDisplays, openText, openSongs, openBible, openMedia 
           className="btn btn--ghost cp-queue-btn-full cp-queue-btn-danger"
           onClick={removeSelectedQueueItem}
           disabled={activeQueueIndex < 0 || activeQueueIndex >= projectorQueue.length}
-          title="Delete selected queue card"
+          title={t('sidebar.deleteSelectedQueueCard', 'Delete selected queue card')}
         >
-          Del Selected
+          {t('sidebar.delSelected', 'Del Selected')}
         </button>
         <button
           className="btn btn--ghost cp-queue-btn-full"
           onClick={clearAllQueueItems}
           disabled={projectorQueue.length === 0}
         >
-          Clear Queue
+          {t('sidebar.clearQueue', 'Clear Queue')}
         </button>
       </div>
     </div>

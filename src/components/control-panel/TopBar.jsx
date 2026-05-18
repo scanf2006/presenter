@@ -1,6 +1,7 @@
 import React from 'react';
 import { useProjectorContext } from '../../contexts/ProjectorContext';
 import { useLicenseContext } from '../../contexts/LicenseContext';
+import { useI18n } from '../../contexts/I18nContext';
 
 /* ── Inline SVG icons (16×16, no external deps) ── */
 const IconClear = () => (
@@ -69,6 +70,7 @@ const IconClose = () => (
 );
 
 function TopBar({ appVersion, onClear }) {
+  const { t } = useI18n();
   const {
     projectorActive,
     handleBlackout,
@@ -96,7 +98,9 @@ function TopBar({ appVersion, onClear }) {
           <span
             className={`status-dot ${projectorActive ? 'status-dot--active' : 'status-dot--inactive'}`}
           />
-          {projectorActive ? 'Projecting' : 'Idle'}
+          {projectorActive
+            ? t('topBar.statusProjecting', 'Projecting')
+            : t('topBar.statusIdle', 'Idle')}
         </div>
         {!!trialLabel && (
           <div
@@ -111,32 +115,40 @@ function TopBar({ appVersion, onClear }) {
           </div>
         )}
         <button className="btn btn--ghost cp-btn-license" onClick={handleOpenLegal}>
-          License
+          {t('topBar.license', 'License')}
         </button>
-        <button className="btn btn--ghost btn--icon" onClick={onClear} title="Clear">
+        <button
+          className="btn btn--ghost btn--icon"
+          onClick={onClear}
+          title={t('topBar.clear', 'Clear')}
+        >
           <IconClear />
         </button>
-        <button className="btn btn--ghost btn--icon" onClick={handleBlackout} title="Blackout">
+        <button
+          className="btn btn--ghost btn--icon"
+          onClick={handleBlackout}
+          title={t('topBar.blackout', 'Blackout')}
+        >
           <IconBlackout />
         </button>
         <button
           className="btn btn--ghost btn--icon"
           onClick={handleMinimizeWindow}
-          title="Minimize"
+          title={t('topBar.minimize', 'Minimize')}
         >
           <IconMinimize />
         </button>
         <button
           className="btn btn--ghost btn--icon"
           onClick={handleToggleMaximizeWindow}
-          title="Maximize / Restore"
+          title={t('topBar.maximizeRestore', 'Maximize / Restore')}
         >
           <IconMaximize />
         </button>
         <button
           className="btn btn--ghost btn--icon"
           onClick={handleCloseWindow}
-          title="Close"
+          title={t('topBar.close', 'Close')}
           style={{ color: '#ff6b6b' }}
         >
           <IconClose />
