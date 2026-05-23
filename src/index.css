@@ -155,6 +155,38 @@ body {
   }
 }
 
+/* Small-screen ergonomics: widen left navigation, narrow center work area, enlarge tap targets. */
+@media (max-width: 1500px), (max-height: 900px) {
+  .app-container {
+    grid-template-columns: 420px 1fr 430px;
+  }
+
+  .btn {
+    min-height: 44px;
+    padding: 11px 18px;
+    font-size: 16px;
+  }
+
+  .btn--icon {
+    width: 44px;
+    height: 44px;
+    font-size: 21px;
+  }
+
+  .sidebar-nav .sidebar__item {
+    min-height: 50px;
+    padding: 11px 13px;
+  }
+
+  .sidebar__item-label {
+    font-size: 15px;
+  }
+
+  .sidebar__item-hint {
+    font-size: 13px;
+  }
+}
+
 /* --- 顶部导航栏 --- */
 .top-bar {
   grid-column: 1 / -1;
@@ -1419,8 +1451,9 @@ body {
   color: #9ba4d8;
 }
 .sidebar-nav .sidebar__item {
-  padding: 8px 10px;
-  font-size: 13px;
+  min-height: 44px;
+  padding: 10px 12px;
+  font-size: 14px;
   border-radius: 10px;
   border: 1px solid transparent;
   display: flex;
@@ -1428,10 +1461,10 @@ body {
   gap: 10px;
 }
 .sidebar-nav .sidebar__item-icon {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border-radius: 7px;
   display: inline-flex;
   align-items: center;
@@ -1449,13 +1482,13 @@ body {
   line-height: 1.15;
 }
 .sidebar__item-label {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: #dce2ff;
   letter-spacing: 0.1px;
 }
 .sidebar__item-hint {
-  font-size: 11px;
+  font-size: 12px;
   color: #97a1cc;
   margin-top: 2px;
   white-space: nowrap;
