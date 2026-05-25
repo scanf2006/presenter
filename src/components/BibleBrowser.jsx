@@ -16,6 +16,7 @@ function BibleBrowser({
   onOpenBackgroundPicker,
   externalBackground,
   activePreloadItem,
+  activeQueueItem,
   forceShowBibleCatalogToken,
 }) {
   const { t } = useI18n();
@@ -49,12 +50,23 @@ function BibleBrowser({
   const [isApplyingQueuePreload, setIsApplyingQueuePreload] = useState(false);
   const verseRowRefs = useRef(new Map());
   const preloadPayloadRef = useRef(null);
+  const currentPreloadTokenRef = useRef(null);
   const skipAutoProjectOnceRef = useRef(false);
   const versesLoadSeqRef = useRef(0);
   const isApplyingQueuePreloadRef = useRef(false);
 
   const isElectron = typeof window.churchDisplay !== 'undefined';
   const searchTimer = useRef(null);
+  const canSyncActiveQueueBible = useCallback(
+    (reference) => {
+      if (!reference || !activeQueueItem) return false;
+      const payload = activeQueueItem.payload || {};
+      const payloadType = String(payload.type || activeQueueItem.type || '').toLowerCase();
+      if (payloadType !== 'bible') return false;
+      return String(payload.reference || '').trim() === String(reference || '').trim();
+    },
+    [activeQueueItem]
+  );
   const beginQueuePreload = useCallback(() => {
     isApplyingQueuePreloadRef.current = true;
     setIsApplyingQueuePreload(true);
@@ -346,13 +358,14 @@ function BibleBrowser({
     const payload = buildSelectedPayload();
     if (!payload) return;
     onProjectContent(payload);
-    if (typeof onUpdateActiveQueueItem === 'function') {
+    if (typeof onUpdateActiveQueueItem === 'function' && canSyncActiveQueueBible(payload.reference)) {
       onUpdateActiveQueueItem(payload, payload.reference, 'bible');
     }
   }, [
     buildSelectedPayload,
     onProjectContent,
     onUpdateActiveQueueItem,
+    canSyncActiveQueueBible,
   ]);
 
   const handleQueueSelected = useCallback(() => {
@@ -377,7 +390,7 @@ function BibleBrowser({
         background: bibleBackground,
       };
       onProjectContent(payload);
-      if (typeof onUpdateActiveQueueItem === 'function') {
+      if (typeof onUpdateActiveQueueItem === 'function' && canSyncActiveQueueBible(payload.reference)) {
         onUpdateActiveQueueItem(payload, payload.reference, 'bible');
       }
     },
@@ -389,6 +402,7 @@ function BibleBrowser({
         bibleBackground,
         showVerseNumbers,
         onUpdateActiveQueueItem,
+        canSyncActiveQueueBible,
     ]
   );
 
@@ -438,8 +452,15 @@ function BibleBrowser({
     if (selectedVerses.length === 0 || typeof onUpdateActiveQueueItem !== 'function') return;
     const payload = buildSelectedPayload();
     if (!payload) return;
+    if (!canSyncActiveQueueBible(payload.reference)) return;
     onUpdateActiveQueueItem(payload, payload.reference, 'bible');
-  }, [isApplyingQueuePreload, selectedVerses, buildSelectedPayload, onUpdateActiveQueueItem]);
+  }, [
+    isApplyingQueuePreload,
+    selectedVerses,
+    buildSelectedPayload,
+    onUpdateActiveQueueItem,
+    canSyncActiveQueueBible,
+  ]);
 
   useEffect(() => {
     if (externalBackground) {
@@ -457,6 +478,9 @@ function BibleBrowser({
     setSelectedVerses([]);
     setPendingPreloadSelection(null);
     setPreloadFocusVerse(null);
+    preloadPayloadRef.current = null;
+    currentPreloadTokenRef.current = null;
+    skipAutoProjectOnceRef.current = false;
     endQueuePreload();
   }, [forceShowBibleCatalogToken, endQueuePreload]);
 
@@ -465,6 +489,8 @@ function BibleBrowser({
       return;
     beginQueuePreload();
     const payload = activePreloadItem.payload;
+    const preloadToken = String(activePreloadItem.token || Date.now());
+    currentPreloadTokenRef.current = preloadToken;
     preloadPayloadRef.current = payload;
     skipAutoProjectOnceRef.current = payload.deferProject === true;
     setSelectedVerses([]);
@@ -499,7 +525,7 @@ function BibleBrowser({
       chapter: parsed.chapter,
       fromVerse: parsed.fromVerse,
       toVerse: parsed.toVerse,
-      token: activePreloadItem.token || Date.now(),
+      token: preloadToken,
     });
   }, [
     activePreloadItem?.token,
@@ -512,6 +538,9 @@ function BibleBrowser({
 
   useEffect(() => {
     if (!pendingPreloadSelection) return;
+    if (String(pendingPreloadSelection.token || '') !== String(currentPreloadTokenRef.current || '')) {
+      return;
+    }
     if (!selectedBook || !selectedChapter || !verses.length) return;
     if (!versesContext) return;
     if (versesContext.bookSn !== selectedBook.sn) return;
@@ -553,7 +582,10 @@ function BibleBrowser({
       // Queue preload can request "show first, project on second click".
       if (sourcePayload.deferProject !== true) {
         onProjectContent(projectedPayload);
-        if (typeof onUpdateActiveQueueItem === 'function') {
+        if (
+          typeof onUpdateActiveQueueItem === 'function' &&
+          canSyncActiveQueueBible(projectedPayload.reference)
+        ) {
           onUpdateActiveQueueItem(projectedPayload, projectedPayload.reference, 'bible');
         }
       }
@@ -574,6 +606,7 @@ function BibleBrowser({
     bibleBackground,
     onProjectContent,
     onUpdateActiveQueueItem,
+    canSyncActiveQueueBible,
     endQueuePreload,
   ]);
 

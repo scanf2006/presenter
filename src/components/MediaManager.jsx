@@ -39,10 +39,23 @@ function MediaManager({
   const dropRef = useRef(null);
   const pdfThumbRefs = useRef(new Map());
   const pptThumbRefs = useRef(new Map());
+  const pdfLoadRequestSeqRef = useRef(0);
+  const pptConvertRequestSeqRef = useRef(0);
+  const staleDropStatsRef = useRef({ pdf: 0, ppt: 0 });
 
   const isElectron = typeof window.churchDisplay !== 'undefined';
   const { showToast, showConfirm, activeSection } = useAppContext();
   const isMediaSectionActive = activeSection === 'media';
+
+  const logStaleDrop = useCallback((type) => {
+    if (!import.meta.env.DEV) return;
+    if (type !== 'pdf' && type !== 'ppt') return;
+    staleDropStatsRef.current[type] += 1;
+    // Dev-only signal: track dropped stale async results to verify race-condition mitigation.
+    console.debug(
+      `[MediaManager] stale ${type.toUpperCase()} result dropped (pdf=${staleDropStatsRef.current.pdf}, ppt=${staleDropStatsRef.current.ppt})`
+    );
+  }, []);
 
   const loadMediaFiles = useCallback(async () => {
     if (isElectron) {
@@ -147,6 +160,9 @@ function MediaManager({
 
   const handleLoadPdfGrid = useCallback(
     async (file) => {
+      const requestSeq = ++pdfLoadRequestSeqRef.current;
+      // Switching to PDF invalidates any previous PPT conversion result.
+      pptConvertRequestSeqRef.current += 1;
       setDetailOpenedFromQueue(Boolean(file?.deferProject));
       setPdfLoading(true);
       // M7: Destroy previous PDF document before loading new one.
@@ -172,6 +188,11 @@ function MediaManager({
 
         const loadingTask = pdfjsLib.getDocument({ data: dataBuffer });
         const pdfDocument = await loadingTask.promise;
+        if (requestSeq !== pdfLoadRequestSeqRef.current) {
+          logStaleDrop('pdf');
+          pdfDocument.destroy().catch(() => {});
+          return;
+        }
 
         setActivePdf({
           path: file.path,
@@ -189,22 +210,37 @@ function MediaManager({
           });
         }
       } catch (err) {
+        if (requestSeq !== pdfLoadRequestSeqRef.current) return;
         console.error('[MediaManager] PDF load failed:', err);
       showToast(`${t('media.pdfLoadFailed', 'Failed to load PDF thumbnails')}: ${err.message}`, 'error');
       } finally {
-        setPdfLoading(false);
+        if (requestSeq === pdfLoadRequestSeqRef.current) {
+          setPdfLoading(false);
+        }
       }
     },
-    [onProjectMedia, showToast, t]
+    [onProjectMedia, showToast, t, logStaleDrop]
   );
 
   const handleConvertPpt = useCallback(
     async (file) => {
       if (!isElectron) return;
+      const requestSeq = ++pptConvertRequestSeqRef.current;
+      // Switching to PPT invalidates any previous PDF load result.
+      pdfLoadRequestSeqRef.current += 1;
       setDetailOpenedFromQueue(Boolean(file?.deferProject));
+      setActivePdf((prev) => {
+        if (prev?.pdfDocument) prev.pdfDocument.destroy().catch(() => {});
+        return null;
+      });
+      setCurrentPdfPage(1);
       setPptSourcePath(file?.path || '');
       setPptConverting(true);
       const result = await window.churchDisplay.convertPpt(file.path);
+      if (requestSeq !== pptConvertRequestSeqRef.current) {
+        logStaleDrop('ppt');
+        return;
+      }
       setPptConverting(false);
 
       if (result.success && result.slides.length > 0) {
@@ -227,7 +263,7 @@ function MediaManager({
         showToast(`${t('media.pptFailed', 'PPT conversion failed')}: ${result.error || t('media.unknownError', 'Unknown error')}`, 'error');
       }
     },
-    [isElectron, showToast, t]
+    [isElectron, showToast, t, logStaleDrop]
   );
 
   const handleProjectMedia = useCallback(
@@ -347,6 +383,14 @@ function MediaManager({
     return () => clearTimeout(timer);
   }, [activePreloadItem, handleConvertPpt, handleLoadPdfGrid]);
 
+  useEffect(() => {
+    const type = activePreloadItem?.type;
+    if (type === 'ppt' || type === 'pdf') return;
+    // Leaving media preload mode should invalidate stale async completions.
+    pdfLoadRequestSeqRef.current += 1;
+    pptConvertRequestSeqRef.current += 1;
+  }, [activePreloadItem]);
+
   // M10-R2: Use a ref for activePdf to avoid the forceShowMediaHomeToken effect
   // depending on activePdf?.pdfDocument (which it modifies, causing double-fire).
   const activePdfRef = useRef(activePdf);
@@ -357,6 +401,9 @@ function MediaManager({
   useEffect(() => {
     if (!forceShowMediaHomeToken) return;
     const timer = setTimeout(() => {
+      // Force-home action should invalidate stale async completions.
+      pdfLoadRequestSeqRef.current += 1;
+      pptConvertRequestSeqRef.current += 1;
       setPptConverting(false);
       setPdfLoading(false);
       setPptSlides(null);
@@ -711,7 +758,7 @@ function MediaManager({
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
               gap: '12px',
               maxHeight: '400px',
               overflowY: 'auto',
@@ -795,7 +842,7 @@ function MediaManager({
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
               gap: '12px',
               maxHeight: '400px',
               overflowY: 'auto',

@@ -93,6 +93,7 @@ export default function useQueuePlayback({
       }
 
       try {
+        setActiveSection(resolvedSection);
         const playableData =
           item.payload?.type === 'youtube'
             ? await resolveYouTubePayload({

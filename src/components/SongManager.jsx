@@ -39,6 +39,7 @@ function SongManager({
   onQueueContent,
   onUpdateActiveQueueItem,
   activePreloadItem,
+  activeQueueItem,
   onOpenBackgroundPicker,
   externalBackground,
   backgroundPickContext,
@@ -72,6 +73,7 @@ function SongManager({
   const lastProjectedSectionRef = useRef(null);
   const lastAppliedExternalPickRef = useRef(null);
   const lastHandledPreloadRef = useRef(null);
+  const backgroundPersistSeqBySongRef = useRef(new Map());
   const sectionCardRefs = useRef(new Map());
   const blankSectionCardRef = useRef(null);
 
@@ -80,6 +82,16 @@ function SongManager({
   const { showToast, showConfirm, activeSection } = useAppContext();
   const { t } = useI18n();
   const isSongsSectionActive = activeSection === 'songs';
+
+  const canSyncActiveQueueSong = useCallback(
+    (song) => {
+      if (!song?.id || !activeQueueItem) return false;
+      const payload = activeQueueItem.payload || {};
+      if (String(payload.type || activeQueueItem.type || '') !== 'song') return false;
+      return Number(payload.songId) === Number(song.id);
+    },
+    [activeQueueItem]
+  );
 
   // 加载歌曲列表
   const loadSongs = useCallback(async () => {
@@ -232,7 +244,11 @@ function SongManager({
       };
       lastProjectedSectionRef.current = { section };
       onProjectContent(payload);
-      if (selectedSong && typeof onUpdateActiveQueueItem === 'function') {
+      if (
+        selectedSong &&
+        typeof onUpdateActiveQueueItem === 'function' &&
+        canSyncActiveQueueSong(selectedSong)
+      ) {
         const queuePayload = buildSelectedSongQueuePayload(selectedSong, section, sectionIndex);
         if (queuePayload) {
           onUpdateActiveQueueItem(queuePayload, selectedSong.title, 'songs');
@@ -250,6 +266,7 @@ function SongManager({
       selectedSong,
       onUpdateActiveQueueItem,
       buildSelectedSongQueuePayload,
+      canSyncActiveQueueSong,
     ]
   );
 
@@ -273,7 +290,11 @@ function SongManager({
       },
     };
     onProjectContent(payload);
-    if (selectedSong && typeof onUpdateActiveQueueItem === 'function') {
+    if (
+      selectedSong &&
+      typeof onUpdateActiveQueueItem === 'function' &&
+      canSyncActiveQueueSong(selectedSong)
+    ) {
       const queuePayload = buildSelectedSongQueuePayload(selectedSong, {
         tag: 'BLANK',
         title: 'Blank',
@@ -294,6 +315,7 @@ function SongManager({
     selectedSong,
     onUpdateActiveQueueItem,
     buildSelectedSongQueuePayload,
+    canSyncActiveQueueSong,
   ]);
 
   useSongSectionNavigation({
@@ -339,7 +361,7 @@ function SongManager({
     const targetSongId = preloadPayload.songId;
     if (!targetSongId) return;
     // Avoid re-opening the same song after save/delete triggers a songs or editingSong change.
-    const preloadKey = `${targetSongId}|${activePreloadItem.payload?.token || ''}`;
+    const preloadKey = `${targetSongId}|${activePreloadItem.token || ''}`;
     if (lastHandledPreloadRef.current === preloadKey) return;
     lastHandledPreloadRef.current = preloadKey;
     const target = songs.find((s) => s.id === targetSongId);
@@ -382,6 +404,7 @@ function SongManager({
     setEditingSong(null);
     setSelectedSectionIndex(-1);
     lastProjectedSectionRef.current = null;
+    lastHandledPreloadRef.current = null;
   }, [forceShowSongListToken]);
 
   // Keep refs in sync via effects to avoid stale-closure: the background-change
@@ -405,6 +428,9 @@ function SongManager({
     async (song, bg, options = {}) => {
       if (!song) return null;
       const nextSong = mergeSongWithBackground(song, bg);
+      const persistKey = String(nextSong.id || '__new__');
+      const nextSeq = (backgroundPersistSeqBySongRef.current.get(persistKey) || 0) + 1;
+      backgroundPersistSeqBySongRef.current.set(persistKey, nextSeq);
       // Options allow reuse in both selected-song and picker-song paths
       // without forking logic into separate near-duplicate functions.
       const syncSelectedSong = options.syncSelectedSong !== false;
@@ -425,7 +451,17 @@ function SongManager({
         console.warn('[SongManager] persist background failed:', err?.message || err);
       }
 
-      if (typeof onUpdateActiveQueueItem === 'function') {
+      const latestSeq = backgroundPersistSeqBySongRef.current.get(persistKey) || 0;
+      if (nextSeq !== latestSeq) {
+        if (import.meta.env.DEV) {
+          console.debug(
+            `[SongManager] stale background persist dropped song=${persistKey} seq=${nextSeq} latest=${latestSeq}`
+          );
+        }
+        return nextSong;
+      }
+
+      if (typeof onUpdateActiveQueueItem === 'function' && canSyncActiveQueueSong(nextSong)) {
         const queuePayload = buildSongQueuePayload({
           song: nextSong,
           background: bg,
@@ -441,7 +477,16 @@ function SongManager({
       }
       return nextSong;
     },
-    [isElectron, onUpdateActiveQueueItem, fontSize, fontSizePx, fontFamily, isBold, textColor]
+    [
+      isElectron,
+      onUpdateActiveQueueItem,
+      fontSize,
+      fontSizePx,
+      fontFamily,
+      isBold,
+      textColor,
+      canSyncActiveQueueSong,
+    ]
   );
 
   useEffect(() => {

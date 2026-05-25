@@ -22,7 +22,7 @@ const APP_VERSION = appPkg.version;
  */
 function ControlPanelInner() {
   const { toast, autosaveToast, dialog, closeDialog, setActiveSection } = useAppContext();
-  const { setActiveQueueIndex, activeQueueIndex, projectorQueue, mediaQueueHomeToken } =
+  const { setActiveQueueIndex, setActivePreloadItem, activeQueueIndex, projectorQueue, mediaQueueHomeToken } =
     useQueueContext();
   const { handleClearProjector, resetFreeTextEditor } = useTextEditorContext();
 
@@ -38,6 +38,7 @@ function ControlPanelInner() {
     openMedia,
   } = useSectionNavigation({
     setActiveQueueIndex,
+    setActivePreloadItem,
     setActiveSection,
     resetFreeTextEditor,
   });
