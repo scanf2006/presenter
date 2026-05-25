@@ -3,11 +3,13 @@ import useTextEditorState from '../hooks/useTextEditorState';
 import useTextCanvasTransform from '../hooks/useTextCanvasTransform';
 import useBackgroundPickerFlow from '../hooks/useBackgroundPickerFlow';
 import useActiveTextQueueAutosave from '../hooks/useActiveTextQueueAutosave';
+import useTextBackgroundAutoProject from '../hooks/useTextBackgroundAutoProject';
 import useObservedWidth from '../hooks/useObservedWidth';
 import { useAppContext } from './AppContext';
 import { useProjectorContext } from './ProjectorContext';
 import { useQueueContext } from './QueueContext';
 import { PREVIEW, TEXT_EDITOR } from '../constants/ui';
+import { clampFreeTextLayout } from '../utils/freeTextLayout';
 
 const TextEditorContext = createContext(null);
 
@@ -104,10 +106,12 @@ export function TextEditorProvider({ children }) {
   const textCanvasWidth = useObservedWidth(textCanvasRef, [activeSection]);
   const textCanvasWidthRatio = Math.max(
     PREVIEW.MIN_WIDTH_RATIO,
-    (textCanvasWidth || PREVIEW.STAGE_FALLBACK_WIDTH_PX * 2.5) / PREVIEW.STAGE_BASE_WIDTH_PX
+    (textCanvasWidth ||
+      PREVIEW.STAGE_FALLBACK_WIDTH_PX * PREVIEW.TEXT_CANVAS_FALLBACK_WIDTH_MULTIPLIER) /
+      PREVIEW.STAGE_BASE_WIDTH_PX
   );
   const textCanvasDisplayFontPx = Math.max(
-    12,
+    PREVIEW.TEXT_CANVAS_MIN_DISPLAY_FONT_PX,
     Math.min(TEXT_EDITOR.SIZE_CLAMP_MAX_PX, Math.round(textSizePx * textCanvasWidthRatio))
   );
 
@@ -127,21 +131,7 @@ export function TextEditorProvider({ children }) {
   const handleSendToProjector = useCallback(
     (content) => {
       const data = buildCurrentTextPayload(content || textContent);
-      const rawLayout = data?.textLayout || textLayout || TEXT_EDITOR.LAYOUT_DEFAULT;
-      const x = Number(rawLayout?.xPercent);
-      const y = Number(rawLayout?.yPercent);
-      const scale = Number(rawLayout?.scale);
-      data.textLayout = {
-        xPercent: Number.isFinite(x)
-          ? Math.max(TEXT_EDITOR.LAYOUT_X_MIN, Math.min(TEXT_EDITOR.LAYOUT_X_MAX, x))
-          : TEXT_EDITOR.LAYOUT_DEFAULT.xPercent,
-        yPercent: Number.isFinite(y)
-          ? Math.max(TEXT_EDITOR.LAYOUT_Y_MIN, Math.min(TEXT_EDITOR.LAYOUT_Y_MAX, y))
-          : TEXT_EDITOR.LAYOUT_DEFAULT.yPercent,
-        scale: Number.isFinite(scale)
-          ? Math.max(TEXT_EDITOR.LAYOUT_SCALE_MIN, Math.min(TEXT_EDITOR.LAYOUT_SCALE_MAX, scale))
-          : TEXT_EDITOR.LAYOUT_DEFAULT.scale,
-      };
+      data.textLayout = clampFreeTextLayout(data?.textLayout || textLayout || TEXT_EDITOR.LAYOUT_DEFAULT);
       pushToProjector(data);
     },
     [textContent, textLayout, buildCurrentTextPayload, pushToProjector]
@@ -159,32 +149,13 @@ export function TextEditorProvider({ children }) {
   );
 
   // ── Background change auto-project ──
-  const sendToProjectorRef = useRef(handleSendToProjector);
-  const activeSectionRef = useRef(activeSection);
-  const textContentRef = useRef(textContent);
-  const currentSlideRef = useRef(currentSlide);
-  useEffect(() => {
-    sendToProjectorRef.current = handleSendToProjector;
-  }, [handleSendToProjector]);
-  useEffect(() => {
-    activeSectionRef.current = activeSection;
-  }, [activeSection]);
-  useEffect(() => {
-    textContentRef.current = textContent;
-  }, [textContent]);
-  useEffect(() => {
-    currentSlideRef.current = currentSlide;
-  }, [currentSlide]);
-
-  useEffect(() => {
-    if (
-      activeSectionRef.current === 'text' &&
-      textContentRef.current.trim() &&
-      currentSlideRef.current?.type === 'text'
-    ) {
-      sendToProjectorRef.current();
-    }
-  }, [textBackground]);
+  useTextBackgroundAutoProject({
+    activeSection,
+    textContent,
+    currentSlide,
+    textBackground,
+    handleSendToProjector,
+  });
 
   // ── Media projection (YouTube resolve) ──
   const handleProjectMedia = useCallback(

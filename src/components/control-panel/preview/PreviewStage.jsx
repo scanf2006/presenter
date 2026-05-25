@@ -1,7 +1,16 @@
 import React from 'react';
 import PdfRenderer from '../../PdfRenderer';
 import { formatTime, getPreviewTextSize, getPreviewMediaUrl } from '../../../utils/preview';
-import { PREVIEW, TEXT_EDITOR } from '../../../constants/ui';
+import { PREVIEW } from '../../../constants/ui';
+import { TEXT_RENDER } from '../../../constants/text-render';
+import {
+  clampFreeTextLayout,
+  FREE_TEXT_CONTENT_WIDTH_PERCENT,
+  getFallbackTextBasePx,
+  getPreviewFallbackEditorTextPx,
+  getScaledFreeTextFontPx,
+  isTextualSlideType,
+} from '../../../utils/freeTextLayout';
 import { useProjectorContext } from '../../../contexts/ProjectorContext';
 import CameraPane from './CameraPane';
 
@@ -46,8 +55,7 @@ function PreviewStage() {
     PREVIEW.MIN_WIDTH_RATIO,
     previewWidth / PREVIEW.STAGE_BASE_WIDTH_PX
   );
-  const projectorFallbackPx =
-    previewSlide?.fontSize === 'small' ? 32 : previewSlide?.fontSize === 'medium' ? 48 : 72;
+  const projectorFallbackPx = getFallbackTextBasePx(previewSlide?.fontSize);
   const previewBibleFontPx = Math.max(
     PREVIEW.TEXT_MIN_PX,
     Math.min(PREVIEW.TEXT_MAX_PX, Math.round(projectorFallbackPx * projectorWidthRatio))
@@ -56,40 +64,17 @@ function PreviewStage() {
     PREVIEW.TEXT_MIN_PX,
     Math.min(34, Math.round(24 * projectorWidthRatio))
   );
-  const freeTextLayout = {
-    xPercent: Math.max(
-      TEXT_EDITOR.LAYOUT_X_MIN,
-      Math.min(
-        TEXT_EDITOR.LAYOUT_X_MAX,
-        Number(previewSlide?.textLayout?.xPercent ?? TEXT_EDITOR.LAYOUT_DEFAULT.xPercent)
-      )
-    ),
-    yPercent: Math.max(
-      TEXT_EDITOR.LAYOUT_Y_MIN,
-      Math.min(
-        TEXT_EDITOR.LAYOUT_Y_MAX,
-        Number(previewSlide?.textLayout?.yPercent ?? TEXT_EDITOR.LAYOUT_DEFAULT.yPercent)
-      )
-    ),
-    scale: Math.max(
-      TEXT_EDITOR.LAYOUT_SCALE_MIN,
-      Math.min(
-        TEXT_EDITOR.LAYOUT_SCALE_MAX,
-        Number(previewSlide?.textLayout?.scale ?? TEXT_EDITOR.LAYOUT_DEFAULT.scale)
-      )
-    ),
-  };
+  const freeTextLayout = clampFreeTextLayout(previewSlide?.textLayout);
   const previewFreeTextPx = (() => {
-    const raw = Number(previewSlide?.fontSizePx);
-    if (!Number.isFinite(raw) || raw <= 0) {
+    const scaledPx = getScaledFreeTextFontPx(previewSlide?.fontSizePx, projectorWidthRatio);
+    if (scaledPx === null) {
       return getPreviewTextSize(
         previewSlide,
-        previewSlide?.fontSize === 'large' ? 16 : previewSlide?.fontSize === 'medium' ? 12 : 10,
+        getPreviewFallbackEditorTextPx(previewSlide?.fontSize),
         previewStageWidth
       );
     }
-    const scaled = Math.round(Math.max(20, Math.min(TEXT_EDITOR.SIZE_CLAMP_MAX_PX, raw)) * projectorWidthRatio);
-    return `${Math.max(PREVIEW.TEXT_MIN_PX, scaled)}px`;
+    return `${scaledPx}px`;
   })();
 
   return (
@@ -165,9 +150,7 @@ function PreviewStage() {
                 alignItems: 'center',
                 justifyContent: 'center',
                 padding:
-                  previewSlide.type === 'text' ||
-                  previewSlide.type === 'bible' ||
-                  previewSlide.type === 'lyrics'
+                  isTextualSlideType(previewSlide.type)
                     ? '12px'
                     : '0px',
               }}
@@ -191,16 +174,16 @@ function PreviewStage() {
                       top: `${freeTextLayout.yPercent - 50}%`,
                       transform: `translate(0, 0) scale(${freeTextLayout.scale})`,
                       transformOrigin: 'center center',
-                      width: '88%',
-                      maxWidth: '88%',
+                      width: `${FREE_TEXT_CONTENT_WIDTH_PERCENT}%`,
+                      maxWidth: `${FREE_TEXT_CONTENT_WIDTH_PERCENT}%`,
                       whiteSpace: 'pre-wrap',
                       textAlign: 'center',
-                      lineHeight: '1.6',
+                      lineHeight: TEXT_RENDER.FREE_TEXT_LINE_HEIGHT,
                       fontSize: previewFreeTextPx,
                       fontWeight: Number(previewSlide?.fontWeight || 700),
                       color: previewSlide.textColor || '#fff',
                       fontFamily: previewSlide.fontFamily || 'inherit',
-                      textShadow: '2px 2px 6px rgba(0,0,0,0.9)',
+                      textShadow: TEXT_RENDER.FREE_TEXT_SHADOW,
                     }}
                   >
                     {previewSlide.text}
@@ -368,12 +351,12 @@ function PreviewStage() {
                       color: previewSlide.textColor || '#fff',
                       fontFamily: previewSlide.fontFamily || 'inherit',
                       whiteSpace: 'pre-line',
-                      lineHeight: '1.9',
+                      lineHeight: TEXT_RENDER.BIBLE_LINE_HEIGHT,
                       letterSpacing: '0.015em',
                       wordBreak: 'break-word',
                       textAlign: 'left',
                       fontWeight: Number(previewSlide?.fontWeight || 700),
-                      textShadow: '2px 2px 6px rgba(0,0,0,0.9)',
+                      textShadow: TEXT_RENDER.FREE_TEXT_SHADOW,
                     }}
                   >
                     {previewSlide.text}
@@ -387,7 +370,7 @@ function PreviewStage() {
                       fontWeight: Number(previewSlide?.fontWeight || 700),
                       textAlign: 'right',
                       fontStyle: 'italic',
-                      textShadow: '2px 2px 8px rgba(0, 0, 0, 0.9)',
+                      textShadow: TEXT_RENDER.REFERENCE_SHADOW,
                     }}
                   >
                     - {previewSlide.reference}
@@ -425,7 +408,7 @@ function PreviewStage() {
                       fontFamily: previewSlide.fontFamily || 'inherit',
                       fontWeight: Number(previewSlide?.fontWeight || 700),
                       whiteSpace: 'pre-line',
-                      lineHeight: '1.8',
+                      lineHeight: TEXT_RENDER.LYRICS_LINE_HEIGHT,
                       textAlign: 'center',
                     }}
                   >

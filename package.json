@@ -43,6 +43,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"tests/**/*.test.js\"",
+    "commercial:gate": "node scripts/commercial-gate.js",
     "lint": "eslint \"src/**/*.{js,jsx}\" \"electron/**/*.js\"",
     "format": "prettier --write .",
     "ndi:prepare": "node scripts/prepare-ndi.js",

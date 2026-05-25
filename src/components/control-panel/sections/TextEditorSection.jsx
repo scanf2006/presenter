@@ -1,6 +1,7 @@
 import React from 'react';
 import { getPreviewMediaUrl } from '../../../utils/preview';
 import { PREVIEW, TEXT_EDITOR } from '../../../constants/ui';
+import { TEXT_RENDER } from '../../../constants/text-render';
 import { PROJECTION_FONT_OPTIONS } from '../../../constants/fontOptions';
 import { useProjectorContext } from '../../../contexts/ProjectorContext';
 import { useTextEditorContext } from '../../../contexts/TextEditorContext';
@@ -180,13 +181,13 @@ function TextEditorSection() {
                 fontWeight: textBold ? 700 : 400,
                 color: textColor,
                 fontSize: `${textCanvasDisplayFontPx}px`,
-                lineHeight: 1.6,
+                lineHeight: TEXT_RENDER.FREE_TEXT_LINE_HEIGHT,
                 whiteSpace: 'pre-wrap',
                 textAlign: 'center',
                 direction: 'ltr',
                 unicodeBidi: 'isolate',
                 writingMode: 'horizontal-tb',
-                textShadow: '2px 2px 8px rgba(0, 0, 0, 0.85)',
+                textShadow: TEXT_RENDER.EDITOR_TEXT_SHADOW,
               }}
             />
             <div
