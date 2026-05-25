@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useMemo } from
 import useProjectorQueue from '../hooks/useProjectorQueue';
 import useQueueCrudActions from '../hooks/useQueueCrudActions';
 import useQueuePlayback from '../hooks/useQueuePlayback';
-import { isBibleQueueItem, isSongQueueItem } from '../utils/queueItemMeta';
+import { getPayloadTypeFromItem, isBibleQueueItem, isSongQueueItem } from '../utils/queueItemMeta';
 import { useAppContext } from './AppContext';
 import { useProjectorContext } from './ProjectorContext';
 
@@ -100,7 +100,10 @@ export function QueueProvider({ applyTextPayloadToEditor, children }) {
     clearQueue,
   });
 
-  const handleMediaQueueItemPlayed = useCallback(() => {
+  const handleMediaQueueItemPlayed = useCallback((item) => {
+    const payloadType = getPayloadTypeFromItem(item);
+    // Keep PPT/PDF queue click in thumbnail/detail mode (do not force media home reset).
+    if (payloadType === 'ppt' || payloadType === 'pdf') return;
     setMediaQueueHomeToken(Date.now());
   }, []);
 
