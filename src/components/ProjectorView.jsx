@@ -1,7 +1,13 @@
-import React, { useEffect, useRef, useState } from 'react';
-/* eslint-disable react-hooks/set-state-in-effect */
-/* eslint-disable react-hooks/exhaustive-deps */
-
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { SCENE } from '../constants/ui';
+import useProjectorChannelSync from '../hooks/useProjectorChannelSync';
+import ProjectorTextLayer from './projector/ProjectorTextLayer';
+import {
+  clampFreeTextLayout,
+  getFallbackTextBasePx,
+  getScaledFreeTextFontPx,
+  isTextualSlideType,
+} from '../utils/freeTextLayout';
 function ProjectorView() {
   const [content, setContent] = useState(null);
   const [backgroundContent, setBackgroundContent] = useState(null);
@@ -21,7 +27,6 @@ function ProjectorView() {
   const videoRef = useRef(null);
   const mediaSampleVideoRef = useRef(null);
   const sampleCanvasRef = useRef(null);
-  const sampleIntervalRef = useRef(null);
   const timeoutRef = useRef([]);
   const [adaptiveOverlayOpacity, setAdaptiveOverlayOpacity] = useState(0.1);
   const [sceneConfig, setSceneConfig] = useState({
@@ -40,134 +45,19 @@ function ProjectorView() {
 
   const isElectron = typeof window.churchDisplay !== 'undefined';
 
-  useEffect(() => {
-    if (!isElectron) return;
-
-    const clearTimers = () => {
-      timeoutRef.current.forEach((t) => clearTimeout(t));
-      timeoutRef.current = [];
-    };
-
-    const offProjectorTransition = window.churchDisplay.onProjectorTransition((data) => {
-      const next = {
-        enabled: data?.enabled !== false,
-        delayMs: Number.isFinite(data?.delayMs) ? Math.max(0, data.delayMs) : 20,
-        durationMs: Number.isFinite(data?.durationMs) ? Math.max(0, data.durationMs) : 60,
-      };
-      transitionRef.current = next;
-      setTransitionConfig(next);
-    });
-    const offProjectorScene = window.churchDisplay.onProjectorScene((data) => {
-      const nextMode = data?.mode === 'split_camera' ? 'split_camera' : 'normal';
-      setSceneConfig((prev) => ({
-        ...prev,
-        mode: nextMode,
-        splitDirection: data?.splitDirection || prev.splitDirection,
-        cameraDeviceId:
-          typeof data?.cameraDeviceId === 'string' ? data.cameraDeviceId : prev.cameraDeviceId,
-        cameraPanePercent: Number.isFinite(data?.cameraPanePercent)
-          ? Math.max(20, Math.min(40, Number(data.cameraPanePercent)))
-          : prev.cameraPanePercent,
-        cameraMuted: data?.cameraMuted !== false,
-        cameraCenterCropPercent: Number.isFinite(data?.cameraCenterCropPercent)
-          ? Math.max(100, Math.min(220, Number(data.cameraCenterCropPercent)))
-          : prev.cameraCenterCropPercent,
-        enableCameraTestMode: data?.enableCameraTestMode === true,
-      }));
-    });
-
-    const offProjectorContent = window.churchDisplay.onProjectorContent((data) => {
-      clearTimers();
-      const cfg = transitionRef.current;
-      if (!cfg.enabled) {
-        setContent(data);
-        if (data?.background) {
-          setBackgroundContent(data.background);
-        }
-        setIsBlackout(false);
-        setFadeClass('');
-        return;
-      }
-
-      setTransitionMaskVisible(true);
-      setFadeClass('projector-view__content--fade-out');
-      const switchTimer = setTimeout(() => {
-        const applyNewTimer = setTimeout(() => {
-          setContent(data);
-          if (data?.background) {
-            setBackgroundContent(data.background);
-          }
-          setIsBlackout(false);
-          setFadeClass('projector-view__content--fade-in');
-          const maskTimer = setTimeout(() => {
-            setTransitionMaskVisible(false);
-          }, cfg.durationMs);
-          timeoutRef.current.push(maskTimer);
-        }, cfg.delayMs);
-        timeoutRef.current.push(applyNewTimer);
-      }, cfg.durationMs);
-      timeoutRef.current.push(switchTimer);
-    });
-
-    const offProjectorBackground = window.churchDisplay.onProjectorBackground((data) => {
-      setBackgroundContent(data || null);
-      setIsBlackout(false);
-    });
-
-    const offProjectorBlackout = window.churchDisplay.onProjectorBlackout(() => {
-      clearTimers();
-      const cfg = transitionRef.current;
-      if (!cfg.enabled) {
-        setContent(null);
-        setIsBlackout(true);
-        setFadeClass('');
-        setTransitionMaskVisible(false);
-        if (videoRef.current) {
-          videoRef.current.pause();
-        }
-        return;
-      }
-
-      setTransitionMaskVisible(true);
-      setFadeClass('projector-view__content--fade-out');
-      const blackoutTimer = setTimeout(() => {
-        const applyBlackoutTimer = setTimeout(() => {
-          setContent(null);
-          setIsBlackout(true);
-          setFadeClass('');
-          const maskTimer = setTimeout(() => {
-            setTransitionMaskVisible(false);
-          }, cfg.durationMs);
-          timeoutRef.current.push(maskTimer);
-
-          if (videoRef.current) {
-            videoRef.current.pause();
-          }
-        }, cfg.delayMs);
-        timeoutRef.current.push(applyBlackoutTimer);
-      }, cfg.durationMs);
-      timeoutRef.current.push(blackoutTimer);
-    });
-
-    const offMediaCommand = window.churchDisplay.onMediaCommand((command) => {
-      if (!videoRef.current) return;
-
-      const { type, value } = command;
-      if (type === 'play') videoRef.current.play().catch(console.error);
-      if (type === 'pause') videoRef.current.pause();
-      if (type === 'seek') videoRef.current.currentTime = value;
-    });
-
-    return () => {
-      if (typeof offProjectorContent === 'function') offProjectorContent();
-      if (typeof offProjectorBackground === 'function') offProjectorBackground();
-      if (typeof offProjectorBlackout === 'function') offProjectorBlackout();
-      if (typeof offMediaCommand === 'function') offMediaCommand();
-      if (typeof offProjectorTransition === 'function') offProjectorTransition();
-      if (typeof offProjectorScene === 'function') offProjectorScene();
-      clearTimers();
-    };
-  }, [isElectron]);
+  useProjectorChannelSync({
+    isElectron,
+    transitionRef,
+    timeoutRef,
+    videoRef,
+    setTransitionConfig,
+    setSceneConfig,
+    setContent,
+    setBackgroundContent,
+    setIsBlackout,
+    setFadeClass,
+    setTransitionMaskVisible,
+  });
 
   useEffect(() => {
     if (content?.type !== 'video') return;
@@ -201,14 +91,13 @@ function ProjectorView() {
   };
 
   const getProjectorTextSize = () => {
-    const px = Number(content?.fontSizePx);
     const paneRatio = splitEnabled ? (100 - rightPanePercent) / 100 : 1;
     const scale = splitEnabled ? Math.max(0.72, paneRatio) : 1;
-    if (Number.isFinite(px) && px > 0) {
-      const scaled = Math.max(20, Math.min(220, Math.round(px * scale)));
-      return `${scaled}px`;
+    const scaledPx = getScaledFreeTextFontPx(content?.fontSizePx, scale);
+    if (scaledPx !== null) {
+      return `${scaledPx}px`;
     }
-    const base = content?.fontSize === 'small' ? 32 : content?.fontSize === 'medium' ? 48 : 72;
+    const base = getFallbackTextBasePx(content?.fontSize);
     return `${Math.round(base * scale)}px`;
   };
 
@@ -227,13 +116,18 @@ function ProjectorView() {
   const backgroundMedia =
     content?.background || content?.payload?.background || content?.bg || backgroundContent || null;
 
-  const standaloneMedia =
-    (content?.type === 'image' || content?.type === 'video') && content?.path
-      ? { type: content.type, path: content.path, standalone: true }
-      : null;
+  const standaloneMedia = useMemo(
+    () =>
+      (content?.type === 'image' || content?.type === 'video') && content?.path
+        ? { type: content.type, path: content.path, standalone: true }
+        : null,
+    [content]
+  );
 
-  const effectiveMedia =
-    standaloneMedia || (backgroundMedia ? { ...backgroundMedia, standalone: false } : null);
+  const effectiveMedia = useMemo(
+    () => standaloneMedia || (backgroundMedia ? { ...backgroundMedia, standalone: false } : null),
+    [standaloneMedia, backgroundMedia]
+  );
   const mediaPathForDetect = String(content?.path || effectiveMedia?.path || '');
   const mediaNameForDetect = String(content?.name || '');
   const isPptImage =
@@ -241,22 +135,25 @@ function ProjectorView() {
     (content?.originType === 'ppt' ||
       /ppt/i.test(mediaNameForDetect) ||
       /[\\/]media[\\/]ppt[\\/]/i.test(mediaPathForDetect));
-  const isTextualContent =
-    content && (content.type === 'text' || content.type === 'bible' || content.type === 'lyrics');
+  const isTextualContent = content && isTextualSlideType(content.type);
   const hasVideoBackgroundForText = Boolean(
     isTextualContent && effectiveMedia?.type === 'video' && !effectiveMedia?.standalone
   );
   const textOverlayOpacity = hasVideoBackgroundForText ? 0 : adaptiveOverlayOpacity;
   const isFreeText = content?.type === 'text';
-  const textLayout = {
-    xPercent: Math.max(8, Math.min(92, Number(content?.textLayout?.xPercent ?? 50))),
-    yPercent: Math.max(10, Math.min(90, Number(content?.textLayout?.yPercent ?? 50))),
-    scale: Math.max(0.5, Math.min(3.2, Number(content?.textLayout?.scale ?? 1))),
-  };
-  const rightPanePercent = Math.max(20, Math.min(40, Number(sceneConfig.cameraPanePercent || 30)));
+  const textLayout = clampFreeTextLayout(content?.textLayout);
+  const rightPanePercent = Math.max(
+    SCENE.CAMERA_PANE_MIN_PERCENT,
+    Math.min(SCENE.CAMERA_PANE_MAX_PERCENT, Number(sceneConfig.cameraPanePercent || SCENE.CAMERA_PANE_DEFAULT_PERCENT))
+  );
   const rightCameraScale = Math.max(1, Number(sceneConfig.cameraCenterCropPercent || 100) / 100);
-  const splitEnabled = false;
+  const splitEnabled = sceneConfig.mode === 'split_camera';
   const contentPaneWidth = `${100 - rightPanePercent}%`;
+  const effectiveCameraPaneStatus = !splitEnabled
+    ? 'idle'
+    : sceneConfig.enableCameraTestMode
+      ? 'ok'
+      : cameraPaneStatus;
 
   useEffect(() => {
     const stop = () => {
@@ -272,13 +169,11 @@ function ProjectorView() {
 
     if (!splitEnabled) {
       stop();
-      setCameraPaneStatus('idle');
       return;
     }
 
     if (sceneConfig.enableCameraTestMode) {
       stop();
-      setCameraPaneStatus('ok');
       return;
     }
 
@@ -361,15 +256,7 @@ function ProjectorView() {
   };
 
   useEffect(() => {
-    if (sampleIntervalRef.current) {
-      clearInterval(sampleIntervalRef.current);
-      sampleIntervalRef.current = null;
-    }
-
-    if (!isTextualContent || !effectiveMedia) {
-      setAdaptiveOverlayOpacity(0.08);
-      return;
-    }
+    if (!isTextualContent || !effectiveMedia) return;
 
     if (effectiveMedia.type === 'image' && effectiveMedia.path) {
       let cancelled = false;
@@ -394,10 +281,9 @@ function ProjectorView() {
 
     if (effectiveMedia.type === 'video') {
       // Keep video backgrounds bright when text overlays are active.
-      setAdaptiveOverlayOpacity(0);
       return;
     }
-  }, [isTextualContent, effectiveMedia?.type, effectiveMedia?.path]);
+  }, [isTextualContent, effectiveMedia]);
 
   const fadeAnimationStyle = transitionConfig.enabled
     ? { animationDuration: `${transitionConfig.durationMs}ms` }
@@ -571,75 +457,18 @@ function ProjectorView() {
         </div>
       )}
 
-      {!isBlackout &&
-        content &&
-        (content.type === 'text' || content.type === 'bible' || content.type === 'lyrics') && (
-          <div
-            style={{
-              ...contentStageStyle,
-              zIndex: 10,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: 'clamp(24px, 5vh, 72px) clamp(28px, 6vw, 120px)',
-              pointerEvents: 'none',
-            }}
-          >
-            <div
-              className={`projector-view__content ${fadeClass}`}
-              style={{
-                width: '88%',
-                position: 'relative',
-                left: isFreeText ? `${textLayout.xPercent - 50}%` : undefined,
-                top: isFreeText ? `${textLayout.yPercent - 50}%` : undefined,
-                transform: isFreeText
-                  ? `translate(0, 0) scale(${textLayout.scale})`
-                  : undefined,
-                transformOrigin: isFreeText ? 'center center' : undefined,
-                textAlign: content.type === 'bible' ? 'left' : 'center',
-                ...fadeAnimationStyle,
-              }}
-            >
-              <div
-                className={`projector-text ${getTextSizeClass()}`}
-                style={{
-                  whiteSpace: 'pre-line',
-                  textAlign: content.type === 'bible' ? 'left' : 'center',
-                  lineHeight: content.type === 'bible' ? '1.9' : '1.6',
-                  letterSpacing: content.type === 'bible' ? '0.015em' : 'normal',
-                  wordBreak: content.type === 'bible' ? 'break-word' : 'normal',
-                  textShadow: '3px 3px 10px rgba(0, 0, 0, 0.9)',
-                  color: content.textColor || '#ffffff',
-                  fontFamily: content.fontFamily || "'Noto Sans SC', 'Inter', sans-serif",
-                  fontWeight: Number(content?.fontWeight || 700),
-                  fontSize: getProjectorTextSize(),
-                }}
-              >
-                {content.text}
-              </div>
-            </div>
-
-            {content.reference && (
-              <div
-                style={{
-                  position: 'absolute',
-                  right: 'clamp(28px, 4.5vw, 96px)',
-                  bottom: 'clamp(22px, 4vh, 72px)',
-                  fontSize: 'clamp(22px, 2vw, 34px)',
-                  fontStyle: 'italic',
-                  color: 'rgba(255, 255, 255, 0.96)',
-                  fontFamily: content.fontFamily || "'Noto Sans SC', 'Inter', sans-serif",
-                  fontWeight: Number(content?.fontWeight || 700),
-                  textAlign: 'right',
-                  textShadow: '2px 2px 8px rgba(0, 0, 0, 0.9)',
-                  pointerEvents: 'none',
-                }}
-              >
-                {`- ${content.reference}`}
-              </div>
-            )}
-          </div>
-        )}
+      {!isBlackout && isTextualSlideType(content?.type) && (
+        <ProjectorTextLayer
+          content={content}
+          contentStageStyle={contentStageStyle}
+          fadeClass={fadeClass}
+          fadeAnimationStyle={fadeAnimationStyle}
+          isFreeText={isFreeText}
+          textLayout={textLayout}
+          getTextSizeClass={getTextSizeClass}
+          getProjectorTextSize={getProjectorTextSize}
+        />
+      )}
 
       {splitEnabled && (
         <div
@@ -743,7 +572,7 @@ function ProjectorView() {
               }}
             />
           )}
-          {!sceneConfig.enableCameraTestMode && cameraPaneStatus !== 'ok' && (
+          {!sceneConfig.enableCameraTestMode && effectiveCameraPaneStatus !== 'ok' && (
             <div
               style={{
                 position: 'absolute',
@@ -759,11 +588,11 @@ function ProjectorView() {
                 lineHeight: 1.5,
               }}
             >
-              {cameraPaneStatus === 'loading'
+              {effectiveCameraPaneStatus === 'loading'
                 ? 'Loading camera...'
-                : cameraPaneStatus === 'error'
+                : effectiveCameraPaneStatus === 'error'
                   ? 'Camera unavailable'
-                  : cameraPaneStatus === 'unsupported'
+                  : effectiveCameraPaneStatus === 'unsupported'
                     ? 'Camera not supported'
                     : 'Camera idle'}
             </div>
