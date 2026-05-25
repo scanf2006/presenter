@@ -2,7 +2,7 @@
  * ChurchDisplay Pro - Electron main process.
  * Handles window lifecycle, IPC, media pipeline, and persistence.
  */
-const { app, BrowserWindow, screen, ipcMain, dialog, protocol, session } = require('electron');
+const { app, BrowserWindow, screen, ipcMain, dialog, protocol, session, globalShortcut } = require('electron');
 const path = require('path');
 
 // C2: Global error handlers — prevent silent crashes.
@@ -22,7 +22,6 @@ process.on('uncaughtException', (err) => {
 process.on('unhandledRejection', (reason) => {
   console.error('[FATAL] Unhandled Rejection:', reason);
 });
-const initSqlJs = require('sql.js');
 const { ScreenManager } = require('./services/screen-manager');
 const {
   resolveAbsolutePath,
@@ -65,6 +64,7 @@ const { createMainUiRuntime } = require('./services/main-ui-runtime');
 const { createMainRuntimeCore } = require('./services/main-runtime-core');
 const { createProjectorControlBridge } = require('./services/projector-control-bridge');
 const { createProjectorRecoveryBridge } = require('./services/projector-recovery-bridge');
+const { createProjectorHealthMonitor } = require('./services/projector-health-monitor');
 const { createNdiOutputService } = require('./services/ndi-output');
 const {
   notifyProjectorUnavailable,
@@ -95,10 +95,31 @@ const { createDatabaseStore, initBibleAndSongsDatabases } = require('./services/
 const { createTrialGuard } = require('./services/trial-guard');
 const { registerBibleSongsIPC } = require('./ipc/bible-songs');
 const { registerAllIPC } = require('./ipc');
-const { ytdl, playDl, YTDlpWrap } = loadOptionalMediaModules();
 const { verifyLicenseToken, getLocalDeviceId } = require('./license');
 const screenManager = new ScreenManager(screen);
-const resolveYouTubeStream = createYouTubeResolver({ playDl, ytdl });
+
+let optionalMediaModulesCache = null;
+let youtubeResolverCache = null;
+function getOptionalMediaModules() {
+  if (!optionalMediaModulesCache) {
+    optionalMediaModulesCache = loadOptionalMediaModules();
+  }
+  return optionalMediaModulesCache;
+}
+function getYTDlpWrap() {
+  return getOptionalMediaModules().YTDlpWrap;
+}
+function resolveYouTubeStream(rawUrl) {
+  if (!youtubeResolverCache) {
+    const { playDl, ytdl } = getOptionalMediaModules();
+    youtubeResolverCache = createYouTubeResolver({ playDl, ytdl });
+  }
+  return youtubeResolverCache(rawUrl);
+}
+async function initSqlJsLazy(...args) {
+  const sqlJsModule = require('sql.js');
+  return sqlJsModule(...args);
+}
 configureAppBootstrap({ app, protocol });
 
 const dbStore = createDatabaseStore();
@@ -142,7 +163,7 @@ const {
   session,
   logger: console,
   networkTimeoutMs: NETWORK_TIMEOUT_MS,
-  YTDlpWrap,
+  getYTDlpWrap,
   getAppSettingsStore: () => appSettingsStore,
   confirmExitDialog,
 });
@@ -179,6 +200,7 @@ const { projectorChannel, splashController } = createMainUiRuntime({
 let controlWindow = null; // Control window
 let projectorWindow = null; // Projector window
 let projectorDisplayId = null; // Locked target display for projector window
+let lastKnownProjectorDisplayId = null; // Last resolved display id for fallback.
 const projectorControlBridge = createProjectorControlBridge({
   controlCloseController,
   controlWindowRef: () => controlWindow,
@@ -228,6 +250,7 @@ const { controlWindowDeps, projectorWindowDeps } = buildWindowRuntimeDeps({
   getProjectorBackground: projectorLiveState.getLatestBackground,
   onProjectorDisplayResolved: (display) => {
     projectorDisplayId = display?.id ?? null;
+    lastKnownProjectorDisplayId = display?.id ?? lastKnownProjectorDisplayId;
   },
   notifyProjectorActive,
   setupNavigationRestrictions: sessionHooks.setupNavigationRestrictions,
@@ -260,8 +283,15 @@ function stabilizeProjectorWindowAfterDisplayChange(reason = 'display-change') {
     projectorDisplayId !== null && projectorDisplayId !== undefined
       ? allDisplays.find((d) => String(d.id) === String(projectorDisplayId))
       : null;
-  const display = displayById || screenManager.getDisplayMatching(current.getBounds());
+  const displayByLastKnownId =
+    !displayById && lastKnownProjectorDisplayId !== null && lastKnownProjectorDisplayId !== undefined
+      ? allDisplays.find((d) => String(d.id) === String(lastKnownProjectorDisplayId))
+      : null;
+  const display = displayById || displayByLastKnownId || screenManager.getDisplayMatching(current.getBounds());
   if (!display || !display.bounds) return false;
+  const beforeBounds = current.getBounds();
+  projectorDisplayId = display.id;
+  lastKnownProjectorDisplayId = display.id;
   try {
     current.setBounds(
       {
@@ -275,8 +305,12 @@ function stabilizeProjectorWindowAfterDisplayChange(reason = 'display-change') {
     current.setFullScreen(true);
     current.setKiosk(true);
     forceWindowZoom100(current);
+    const afterBounds = current.getBounds();
     console.log(
-      `[ProjectorStabilize] ${reason} -> display ${display.id} (${display.bounds.width}x${display.bounds.height})`
+      `[ProjectorStabilize] ${reason} -> display ${display.id} (${display.bounds.width}x${display.bounds.height}), ` +
+        `window ${beforeBounds.x},${beforeBounds.y},${beforeBounds.width}x${beforeBounds.height} -> ` +
+        `${afterBounds.x},${afterBounds.y},${afterBounds.width}x${afterBounds.height}, ` +
+        `fs=${current.isFullScreen()} kiosk=${current.isKiosk()}`
     );
     return true;
   } catch (err) {
@@ -293,6 +327,14 @@ const ndiOutputService = createNdiOutputService({
   logger: console,
   defaultSourceName: `${app.getName()} NDI`,
   defaultFps: 30,
+});
+const projectorHealthMonitor = createProjectorHealthMonitor({
+  getProjectorWindow: () => projectorWindow,
+  getProjectorDisplayId: () => projectorDisplayId,
+  screenManager,
+  stabilizeProjectorWindow: stabilizeProjectorWindowAfterDisplayChange,
+  logger: console,
+  intervalMs: 1500,
 });
 const setupIPC = createMainSetupIpc({
   registerAllIPC,
@@ -337,6 +379,20 @@ const setupIPC = createMainSetupIpc({
 app
   .whenReady()
   .then(async () => {
+    globalShortcut.register('CommandOrControl+Shift+P', () => {
+      try {
+        const current = projectorWindow;
+        if (!current || current.isDestroyed()) return;
+        current.setKiosk(false);
+        current.setFullScreen(false);
+        current.show();
+        current.focus();
+        console.log('[ProjectorEmergencyExit] Ctrl/Cmd+Shift+P applied');
+      } catch (err) {
+        console.warn('[ProjectorEmergencyExit] failed:', err?.message || err);
+      }
+    });
+    projectorHealthMonitor.start();
     await runWhenReadyRuntime(
       buildWhenReadyOptions({
         sessionHooks,
@@ -357,7 +413,7 @@ app
         resolveAbsolutePath,
         isPathWithinRoot,
         initBibleAndSongsDatabases,
-        initSqlJs,
+        initSqlJs: initSqlJsLazy,
         dbStore,
         electronDir: __dirname,
         runStartupUiRuntime,
@@ -408,6 +464,8 @@ setupLifecycleRuntime(
     controlWindowRef: () => controlWindow,
     createControlWindow,
     onBeforeQuitExtra: () => {
+      globalShortcut.unregisterAll();
+      projectorHealthMonitor.stop();
       void ndiOutputService.stop();
       // M8: Close all SQLite databases before exit.
       dbStore.closeAll();

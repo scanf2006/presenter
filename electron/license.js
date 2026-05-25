@@ -34,14 +34,6 @@ ywIDAQAB
 -----END PUBLIC KEY-----
 `;
 
-function toBase64Url(input) {
-  return Buffer.from(input)
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/g, '');
-}
-
 function fromBase64Url(input) {
   const normalized = input.replace(/-/g, '+').replace(/_/g, '/');
   const pad = normalized.length % 4 === 0 ? '' : '='.repeat(4 - (normalized.length % 4));
@@ -199,25 +191,11 @@ function createEulaAcceptanceProof(acceptedEulaAt, deviceId) {
     .digest('hex');
 }
 
-// For tooling use only (never ship private key in app):
-// token = "CDP1.<base64url(payload json)>.<base64url(signature of 'CDP1.<payloadB64>')>"
-function buildLicenseToken(payload, privateKeyPem) {
-  const payloadRaw = JSON.stringify({ ...payload, product: PRODUCT_CODE });
-  const payloadB64 = toBase64Url(payloadRaw);
-  const content = `CDP1.${payloadB64}`;
-  const signer = crypto.createSign('RSA-SHA256');
-  signer.update(content);
-  signer.end();
-  const signature = signer.sign(privateKeyPem);
-  return `CDP1.${payloadB64}.${toBase64Url(signature)}`;
-}
-
 module.exports = {
   PRODUCT_CODE,
   verifyLicenseToken,
   createReadableLicenseSummary,
   getLocalDeviceId,
   createEulaAcceptanceProof,
-  // H1-R2: buildLicenseToken removed from production exports.
   // Use scripts/generate-license.js to create license tokens.
 };

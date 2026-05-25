@@ -6,6 +6,7 @@ export default function useProjectorSceneSync({
   projectorDisplayId,
   sceneConfig,
   currentSlide,
+  resendCurrentSlideToProjector,
 }) {
   const lastResyncKeyRef = useRef('');
 
@@ -28,6 +29,14 @@ export default function useProjectorSceneSync({
     if (typeof window.churchDisplay?.sendProjectorScene === 'function') {
       window.churchDisplay.sendProjectorScene(sceneConfig);
     }
-    window.churchDisplay.sendToProjector(currentSlide);
-  }, [sceneConfig.mode, sceneConfig, currentSlide, isElectron, projectorActive, projectorDisplayId]);
+    resendCurrentSlideToProjector(currentSlide);
+  }, [
+    sceneConfig.mode,
+    sceneConfig,
+    currentSlide,
+    isElectron,
+    projectorActive,
+    projectorDisplayId,
+    resendCurrentSlideToProjector,
+  ]);
 }

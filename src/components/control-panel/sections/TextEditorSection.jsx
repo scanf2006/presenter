@@ -39,10 +39,10 @@ function TextEditorSection() {
 
   return (
     <div className="text-editor animate-slide-in-up">
-      <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px' }}>
+      <h2 className="cp-page-title cp-page-title--tight">
         {t('textEditor.title', 'Free Text Projection')}
       </h2>
-      <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '16px' }}>
+      <p className="cp-page-intro">
         {t('textEditor.intro', 'Type any text and click "Send to Projector".')}
       </p>
 
@@ -131,8 +131,8 @@ function TextEditorSection() {
               top: `${textLayout.yPercent}%`,
               transform: `translate(-50%, -50%) scale(${textLayout.scale})`,
               transformOrigin: 'center center',
-              width: '88%',
-              maxWidth: '88%',
+              width: 'calc(88% - 24px)',
+              maxWidth: 'calc(88% - 24px)',
             }}
             onMouseDown={startTextDrag}
           >
@@ -209,7 +209,7 @@ function TextEditorSection() {
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+      <div className="cp-toolbar-row">
         <button className="btn btn--ghost" onClick={() => handleOpenBackgroundPicker('text')}>
           {t('textEditor.pickBackgroundFromMedia', 'Pick Background from Media')}
         </button>
@@ -218,7 +218,7 @@ function TextEditorSection() {
             {t('textEditor.clearBackground', 'Clear Background')}
           </button>
         )}
-        <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+        <span className="cp-inline-note">
           {textBackground
             ? `${t('common.selected', 'Selected')}: ${textBackground.name || textBackground.path}`
             : t('common.noBackgroundSelected', 'No background selected')}
@@ -316,16 +316,14 @@ function TextEditorSection() {
         </div>
       </div>
       <button
-        className="btn btn--success btn--lg"
-        style={{ width: '100%' }}
+        className="btn btn--success btn--lg cp-btn-block"
         onClick={() => handleSendToProjector()}
         disabled={!textContent.trim()}
       >
         {t('textEditor.sendToProjector', 'Send to Projector')}
       </button>
       <button
-        className="btn btn--ghost"
-        style={{ width: '100%' }}
+        className="btn btn--ghost cp-btn-block"
         onClick={handleAddTextToQueue}
         disabled={!textContent.trim()}
       >

@@ -1009,13 +1009,13 @@ function SongManager({
   // 歌曲列表视图
   return (
     <div className="song-manager animate-slide-in-up">
-      <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px' }}>{t('songs.title', 'Songs')}</h2>
-      <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '16px' }}>
+      <h2 className="cp-page-title cp-page-title--tight">{t('songs.title', 'Songs')}</h2>
+      <p className="cp-page-intro">
         {t('songs.intro', 'Manage worship songs with section-based projection.')}
       </p>
 
       {/* Actions */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+      <div className="cp-toolbar-row cp-gap-bottom-md">
         <button className="btn btn--primary" onClick={handleNew}>
           {t('songs.newSong', '+ New Song')}
         </button>
@@ -1034,16 +1034,7 @@ function SongManager({
           placeholder={t('songs.searchSongs', 'Search songs...')}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          style={{
-            flex: 1,
-            padding: '8px 12px',
-            borderRadius: '6px',
-            border: '1px solid var(--color-border)',
-            background: 'var(--color-surface)',
-            color: 'var(--color-text-primary)',
-            fontSize: '13px',
-            outline: 'none',
-          }}
+          className="cp-input-inline"
         />
         <button className="btn btn--ghost" onClick={handleSiteSearch} disabled={webSearching}>
           {webSearching ? t('songs.searching', 'Searching...') : t('songs.search', 'Search')}
@@ -1127,82 +1118,53 @@ function SongManager({
 
       {/* 歌曲列表 */}
       {filteredSongs.length === 0 ? (
-        <div
-          style={{ textAlign: 'center', padding: '40px 0', color: 'var(--color-text-secondary)' }}
-        >
-          <div style={{ fontSize: '40px', marginBottom: '12px' }}>{t('songs.title', 'Songs')}</div>
-          <div style={{ fontSize: '14px', marginBottom: '8px' }}>{t('songs.noSongsYet', 'No songs yet')}</div>
-          <div style={{ fontSize: '12px' }}>{t('songs.startHint', 'Click "New Song" or "Import Lyrics" to start')}</div>
+        <div className="empty-state empty-state--roomy">
+          <div className="empty-state__icon">{t('songs.title', 'Songs')}</div>
+          <div className="empty-state__title">{t('songs.noSongsYet', 'No songs yet')}</div>
+          <div className="empty-state__desc">{t('songs.startHint', 'Click "New Song" or "Import Lyrics" to start')}</div>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {filteredSongs.map((song) => (
             <div
               key={song.id}
-              style={{
-                padding: '14px 16px',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                background: 'var(--color-surface)',
-                border: '1px solid var(--color-border)',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                transition: 'all 0.2s',
-              }}
+              className="cp-list-card"
               onClick={() => openSongWithoutAutoProject(song)}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'var(--color-primary)';
-                e.currentTarget.style.transform = 'translateX(4px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'var(--color-border)';
-                e.currentTarget.style.transform = 'none';
-              }}
             >
               <div>
-                <div style={{ fontSize: '14px', fontWeight: '600' }}>{song.title}</div>
+                <div className="cp-list-card__title">{song.title}</div>
                 {song.author && (
-                  <div
-                    style={{
-                      fontSize: '12px',
-                      color: 'var(--color-text-secondary)',
-                      marginTop: '4px',
-                    }}
-                  >
+                  <div className="cp-list-card__meta">
                     {song.author}
                   </div>
                 )}
               </div>
               <div style={{ display: 'flex', gap: '6px' }}>
                 <button
-                  className="btn btn--ghost"
+                  className="btn btn--ghost cp-btn-xs cp-btn-accent"
                   onClick={(e) => {
                     e.stopPropagation();
                     handleQueueSong(song);
                   }}
-                  style={{ padding: '4px 8px', fontSize: '12px', color: 'var(--color-primary)' }}
                   title={t('songs.addWholeSongToQueue', 'Add whole song to queue')}
                 >
                   +{' '}
                 </button>
                 <button
-                  className="btn btn--ghost"
+                  className="btn btn--ghost cp-btn-xs"
                   onClick={(e) => {
                     e.stopPropagation();
                     handleEdit(song);
                   }}
-                  style={{ padding: '4px 8px', fontSize: '12px' }}
                 >
                   {t('songs.edit', 'Edit')}
                 </button>
                 <button
-                  className="btn btn--ghost"
+                  className="btn btn--ghost cp-btn-xs cp-btn-danger-soft"
                   onClick={(e) => {
                     e.stopPropagation();
                     handleDelete(song.id);
                   }}
-                  style={{ padding: '4px 8px', fontSize: '12px', color: '#ff4d4f' }}
                 >
                   {t('songs.deleteSong', 'Delete')}
                 </button>

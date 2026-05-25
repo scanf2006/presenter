@@ -593,28 +593,19 @@ function BibleBrowser({
 
   return (
     <div className="bible-browser animate-slide-in-up">
-      <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px' }}>{t('bible.title', 'Bible')}</h2>
+      <h2 className="cp-page-title cp-page-title--tight">{t('bible.title', 'Bible')}</h2>
 
       {/* Version switch + search */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-        <div
-          style={{
-            display: 'flex',
-            borderRadius: '6px',
-            overflow: 'hidden',
-            border: '1px solid var(--color-border)',
-          }}
-        >
+      <div className="cp-toolbar-row cp-gap-bottom-md">
+        <div className="bible-version-switch">
           <button
-            className={`btn ${version === 'cuvs' ? 'btn--primary' : 'btn--ghost'}`}
-            style={{ borderRadius: 0, padding: '6px 12px', fontSize: '12px' }}
+            className={`btn ${version === 'cuvs' ? 'btn--primary' : 'btn--ghost'} bible-version-btn`}
             onClick={() => setVersion('cuvs')}
           >
             {t('bible.versionChinese', 'Chinese CUV')}
           </button>
           <button
-            className={`btn ${version === 'kjv' ? 'btn--primary' : 'btn--ghost'}`}
-            style={{ borderRadius: 0, padding: '6px 12px', fontSize: '12px' }}
+            className={`btn ${version === 'kjv' ? 'btn--primary' : 'btn--ghost'} bible-version-btn`}
             onClick={() => setVersion('kjv')}
           >
             {t('bible.versionEnglish', 'English KJV')}
@@ -622,24 +613,14 @@ function BibleBrowser({
         </div>
         <input
           type="text"
-          className="bible-search-input"
           placeholder={t('bible.searchPlaceholder', 'Search Bible (e.g. 创1:1, 约3:16, or keywords)')}
           value={searchQuery}
           onChange={(e) => handleSearch(e.target.value)}
-          style={{
-            flex: 1,
-            padding: '8px 12px',
-            borderRadius: '6px',
-            border: '1px solid var(--color-border)',
-            background: 'var(--color-surface)',
-            color: 'var(--color-text-primary)',
-            fontSize: '13px',
-            outline: 'none',
-          }}
+          className="bible-search-input bible-search-input--pro"
         />
       </div>
 
-      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px' }}>
+      <div className="cp-toolbar-row cp-gap-bottom-sm">
         <button className="btn btn--ghost" onClick={() => onOpenBackgroundPicker?.()}>
           🎬 {t('bible.pickBackground', 'Pick Background from Media')}
         </button>
@@ -648,7 +629,7 @@ function BibleBrowser({
             {t('bible.clearBackground', 'Clear Background')}
           </button>
         )}
-        <span style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>
+        <span className="cp-inline-note">
           {bibleBackground
             ? `${t('common.selected', 'Selected')}: ${bibleBackground.name || bibleBackground.path}`
             : t('common.noBackgroundSelected', 'No background selected')}
@@ -656,26 +637,14 @@ function BibleBrowser({
       </div>
       {/* 搜索结果 */}
       {searchResults.length > 0 && (
-        <div style={{ marginBottom: '16px', maxHeight: '300px', overflowY: 'auto' }}>
-          <h3
-            style={{ fontSize: '14px', marginBottom: '8px', color: 'var(--color-text-secondary)' }}
-          >
+        <div className="cp-gap-bottom-md" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+          <h3 className="cp-section-subtitle">
             🔍 {t('bible.searchResults', 'Search Results')} ({searchResults.length})
           </h3>
           {searchResults.map((r, idx) => (
             <div
               key={idx}
-              style={{
-                padding: '10px 12px',
-                marginBottom: '6px',
-                background: 'var(--color-surface)',
-                border: '1px solid var(--color-border)',
-                borderRadius: '6px',
-                fontSize: '13px',
-                transition: 'border-color 0.2s',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--color-primary)')}
-              onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--color-border)')}
+              className="cp-list-card cp-list-card--compact"
             >
               <div
                 style={{
@@ -685,24 +654,14 @@ function BibleBrowser({
                   gap: '8px',
                 }}
               >
-                <div
-                  style={{ cursor: 'pointer', flex: 1 }}
-                  onClick={() => handleProjectSearchResult(r)}
-                >
-                  <span
-                    style={{
-                      color: 'var(--color-primary)',
-                      fontWeight: 'bold',
-                      marginRight: '8px',
-                    }}
-                  >
+                <div className="cp-list-card__clickable" onClick={() => handleProjectSearchResult(r)}>
+                  <span className="cp-list-card__key">
                     {r.fullName} {r.chapter}:{r.verse}
                   </span>
-                  <span>{r.text}</span>
+                  <span className="bible-search-result-text">{r.text}</span>
                 </div>
                 <button
-                  className="btn btn--ghost"
-                  style={{ padding: '4px 8px', fontSize: '11px' }}
+                  className="btn btn--ghost cp-btn-xs"
                   onClick={(e) => {
                     e.stopPropagation();
                     handleQueueSearchResult(r);
@@ -717,8 +676,8 @@ function BibleBrowser({
       )}
 
       {searching && (
-        <div style={{ textAlign: 'center', padding: '20px', color: 'var(--color-text-secondary)' }}>
-          <div className="spinner" style={{ margin: '0 auto 8px' }}></div>
+        <div className="cp-loading-block">
+          <div className="spinner cp-loading-spinner"></div>
           {t('bible.searching', 'Searching...')}
         </div>
       )}
@@ -754,25 +713,7 @@ function BibleBrowser({
                       setSelectedChapter(null);
                       setVerses([]);
                     }}
-                    style={{
-                      padding: '8px 4px',
-                      fontSize: '12px',
-                      borderRadius: '6px',
-                      border: '1px solid var(--color-border)',
-                      background: 'var(--color-surface)',
-                      color: 'var(--color-text-primary)',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                      textAlign: 'center',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = 'var(--color-primary)';
-                      e.currentTarget.style.background = 'rgba(99,102,241,0.1)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = 'var(--color-border)';
-                      e.currentTarget.style.background = 'var(--color-surface)';
-                    }}
+                    className="bible-grid-btn"
                   >
                     {version === 'cuvs' ? book.shortName : book.fullName.substring(0, 6)}
                   </button>
@@ -803,25 +744,7 @@ function BibleBrowser({
                       setSelectedChapter(null);
                       setVerses([]);
                     }}
-                    style={{
-                      padding: '8px 4px',
-                      fontSize: '12px',
-                      borderRadius: '6px',
-                      border: '1px solid var(--color-border)',
-                      background: 'var(--color-surface)',
-                      color: 'var(--color-text-primary)',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                      textAlign: 'center',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = '#10b981';
-                      e.currentTarget.style.background = 'rgba(16,185,129,0.1)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = 'var(--color-border)';
-                      e.currentTarget.style.background = 'var(--color-surface)';
-                    }}
+                    className="bible-grid-btn bible-grid-btn--nt"
                   >
                     {version === 'cuvs' ? book.shortName : book.fullName.substring(0, 6)}
                   </button>
@@ -833,9 +756,7 @@ function BibleBrowser({
           {/* Level 2: chapter selection */}
           {selectedBook && !selectedChapter && (
             <div>
-              <div
-                style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}
-              >
+              <div className="cp-toolbar-row cp-gap-bottom-md">
                 <button
                   className="btn btn--ghost"
                   onClick={() => setSelectedBook(null)}
@@ -843,7 +764,7 @@ function BibleBrowser({
                 >
                   ← {t('bible.back', 'Back')}
                 </button>
-                <h3 style={{ fontSize: '15px', fontWeight: 'bold' }}>
+                <h3 className="cp-section-title">
                   📗 {selectedBook.fullName} ({selectedBook.chapterCount} {t('bible.chapters', 'chapters')})
                 </h3>
               </div>
@@ -858,25 +779,7 @@ function BibleBrowser({
                   <button
                     key={ch}
                     onClick={() => setSelectedChapter(ch)}
-                    style={{
-                      padding: '10px 4px',
-                      fontSize: '14px',
-                      fontWeight: '600',
-                      borderRadius: '6px',
-                      border: '1px solid var(--color-border)',
-                      background: 'var(--color-surface)',
-                      color: 'var(--color-text-primary)',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = 'var(--color-primary)';
-                      e.currentTarget.style.background = 'rgba(99,102,241,0.15)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = 'var(--color-border)';
-                      e.currentTarget.style.background = 'var(--color-surface)';
-                    }}
+                    className="bible-chapter-btn"
                   >
                     {ch}
                   </button>
@@ -889,14 +792,17 @@ function BibleBrowser({
           {selectedBook && selectedChapter && (
             <div>
               <div
+                className="bible-chapter-toolbar"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
+                  gap: '8px',
+                  flexWrap: 'wrap',
                   marginBottom: '12px',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div className="cp-toolbar-row" style={{ minWidth: 0 }}>
                   <button
                     className="btn btn--ghost"
                     onClick={() => setSelectedChapter(null)}
@@ -904,16 +810,16 @@ function BibleBrowser({
                   >
                     ← {t('bible.back', 'Back')}
                   </button>
-                  <h3 style={{ fontSize: '15px', fontWeight: 'bold' }}>
+                  <h3 className="cp-section-title">
                     📗 {selectedBook.fullName} {t('bible.chapterLabel', 'Chapter')} {selectedChapter}
                   </h3>
                 </div>
                 {selectedVerses.length > 0 && (
-                  <div style={{ display: 'flex', gap: '6px' }}>
-                    <button className="btn btn--ghost" onClick={handleQueueSelected}>
+                  <div className="bible-chapter-actions">
+                    <button className="btn btn--ghost bible-chapter-action-btn" onClick={handleQueueSelected}>
                       {t('bible.queueSelected', '+ Queue')} ({selectedVerses.length} {t('bible.versesUnit', 'verses')})
                     </button>
-                    <button className="btn btn--primary" onClick={handleProject}>
+                    <button className="btn btn--primary bible-chapter-action-btn" onClick={handleProject}>
                       📤 {t('bible.projectSelected', 'Project Selection')} ({selectedVerses.length} {t('bible.versesUnit', 'verses')})
                     </button>
                   </div>
@@ -921,15 +827,7 @@ function BibleBrowser({
               </div>
 
               {/* 字号选择 */}
-              <div
-                style={{
-                  display: 'flex',
-                  gap: '6px',
-                  marginBottom: '12px',
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                }}
-              >
+              <div className="cp-toolbar-row cp-gap-bottom-sm">
                 {[
                   { key: 'small', label: t('bible.small', 'Small') },
                   { key: 'medium', label: t('bible.medium', 'Medium') },

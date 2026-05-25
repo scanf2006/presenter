@@ -13,6 +13,7 @@ function createMainRuntimeCore({
   logger,
   networkTimeoutMs,
   YTDlpWrap,
+  getYTDlpWrap,
   getAppSettingsStore,
   confirmExitDialog,
 }) {
@@ -25,6 +26,7 @@ function createMainRuntimeCore({
   const sessionHooks = createSessionHooks({ session, logger });
   const ytdlpService = createYtDlpService({
     YTDlpWrap,
+    getYTDlpWrap,
     debug: (tag, payload) => bgDebug.append(tag, payload),
   });
   const licenseRuntime = createLicenseRuntimeBridge({

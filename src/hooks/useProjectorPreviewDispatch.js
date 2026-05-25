@@ -112,6 +112,21 @@ export default function useProjectorPreviewDispatch({
     ]
   );
 
+  const resendCurrentSlideToProjector = useCallback(
+    (data) => {
+      if (!isElectron || !window.churchDisplay || !data) return;
+      window.churchDisplay.sendToProjector(data);
+      if (typeof window.churchDisplay.sendToProjectorBackground === 'function') {
+        const nextSig = getBackgroundSignature(data?.background || null);
+        if (nextSig !== lastBackgroundSignatureRef.current) {
+          lastBackgroundSignatureRef.current = nextSig;
+          window.churchDisplay.sendToProjectorBackground(data?.background || null);
+        }
+      }
+    },
+    [isElectron, getBackgroundSignature]
+  );
+
   const blackout = useCallback(() => {
     setCurrentSlide(null);
     applyPreviewTransition(null);
@@ -125,6 +140,7 @@ export default function useProjectorPreviewDispatch({
     previewSlide,
     previewMaskVisible,
     pushToProjector,
+    resendCurrentSlideToProjector,
     blackout,
   };
 }

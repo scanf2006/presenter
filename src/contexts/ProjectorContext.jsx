@@ -52,6 +52,7 @@ export function ProjectorProvider({ children }) {
     previewSlide,
     previewMaskVisible,
     pushToProjector,
+    resendCurrentSlideToProjector,
     blackout: handleBlackout,
   } = useProjectorPreviewDispatch({
     isElectron,
@@ -134,6 +135,7 @@ export function ProjectorProvider({ children }) {
     projectorDisplayId,
     sceneConfig,
     currentSlide,
+    resendCurrentSlideToProjector,
   });
 
   const value = useMemo(

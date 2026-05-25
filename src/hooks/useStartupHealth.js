@@ -52,7 +52,10 @@ export default function useStartupHealth({ isElectron, showToast }) {
   );
 
   useEffect(() => {
-    void runStartupHealthCheck({ silent: true });
+    const timer = setTimeout(() => {
+      void runStartupHealthCheck({ silent: true });
+    }, 0);
+    return () => clearTimeout(timer);
   }, [runStartupHealthCheck]);
 
   return {

@@ -18,10 +18,10 @@ function DisplaysSection() {
 
   return (
     <div className="animate-slide-in-up">
-      <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px' }}>
+      <h2 className="cp-page-title">
         {t('displays.title', 'Displays')}
       </h2>
-      <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '24px' }}>
+      <p className="cp-page-intro cp-page-intro--spacious">
         {t(
           'displays.intro',
           'Select an external display to start projection. Content will be fullscreen on the selected screen.'
@@ -70,7 +70,7 @@ function DisplaysSection() {
               : t('displays.unavailable', 'Unavailable')}
         </span>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      <div className="cp-stack-md">
         {displays.map((display) => (
           <div
             key={display.id}
@@ -104,8 +104,7 @@ function DisplaysSection() {
 
       {projectorActive && (
         <button
-          className="btn btn--danger btn--lg"
-          style={{ marginTop: '24px', width: '100%' }}
+          className="btn btn--danger btn--lg cp-btn-block cp-gap-top-lg"
           onClick={handleStopProjector}
         >
           {t('displays.stopProjector', 'Stop Projector')}

@@ -4,8 +4,61 @@ import { useQueueContext } from '../../contexts/QueueContext';
 import { useI18n } from '../../contexts/I18nContext';
 import { getQueueTypeLabel } from '../../utils/queueItemMeta';
 
+function NavIcon({ type }) {
+  const common = {
+    width: '15',
+    height: '15',
+    viewBox: '0 0 16 16',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: '1.6',
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+  };
+
+  if (type === 'displays') {
+    return (
+      <svg {...common}>
+        <rect x="2.5" y="3" width="11" height="7.5" rx="1.2" />
+        <path d="M6.2 13h3.6M8 10.5V13" />
+      </svg>
+    );
+  }
+  if (type === 'text') {
+    return (
+      <svg {...common}>
+        <path d="M3 4h10M8 4v8M5.2 12h5.6" />
+      </svg>
+    );
+  }
+  if (type === 'songs') {
+    return (
+      <svg {...common}>
+        <path d="M6 3.5v7.2a1.8 1.8 0 1 1-1-1.6V5.1l6-1.4v6.3a1.8 1.8 0 1 1-1-1.6V3.5z" />
+      </svg>
+    );
+  }
+  if (type === 'bible') {
+    return (
+      <svg {...common}>
+        <path d="M3 3.5h4.5a2 2 0 0 1 2 2V13H5a2 2 0 0 1-2-2z" />
+        <path d="M13 3.5H8.5a2 2 0 0 0-2 2V13H11a2 2 0 0 0 2-2z" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...common}>
+      <rect x="2.5" y="4" width="11" height="8.5" rx="1.4" />
+      <path d="M2.8 6.2l4.2 3 2.2-1.7 3 2.3" />
+    </svg>
+  );
+}
+
 function SidebarQueue({ openDisplays, openText, openSongs, openBible, openMedia }) {
   const { t } = useI18n();
+  const useChineseMenu = String(import.meta.env.VITE_MENU_LANG || 'en')
+    .toLowerCase()
+    .startsWith('zh');
   const [dropHint, setDropHint] = useState({ index: -1, position: 'before' });
   const queueListRef = useRef(null);
   const draggingQueueIdRef = useRef('');
@@ -36,11 +89,19 @@ function SidebarQueue({ openDisplays, openText, openSongs, openBible, openMedia 
       .trim();
 
   const navItems = [
-    { key: 'displays', icon: 'D', label: t('sidebar.displays', 'Displays'), hint: t('sidebar.displaysHint', 'Screen output'), onClick: openDisplays },
-    { key: 'text', icon: 'T', label: t('sidebar.text', 'Free Text'), hint: t('sidebar.textHint', 'Custom words'), onClick: openText },
-    { key: 'songs', icon: 'S', label: t('sidebar.songs', 'Songs'), hint: t('sidebar.songsHint', 'Lyrics cards'), onClick: openSongs },
-    { key: 'bible', icon: 'B', label: t('sidebar.bible', 'Bible'), hint: t('sidebar.bibleHint', 'Verses and refs'), onClick: openBible },
-    { key: 'media', icon: 'M', label: t('sidebar.media', 'Media'), hint: t('sidebar.mediaHint', 'Image/Video/PDF/PPT'), onClick: openMedia },
+    {
+      key: 'displays',
+      label: useChineseMenu ? t('sidebar.displays', 'Displays') : 'Displays',
+      onClick: openDisplays,
+    },
+    {
+      key: 'text',
+      label: useChineseMenu ? t('sidebar.text', 'Free Text') : 'Free Text',
+      onClick: openText,
+    },
+    { key: 'songs', label: useChineseMenu ? t('sidebar.songs', 'Songs') : 'Songs', onClick: openSongs },
+    { key: 'bible', label: useChineseMenu ? t('sidebar.bible', 'Bible') : 'Bible', onClick: openBible },
+    { key: 'media', label: useChineseMenu ? t('sidebar.media', 'Media') : 'Media', onClick: openMedia },
   ];
 
   const resolveDropTargetIndex = (fromIndex, targetIndex, position) => {
@@ -77,7 +138,9 @@ function SidebarQueue({ openDisplays, openText, openSongs, openBible, openMedia 
     <div className="sidebar">
       <div className="sidebar-nav">
         <div className="sidebar-nav-card">
-          <div className="sidebar__section-title">{t('sidebar.mainMenu', 'Main Menu')}</div>
+          <div className="sidebar__section-title">
+            {useChineseMenu ? t('sidebar.mainMenu', 'Main Menu') : 'Main Menu'}
+          </div>
           {navItems.map((item) => {
             const isActive = activeSection === item.key;
             return (
@@ -86,14 +149,12 @@ function SidebarQueue({ openDisplays, openText, openSongs, openBible, openMedia 
                 className={`sidebar__item ${isActive ? 'sidebar__item--active' : ''}`}
                 onClick={item.onClick}
               >
-                <span className="sidebar__item-icon">{item.icon}</span>
-                <span className="sidebar__item-text">
-                  <span className="sidebar__item-label">{item.label}</span>
-                  <span className="sidebar__item-hint">{item.hint}</span>
+                <span className="sidebar__item-core">
+                  <span className="sidebar__item-icon"><NavIcon type={item.key} /></span>
+                  <span className="sidebar__item-text">
+                    <span className="sidebar__item-label">{item.label}</span>
+                  </span>
                 </span>
-                <span
-                  className={`sidebar__item-dot ${isActive ? 'sidebar__item-dot--active' : ''}`}
-                />
               </button>
             );
           })}
@@ -102,21 +163,29 @@ function SidebarQueue({ openDisplays, openText, openSongs, openBible, openMedia 
 
       <div className="sidebar-playlist">
         <div className="cp-queue-head">
-          <div className="sidebar__section-title" style={{ paddingTop: 0 }}>
-            {t('sidebar.queue', 'Queue')}
+          <div className="sidebar__section-title sidebar__section-title--flush-top">
+            {useChineseMenu ? t('sidebar.queue', 'Queue') : 'Queue'}
           </div>
           <button
             className="btn btn--ghost cp-queue-head-btn"
             onClick={() => setShowQueueTypeTags((v) => !v)}
             title={
               showQueueTypeTags
-                ? t('sidebar.hideQueueTypeTags', 'Hide queue type tags')
-                : t('sidebar.showQueueTypeTags', 'Show queue type tags')
+                ? useChineseMenu
+                  ? t('sidebar.hideQueueTypeTags', 'Hide queue type tags')
+                  : 'Hide queue type tags'
+                : useChineseMenu
+                  ? t('sidebar.showQueueTypeTags', 'Show queue type tags')
+                  : 'Show queue type tags'
             }
           >
             {showQueueTypeTags
-              ? t('sidebar.hideTags', 'Hide Tags')
-              : t('sidebar.showTags', 'Show Tags')}
+              ? useChineseMenu
+                ? t('sidebar.hideTags', 'Hide Tags')
+                : 'Hide Tags'
+              : useChineseMenu
+                ? t('sidebar.showTags', 'Show Tags')
+                : 'Show Tags'}
           </button>
         </div>
         <div
@@ -146,7 +215,11 @@ function SidebarQueue({ openDisplays, openText, openSongs, openBible, openMedia 
           }}
         >
           {projectorQueue.length === 0 && (
-            <div className="cp-queue-empty">{t('sidebar.queueEmpty', 'Add items from Media or Free Text.')}</div>
+            <div className="cp-queue-empty">
+              {useChineseMenu
+                ? t('sidebar.queueEmpty', 'Add items from Media or Free Text.')
+                : 'Add items from Media or Free Text.'}
+            </div>
           )}
           {projectorQueue.map((item, index) => (
             <div
@@ -240,28 +313,34 @@ function SidebarQueue({ openDisplays, openText, openSongs, openBible, openMedia 
                     }}
                     title={t('sidebar.renameCard', 'Rename card')}
                   >
-                    {t('sidebar.edit', 'Edit')}
+                    {useChineseMenu ? t('sidebar.edit', 'Edit') : 'Edit'}
                   </button>
                 )}
               </div>
             </div>
           ))}
         </div>
-        <button
-          className="btn btn--ghost cp-queue-btn-full cp-queue-btn-danger"
-          onClick={removeSelectedQueueItem}
-          disabled={activeQueueIndex < 0 || activeQueueIndex >= projectorQueue.length}
-          title={t('sidebar.deleteSelectedQueueCard', 'Delete selected queue card')}
-        >
-          {t('sidebar.delSelected', 'Del Selected')}
-        </button>
-        <button
-          className="btn btn--ghost cp-queue-btn-full"
-          onClick={clearAllQueueItems}
-          disabled={projectorQueue.length === 0}
-        >
-          {t('sidebar.clearQueue', 'Clear Queue')}
-        </button>
+        <div className="cp-queue-actions">
+          <button
+            className="btn btn--ghost cp-queue-btn-full cp-queue-btn-danger"
+            onClick={removeSelectedQueueItem}
+            disabled={activeQueueIndex < 0 || activeQueueIndex >= projectorQueue.length}
+            title={
+              useChineseMenu
+                ? t('sidebar.deleteSelectedQueueCard', 'Delete selected queue card')
+                : 'Delete selected queue card'
+            }
+          >
+            {useChineseMenu ? t('sidebar.delSelected', 'Del Selected') : 'Del Selected'}
+          </button>
+          <button
+            className="btn btn--ghost cp-queue-btn-full"
+            onClick={clearAllQueueItems}
+            disabled={projectorQueue.length === 0}
+          >
+            {useChineseMenu ? t('sidebar.clearQueue', 'Clear Queue') : 'Clear Queue'}
+          </button>
+        </div>
       </div>
     </div>
   );

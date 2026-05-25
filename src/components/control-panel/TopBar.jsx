@@ -94,65 +94,64 @@ function TopBar({ appVersion, onClear }) {
         </div>
       </div>
       <div className="top-bar__controls">
-        <div className="cp-status-inline">
-          <span
-            className={`status-dot ${projectorActive ? 'status-dot--active' : 'status-dot--inactive'}`}
-          />
-          {projectorActive
-            ? t('topBar.statusProjecting', 'Projecting')
-            : t('topBar.statusIdle', 'Idle')}
-        </div>
-        {!!trialLabel && (
-          <div
-            className="cp-status-inline"
-            style={{
-              color: trialExpired ? '#ff8080' : '#f6d365',
-              borderColor: trialExpired ? 'rgba(255,128,128,0.35)' : 'rgba(246,211,101,0.35)',
-            }}
-            title="Trial status"
-          >
-            {trialLabel}
+        <div className="top-bar__status-group">
+          <div className={`cp-status-inline ${projectorActive ? 'cp-status-inline--ok' : 'cp-status-inline--idle'}`}>
+            <span
+              className={`status-dot ${projectorActive ? 'status-dot--active' : 'status-dot--inactive'}`}
+            />
+            {projectorActive
+              ? t('topBar.statusProjecting', 'Projecting')
+              : t('topBar.statusIdle', 'Idle')}
           </div>
-        )}
-        <button className="btn btn--ghost cp-btn-license" onClick={handleOpenLegal}>
-          {t('topBar.license', 'License')}
-        </button>
-        <button
-          className="btn btn--ghost btn--icon"
-          onClick={onClear}
-          title={t('topBar.clear', 'Clear')}
-        >
-          <IconClear />
-        </button>
-        <button
-          className="btn btn--ghost btn--icon"
-          onClick={handleBlackout}
-          title={t('topBar.blackout', 'Blackout')}
-        >
-          <IconBlackout />
-        </button>
-        <button
-          className="btn btn--ghost btn--icon"
-          onClick={handleMinimizeWindow}
-          title={t('topBar.minimize', 'Minimize')}
-        >
-          <IconMinimize />
-        </button>
-        <button
-          className="btn btn--ghost btn--icon"
-          onClick={handleToggleMaximizeWindow}
-          title={t('topBar.maximizeRestore', 'Maximize / Restore')}
-        >
-          <IconMaximize />
-        </button>
-        <button
-          className="btn btn--ghost btn--icon"
-          onClick={handleCloseWindow}
-          title={t('topBar.close', 'Close')}
-          style={{ color: '#ff6b6b' }}
-        >
-          <IconClose />
-        </button>
+          {!!trialLabel && (
+            <div
+              className={`cp-status-inline ${trialExpired ? 'cp-status-inline--error' : 'cp-status-inline--warn'}`}
+              title="Trial status"
+            >
+              {trialLabel}
+            </div>
+          )}
+        </div>
+        <div className="top-bar__action-group">
+          <button className="btn btn--ghost cp-btn-license" onClick={handleOpenLegal}>
+            {t('topBar.license', 'License')}
+          </button>
+          <button
+            className="btn btn--ghost btn--icon"
+            onClick={onClear}
+            title={t('topBar.clear', 'Clear')}
+          >
+            <IconClear />
+          </button>
+          <button
+            className="btn btn--ghost btn--icon"
+            onClick={handleBlackout}
+            title={t('topBar.blackout', 'Blackout')}
+          >
+            <IconBlackout />
+          </button>
+          <button
+            className="btn btn--ghost btn--icon"
+            onClick={handleMinimizeWindow}
+            title={t('topBar.minimize', 'Minimize')}
+          >
+            <IconMinimize />
+          </button>
+          <button
+            className="btn btn--ghost btn--icon"
+            onClick={handleToggleMaximizeWindow}
+            title={t('topBar.maximizeRestore', 'Maximize / Restore')}
+          >
+            <IconMaximize />
+          </button>
+          <button
+            className="btn btn--ghost btn--icon top-bar__btn-close"
+            onClick={handleCloseWindow}
+            title={t('topBar.close', 'Close')}
+          >
+            <IconClose />
+          </button>
+        </div>
       </div>
     </div>
   );

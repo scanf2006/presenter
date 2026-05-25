@@ -20,23 +20,23 @@ function MainContentArea({ songsListOpenToken, bibleCatalogOpenToken, mediaHomeO
 
   return (
     <div className="main-content">
-      <div style={{ display: activeSection === 'displays' ? 'block' : 'none' }}>
+      <div className="main-content__section" style={{ display: activeSection === 'displays' ? 'block' : 'none' }}>
         <DisplaysSection />
       </div>
 
-      <div style={{ display: activeSection === 'text' ? 'block' : 'none' }}>
+      <div className="main-content__section" style={{ display: activeSection === 'text' ? 'block' : 'none' }}>
         <TextEditorSection />
       </div>
 
-      <div style={{ display: activeSection === 'bible' ? 'block' : 'none' }}>
+      <div className="main-content__section" style={{ display: activeSection === 'bible' ? 'block' : 'none' }}>
         <BibleSection bibleCatalogOpenToken={bibleCatalogOpenToken} />
       </div>
 
-      <div style={{ display: activeSection === 'songs' ? 'block' : 'none' }}>
+      <div className="main-content__section" style={{ display: activeSection === 'songs' ? 'block' : 'none' }}>
         <SongsSection songsListOpenToken={songsListOpenToken} />
       </div>
 
-      <div style={{ display: activeSection === 'media' ? 'block' : 'none' }}>
+      <div className="main-content__section" style={{ display: activeSection === 'media' ? 'block' : 'none' }}>
         <MediaSection mediaHomeOpenToken={mediaHomeOpenToken} />
       </div>
     </div>
