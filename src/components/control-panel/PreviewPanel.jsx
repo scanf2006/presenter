@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { PREVIEW } from '../../constants/ui';
 import { useProjectorContext } from '../../contexts/ProjectorContext';
 import { useQueueContext } from '../../contexts/QueueContext';
 import PreviewStage from './preview/PreviewStage';
@@ -108,21 +107,26 @@ function PreviewPanel({ nextQueueTitle }) {
       </div>
 
       <div className="preview-panel__rest-block">
-        <div className="preview-screen" style={{ aspectRatio: PREVIEW.ASPECT_RATIO_16_9 }}>
+        <div className="preview-screen preview-screen--next">
           <span className="preview-screen__label">Next</span>
           <div className="preview-screen__content">
             {projectorQueue.length > 0 ? (
-              <span style={{ fontSize: '11px' }}>{nextQueueTitle}</span>
+              <span className="preview-next-text">{nextQueueTitle}</span>
             ) : (
-              <span style={{ fontSize: '11px' }}>No content</span>
+              <span className="preview-next-text">No content</span>
             )}
           </div>
         </div>
 
         <div className="preview-panel__rest-content">
           <TransitionSettings />
-          <CameraSettings />
-          <SystemInfoPanel />
+          <details className="preview-advanced" open={false}>
+            <summary className="preview-advanced__summary">Advanced</summary>
+            <div className="preview-advanced__body">
+              <CameraSettings />
+              <SystemInfoPanel />
+            </div>
+          </details>
         </div>
       </div>
     </div>

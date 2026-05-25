@@ -578,9 +578,9 @@ function ProjectorView() {
             style={{
               ...contentStageStyle,
               zIndex: 10,
-              display: isFreeText ? 'block' : 'flex',
-              alignItems: isFreeText ? undefined : 'center',
-              justifyContent: isFreeText ? undefined : 'center',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
               padding: 'clamp(24px, 5vh, 72px) clamp(28px, 6vw, 120px)',
               pointerEvents: 'none',
             }}
@@ -589,11 +589,11 @@ function ProjectorView() {
               className={`projector-view__content ${fadeClass}`}
               style={{
                 width: '88%',
-                position: isFreeText ? 'absolute' : 'relative',
-                left: isFreeText ? `${textLayout.xPercent}%` : undefined,
-                top: isFreeText ? `${textLayout.yPercent}%` : undefined,
+                position: 'relative',
+                left: isFreeText ? `${textLayout.xPercent - 50}%` : undefined,
+                top: isFreeText ? `${textLayout.yPercent - 50}%` : undefined,
                 transform: isFreeText
-                  ? `translate(-50%, -50%) scale(${textLayout.scale})`
+                  ? `translate(0, 0) scale(${textLayout.scale})`
                   : undefined,
                 transformOrigin: isFreeText ? 'center center' : undefined,
                 textAlign: content.type === 'bible' ? 'left' : 'center',

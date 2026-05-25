@@ -79,7 +79,10 @@ function MediaManager({
   }, [isElectron, activeFilter]);
 
   useEffect(() => {
-    loadMediaFiles();
+    const timer = setTimeout(() => {
+      void loadMediaFiles();
+    }, 0);
+    return () => clearTimeout(timer);
   }, [loadMediaFiles]);
 
   const handleSelectFiles = useCallback(
@@ -337,8 +340,11 @@ function MediaManager({
       deferProject: !!activePreloadItem.payload.deferProject,
     };
 
-    if (type === 'ppt') handleConvertPpt(file);
-    if (type === 'pdf') handleLoadPdfGrid(file);
+    const timer = setTimeout(() => {
+      if (type === 'ppt') void handleConvertPpt(file);
+      if (type === 'pdf') void handleLoadPdfGrid(file);
+    }, 0);
+    return () => clearTimeout(timer);
   }, [activePreloadItem, handleConvertPpt, handleLoadPdfGrid]);
 
   // M10-R2: Use a ref for activePdf to avoid the forceShowMediaHomeToken effect
@@ -350,18 +356,21 @@ function MediaManager({
 
   useEffect(() => {
     if (!forceShowMediaHomeToken) return;
-    setPptConverting(false);
-    setPdfLoading(false);
-    setPptSlides(null);
-    setPptSourcePath('');
-    // M7/M10-R2: Destroy PDF document before clearing reference, using ref.
-    if (activePdfRef.current?.pdfDocument) {
-      activePdfRef.current.pdfDocument.destroy().catch(() => {});
-    }
-    setActivePdf(null);
-    setCurrentSlideIndex(-1);
-    setCurrentPdfPage(1);
-    setActiveFilter('all');
+    const timer = setTimeout(() => {
+      setPptConverting(false);
+      setPdfLoading(false);
+      setPptSlides(null);
+      setPptSourcePath('');
+      // M7/M10-R2: Destroy PDF document before clearing reference, using ref.
+      if (activePdfRef.current?.pdfDocument) {
+        activePdfRef.current.pdfDocument.destroy().catch(() => {});
+      }
+      setActivePdf(null);
+      setCurrentSlideIndex(-1);
+      setCurrentPdfPage(1);
+      setActiveFilter('all');
+    }, 0);
+    return () => clearTimeout(timer);
   }, [forceShowMediaHomeToken]);
 
   useEffect(() => {
@@ -538,8 +547,8 @@ function MediaManager({
 
   return (
     <div className="media-manager animate-slide-in-up">
-      <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px' }}>{t('media.title', 'Media')}</h2>
-      <p style={{ fontSize: '13px', color: 'var(--color-text-secondary)', marginBottom: '16px' }}>
+      <h2 className="cp-page-title cp-page-title--tight">{t('media.title', 'Media')}</h2>
+      <p className="cp-page-intro">
         {t('media.intro', 'Import image, video, PDF and PPT files. Click to project.')}
       </p>
 
@@ -567,22 +576,13 @@ function MediaManager({
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+          <div className="cp-toolbar-row cp-gap-bottom-sm">
             <input
               type="text"
               placeholder={t('media.youtubePlaceholder', 'Paste YouTube URL (e.g. https://youtu.be/...)')}
               value={youtubeUrl}
               onChange={(e) => setYoutubeUrl(e.target.value)}
-              style={{
-                flex: 1,
-                padding: '8px 10px',
-                borderRadius: '6px',
-                border: '1px solid var(--color-border)',
-                background: 'var(--color-surface)',
-                color: 'var(--color-text-primary)',
-                fontSize: '12px',
-                outline: 'none',
-              }}
+              className="cp-input-inline cp-input-inline--sm"
             />
             <button className="btn btn--primary" onClick={handleProjectYouTube}>
               {t('media.play', 'Play')}
@@ -858,7 +858,7 @@ function MediaManager({
           </h3>
 
           {displayFiles.length === 0 ? (
-            <div className="empty-state" style={{ padding: '40px 0' }}>
+            <div className="empty-state empty-state--roomy">
               <div className="empty-state__icon">FILE</div>
               <div className="empty-state__title">{t('media.noMediaFiles', 'No media files')}</div>
               <div className="empty-state__desc">
@@ -869,32 +869,15 @@ function MediaManager({
             groupedFiles.map((group) => (
               <div key={group.type} style={{ marginBottom: '16px' }}>
                 <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: '10px',
-                    padding: '8px 10px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--color-border)',
-                    background: 'rgba(99,102,241,0.08)',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                  }}
+                  className="cp-group-head"
                 >
                   <span>
                     {getTypeIcon(group.type)} {getTypeLabel(group.type)}
                   </span>
-                  <span style={{ color: 'var(--color-text-secondary)' }}>{group.files.length}</span>
+                  <span className="cp-group-head__count">{group.files.length}</span>
                 </div>
 
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
-                    gap: '16px',
-                  }}
-                >
+                <div className="cp-media-grid">
                   {group.files.map((file) => {
                     const mediaKey = String(file.path || file.id || file.name || '');
                     const isSelected = mediaKey !== '' && selectedMediaKey === mediaKey;
@@ -904,12 +887,11 @@ function MediaManager({
                         style={{
                           ...getSelectableThumbCardStyle(isSelected),
                           position: 'relative',
-                          background: 'var(--color-surface)',
-                          borderRadius: '8px',
                           overflow: 'hidden',
                           display: 'flex',
                           flexDirection: 'column',
                         }}
+                        className="cp-media-card"
                         onClick={() => {
                           setSelectedMediaKey(mediaKey);
                           handleProjectMedia(file);
@@ -986,39 +968,15 @@ function MediaManager({
                           </div>
                         </div>
 
-                        <div style={{ padding: '10px' }}>
-                          <div
-                            style={{
-                              fontSize: '13px',
-                              fontWeight: '500',
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              color: 'var(--color-text-primary)',
-                            }}
-                          >
+                        <div className="cp-media-card__body">
+                          <div className="cp-media-card__title">
                             {file.name}
                           </div>
-                          <div
-                            style={{
-                              fontSize: '11px',
-                              color: 'var(--color-text-secondary)',
-                              marginTop: '4px',
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                            }}
-                          >
+                          <div className="cp-media-card__meta">
                             <span>{formatSize(file.size)}</span>
-                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                            <div className="cp-media-card__actions">
                               <span
-                                style={{
-                                  color: 'var(--color-primary)',
-                                  cursor: 'pointer',
-                                  padding: '2px 6px',
-                                  background: 'rgba(99,102,241,0.1)',
-                                  borderRadius: '4px',
-                                }}
+                                className="cp-media-card__action-btn"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   if (onAddPlaylist) {
@@ -1038,7 +996,7 @@ function MediaManager({
                                 +
                               </span>
                               <span
-                                style={{ color: 'var(--color-primary)' }}
+                                className="cp-media-card__action-link"
                                 title={t('media.projectNow', 'Project now')}
                                 onClick={(e) => {
                                   e.stopPropagation();

@@ -79,13 +79,16 @@ export default function useNdiOutput({ isElectron, showToast, projectorActive })
 
   useEffect(() => {
     if (!isElectron) return;
-    void refreshNdiStatus();
+    const refreshTimer = setTimeout(() => {
+      void refreshNdiStatus();
+    }, 0);
     if (typeof window.churchDisplay?.onNdiStatus !== 'function') return undefined;
     const off = window.churchDisplay.onNdiStatus((nextStatus) => {
       if (!nextStatus || typeof nextStatus !== 'object') return;
       setNdiStatus((prev) => ({ ...prev, ...nextStatus }));
     });
     return () => {
+      clearTimeout(refreshTimer);
       if (typeof off === 'function') off();
     };
   }, [isElectron, refreshNdiStatus]);
@@ -93,7 +96,10 @@ export default function useNdiOutput({ isElectron, showToast, projectorActive })
   useEffect(() => {
     if (projectorActive) return;
     if (!ndiStatus.active && !ndiStatus.enabled) return;
-    void stopNdiOutput();
+    const stopTimer = setTimeout(() => {
+      void stopNdiOutput();
+    }, 0);
+    return () => clearTimeout(stopTimer);
   }, [ndiStatus.active, ndiStatus.enabled, projectorActive, stopNdiOutput]);
 
   return {

@@ -1,12 +1,25 @@
 const fs = require('fs');
 const path = require('path');
 
-function createYtDlpService({ YTDlpWrap, debug = () => {} } = {}) {
+function createYtDlpService({ YTDlpWrap, getYTDlpWrap, debug = () => {} } = {}) {
   let ytdlpInstance = null;
   let ytdlpBinPath = '';
+  let resolvedYTDlpWrap = YTDlpWrap || null;
+
+  function resolveYTDlpWrapClass() {
+    if (resolvedYTDlpWrap) return resolvedYTDlpWrap;
+    if (typeof getYTDlpWrap !== 'function') return null;
+    try {
+      resolvedYTDlpWrap = getYTDlpWrap() || null;
+    } catch (_) {
+      resolvedYTDlpWrap = null;
+    }
+    return resolvedYTDlpWrap;
+  }
 
   async function getYtDlpInstance() {
-    if (!YTDlpWrap) return null;
+    const YTDlpWrapClass = resolveYTDlpWrapClass();
+    if (!YTDlpWrapClass) return null;
     if (ytdlpInstance) return ytdlpInstance;
     if (!ytdlpBinPath) return null;
 
@@ -14,10 +27,10 @@ function createYtDlpService({ YTDlpWrap, debug = () => {} } = {}) {
       if (!fs.existsSync(ytdlpBinPath)) {
         debug('ytdlp-download-start', { binPath: ytdlpBinPath });
         fs.mkdirSync(path.dirname(ytdlpBinPath), { recursive: true });
-        await YTDlpWrap.downloadFromGithub(ytdlpBinPath);
+        await YTDlpWrapClass.downloadFromGithub(ytdlpBinPath);
         debug('ytdlp-download-done', { binPath: ytdlpBinPath });
       }
-      ytdlpInstance = new YTDlpWrap(ytdlpBinPath);
+      ytdlpInstance = new YTDlpWrapClass(ytdlpBinPath);
       return ytdlpInstance;
     } catch (err) {
       debug('ytdlp-init-failed', { error: err?.message || String(err) });

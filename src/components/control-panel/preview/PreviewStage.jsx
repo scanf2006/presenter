@@ -56,6 +56,41 @@ function PreviewStage() {
     PREVIEW.TEXT_MIN_PX,
     Math.min(34, Math.round(24 * projectorWidthRatio))
   );
+  const freeTextLayout = {
+    xPercent: Math.max(
+      TEXT_EDITOR.LAYOUT_X_MIN,
+      Math.min(
+        TEXT_EDITOR.LAYOUT_X_MAX,
+        Number(previewSlide?.textLayout?.xPercent ?? TEXT_EDITOR.LAYOUT_DEFAULT.xPercent)
+      )
+    ),
+    yPercent: Math.max(
+      TEXT_EDITOR.LAYOUT_Y_MIN,
+      Math.min(
+        TEXT_EDITOR.LAYOUT_Y_MAX,
+        Number(previewSlide?.textLayout?.yPercent ?? TEXT_EDITOR.LAYOUT_DEFAULT.yPercent)
+      )
+    ),
+    scale: Math.max(
+      TEXT_EDITOR.LAYOUT_SCALE_MIN,
+      Math.min(
+        TEXT_EDITOR.LAYOUT_SCALE_MAX,
+        Number(previewSlide?.textLayout?.scale ?? TEXT_EDITOR.LAYOUT_DEFAULT.scale)
+      )
+    ),
+  };
+  const previewFreeTextPx = (() => {
+    const raw = Number(previewSlide?.fontSizePx);
+    if (!Number.isFinite(raw) || raw <= 0) {
+      return getPreviewTextSize(
+        previewSlide,
+        previewSlide?.fontSize === 'large' ? 16 : previewSlide?.fontSize === 'medium' ? 12 : 10,
+        previewStageWidth
+      );
+    }
+    const scaled = Math.round(Math.max(20, Math.min(TEXT_EDITOR.SIZE_CLAMP_MAX_PX, raw)) * projectorWidthRatio);
+    return `${Math.max(PREVIEW.TEXT_MIN_PX, scaled)}px`;
+  })();
 
   return (
     <div
@@ -144,29 +179,24 @@ function PreviewStage() {
                     width: '100%',
                     height: '100%',
                     overflow: 'hidden',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                   }}
                 >
                   <div
                     style={{
-                      position: 'absolute',
-                      left: `${Math.max(TEXT_EDITOR.LAYOUT_X_MIN, Math.min(TEXT_EDITOR.LAYOUT_X_MAX, Number(previewSlide?.textLayout?.xPercent ?? TEXT_EDITOR.LAYOUT_DEFAULT.xPercent)))}%`,
-                      top: `${Math.max(TEXT_EDITOR.LAYOUT_Y_MIN, Math.min(TEXT_EDITOR.LAYOUT_Y_MAX, Number(previewSlide?.textLayout?.yPercent ?? TEXT_EDITOR.LAYOUT_DEFAULT.yPercent)))}%`,
-                      transform: `translate(-50%, -50%) scale(${Math.max(TEXT_EDITOR.LAYOUT_SCALE_MIN, Math.min(TEXT_EDITOR.LAYOUT_SCALE_MAX, Number(previewSlide?.textLayout?.scale ?? TEXT_EDITOR.LAYOUT_DEFAULT.scale)))})`,
+                      position: 'relative',
+                      left: `${freeTextLayout.xPercent - 50}%`,
+                      top: `${freeTextLayout.yPercent - 50}%`,
+                      transform: `translate(0, 0) scale(${freeTextLayout.scale})`,
                       transformOrigin: 'center center',
-                      width: '90%',
-                      maxWidth: '90%',
+                      width: '88%',
+                      maxWidth: '88%',
                       whiteSpace: 'pre-wrap',
                       textAlign: 'center',
                       lineHeight: '1.6',
-                      fontSize: getPreviewTextSize(
-                        previewSlide,
-                        previewSlide.fontSize === 'large'
-                          ? 16
-                          : previewSlide.fontSize === 'medium'
-                            ? 12
-                            : 10,
-                        previewStageWidth
-                      ),
+                      fontSize: previewFreeTextPx,
                       fontWeight: Number(previewSlide?.fontWeight || 700),
                       color: previewSlide.textColor || '#fff',
                       fontFamily: previewSlide.fontFamily || 'inherit',

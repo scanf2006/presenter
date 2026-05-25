@@ -29,7 +29,9 @@ function registerWindowProjectorIPC({
     try {
       const allDisplays = screenManager.getAllDisplays();
       const displayById =
-        displayId != null ? allDisplays.find((d) => String(d.id) === String(displayId)) : null;
+        displayId !== null && displayId !== undefined
+          ? allDisplays.find((d) => String(d.id) === String(displayId))
+          : null;
 
       if (typeof ensureProjectionAccess === 'function') {
         const access = ensureProjectionAccess();

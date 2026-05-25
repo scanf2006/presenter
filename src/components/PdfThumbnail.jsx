@@ -33,8 +33,11 @@ function PdfThumbnailImpl({ pdfDocument, pageNumber, onClick, isSelected, thumbR
   const [errorMsg, setErrorMsg] = useState(null);
 
   useEffect(() => {
-    setThumbDataUrl(getCachedThumbnail(cacheEntryKey));
-    setErrorMsg(null);
+    const timer = setTimeout(() => {
+      setThumbDataUrl(getCachedThumbnail(cacheEntryKey));
+      setErrorMsg(null);
+    }, 0);
+    return () => clearTimeout(timer);
   }, [cacheEntryKey]);
 
   useEffect(() => {
