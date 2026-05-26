@@ -28,6 +28,19 @@ function buildSongSaveInput(song) {
     lyrics: song.lyrics || '',
     backgroundType: song.backgroundType || '',
     backgroundPath: song.backgroundPath || '',
+    songStyle: song.songStyle || null,
+  };
+}
+
+function buildSongStyleFromSong(song) {
+  const style = song?.songStyle;
+  if (!style || typeof style !== 'object') return null;
+  return {
+    fontSize: style.fontSize || 'large',
+    fontSizePx: Number(style.fontSizePx || 72),
+    fontFamily: style.fontFamily || 'Noto Sans SC',
+    fontWeight: Number(style.fontWeight || 700),
+    textColor: style.textColor || '#ffffff',
   };
 }
 
@@ -200,6 +213,7 @@ export {
   buildSongBackgroundFromSong,
   mergeSongWithBackground,
   buildSongSaveInput,
+  buildSongStyleFromSong,
   buildSongBackgroundForPayload,
   buildSongQueuePayload,
   parseSongLyricsSections,

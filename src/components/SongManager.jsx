@@ -10,6 +10,7 @@ import {
 import {
   buildSongBackgroundFromSong,
   buildSongSaveInput,
+  buildSongStyleFromSong,
   buildSongQueuePayload,
   decodeLyricsImportBytes,
   deriveSongTitleFromImportFile,
@@ -93,6 +94,19 @@ function SongManager({
     [activeQueueItem]
   );
 
+  const applySongStyle = useCallback((style) => {
+    if (!style) return;
+    const nextFontSize =
+      style.fontSize === 'small' || style.fontSize === 'medium' || style.fontSize === 'large'
+        ? style.fontSize
+        : SONG_STYLE_DEFAULTS.fontSize;
+    setFontSize(nextFontSize);
+    setFontSizePx(Math.max(24, Math.min(180, Number(style.fontSizePx || SONG_STYLE_DEFAULTS.fontSizePx))));
+    setFontFamily(style.fontFamily || SONG_STYLE_DEFAULTS.fontFamily);
+    setIsBold(Number(style.fontWeight || SONG_STYLE_DEFAULTS.fontWeight) >= 600);
+    setTextColor(style.textColor || SONG_STYLE_DEFAULTS.textColor);
+  }, []);
+
   // 加载歌曲列表
   const loadSongs = useCallback(async () => {
     if (isElectron) {
@@ -141,6 +155,13 @@ function SongManager({
       lyrics: formLyrics.trim(),
       backgroundType: songBackground?.type || '',
       backgroundPath: songBackground?.path || '',
+      songStyle: {
+        fontSize,
+        fontSizePx,
+        fontFamily,
+        fontWeight: isBold ? 700 : 400,
+        textColor,
+      },
     };
     try {
       if (isElectron) {
@@ -163,6 +184,11 @@ function SongManager({
     formAuthor,
     formLyrics,
     songBackground,
+    fontSize,
+    fontSizePx,
+    fontFamily,
+    isBold,
+    textColor,
     isElectron,
     loadSongs,
     showToast,
@@ -192,6 +218,7 @@ function SongManager({
     setFormAuthor(song.author || '');
     setFormLyrics(song.lyrics);
     setSongBackground(buildSongBackgroundFromSong(song));
+    applySongStyle(buildSongStyleFromSong(song));
     setSelectedSong(null);
   };
 
@@ -334,10 +361,11 @@ function SongManager({
   const handleQueueSong = useCallback(
     (song) => {
       if (typeof onQueueContent !== 'function' || !song) return;
+      const savedStyle = buildSongStyleFromSong(song);
       const payload = buildSongQueuePayload({
         song,
         background: buildSongBackgroundFromSong(song),
-        style: SONG_STYLE_DEFAULTS,
+        style: savedStyle || SONG_STYLE_DEFAULTS,
       });
       onQueueContent(payload, song.title);
     },
@@ -351,7 +379,8 @@ function SongManager({
     setEditingSong(null);
     setSelectedSong(song);
     setSongBackground(buildSongBackgroundFromSong(song));
-  }, []);
+    applySongStyle(buildSongStyleFromSong(song));
+  }, [applySongStyle]);
 
   useEffect(() => {
     // Do not interrupt editor mode while user is creating/editing a song.
@@ -367,27 +396,10 @@ function SongManager({
     const target = songs.find((s) => s.id === targetSongId);
     if (target) {
       const preloadStyle = preloadPayload.songStyle || null;
-      if (preloadStyle) {
-        const nextFontSize =
-          preloadStyle.fontSize === 'small' ||
-          preloadStyle.fontSize === 'medium' ||
-          preloadStyle.fontSize === 'large'
-            ? preloadStyle.fontSize
-            : SONG_STYLE_DEFAULTS.fontSize;
-        setFontSize(nextFontSize);
-        setFontSizePx(
-          Math.max(
-            24,
-            Math.min(180, Number(preloadStyle.fontSizePx || SONG_STYLE_DEFAULTS.fontSizePx))
-          )
-        );
-        setFontFamily(preloadStyle.fontFamily || SONG_STYLE_DEFAULTS.fontFamily);
-        setIsBold(Number(preloadStyle.fontWeight || SONG_STYLE_DEFAULTS.fontWeight) >= 600);
-        setTextColor(preloadStyle.textColor || SONG_STYLE_DEFAULTS.textColor);
-      }
       openSongWithoutAutoProject(target);
+      if (preloadStyle) applySongStyle(preloadStyle);
     }
-  }, [activePreloadItem, songs, editingSong, openSongWithoutAutoProject]);
+  }, [activePreloadItem, songs, editingSong, openSongWithoutAutoProject, applySongStyle]);
 
   useEffect(() => {
     if (!selectedSong) return;
@@ -424,6 +436,63 @@ function SongManager({
     }
   }, [songBackground]);
 
+  useEffect(() => {
+    if (!selectedSong || editingSong) return;
+    const style = {
+      fontSize,
+      fontSizePx,
+      fontFamily,
+      fontWeight: isBold ? 700 : 400,
+      textColor,
+    };
+    const saved = buildSongStyleFromSong(selectedSong);
+    if (JSON.stringify(saved || null) === JSON.stringify(style)) return;
+    const nextSong = { ...selectedSong, songStyle: style };
+    setSelectedSong(nextSong);
+    setSongs((prev) => prev.map((s) => (s.id === nextSong.id ? { ...s, songStyle: style } : s)));
+
+    if (!isElectron) return;
+    const saveInput = buildSongSaveInput(nextSong);
+    if (!saveInput) return;
+    window.churchDisplay.songsSave(saveInput).catch((err) => {
+      console.warn('[SongManager] persist song style failed:', err?.message || err);
+    });
+  }, [selectedSong?.id, editingSong, fontSize, fontSizePx, fontFamily, isBold, textColor, isElectron]);
+
+  // Keep active song queue card style in sync with current controls.
+  // This lets different queue cards preserve their own font family/size/color settings.
+  useEffect(() => {
+    if (!selectedSong) return;
+    if (typeof onUpdateActiveQueueItem !== 'function') return;
+    if (!canSyncActiveQueueSong(selectedSong)) return;
+    const queuePayload = buildSongQueuePayload({
+      song: selectedSong,
+      background: songBackground,
+      section: null,
+      sectionIndex: null,
+      style: {
+        fontSize,
+        fontSizePx,
+        fontFamily,
+        fontWeight: isBold ? 700 : 400,
+        textColor,
+      },
+    });
+    onUpdateActiveQueueItem(queuePayload, selectedSong.title, 'songs', { silent: true });
+  }, [
+    selectedSong?.id,
+    selectedSong?.title,
+    songBackground?.type,
+    songBackground?.path,
+    fontSize,
+    fontSizePx,
+    fontFamily,
+    isBold,
+    textColor,
+    onUpdateActiveQueueItem,
+    canSyncActiveQueueSong,
+  ]);
+
   const persistSongBackground = useCallback(
     async (song, bg, options = {}) => {
       if (!song) return null;
@@ -435,14 +504,23 @@ function SongManager({
       // without forking logic into separate near-duplicate functions.
       const syncSelectedSong = options.syncSelectedSong !== false;
       const syncSongBackground = options.syncSongBackground !== false;
-
-      if (syncSelectedSong) setSelectedSong(nextSong);
+      const nextSongWithStyle = {
+        ...nextSong,
+        songStyle: {
+          fontSize,
+          fontSizePx,
+          fontFamily,
+          fontWeight: isBold ? 700 : 400,
+          textColor,
+        },
+      };
+      if (syncSelectedSong) setSelectedSong(nextSongWithStyle);
       if (syncSongBackground) setSongBackground(bg || null);
-      setSongs((prev) => prev.map((s) => (s.id === nextSong.id ? nextSong : s)));
+      setSongs((prev) => prev.map((s) => (s.id === nextSongWithStyle.id ? nextSongWithStyle : s)));
 
       try {
         if (isElectron) {
-          const saveInput = buildSongSaveInput(nextSong);
+          const saveInput = buildSongSaveInput(nextSongWithStyle);
           if (saveInput) {
             await window.churchDisplay.songsSave(saveInput);
           }
@@ -461,9 +539,9 @@ function SongManager({
         return nextSong;
       }
 
-      if (typeof onUpdateActiveQueueItem === 'function' && canSyncActiveQueueSong(nextSong)) {
+      if (typeof onUpdateActiveQueueItem === 'function' && canSyncActiveQueueSong(nextSongWithStyle)) {
         const queuePayload = buildSongQueuePayload({
-          song: nextSong,
+          song: nextSongWithStyle,
           background: bg,
           style: {
             fontSize,
@@ -473,9 +551,9 @@ function SongManager({
             textColor,
           },
         });
-        onUpdateActiveQueueItem(queuePayload, nextSong.title, 'songs');
+        onUpdateActiveQueueItem(queuePayload, nextSongWithStyle.title, 'songs');
       }
-      return nextSong;
+      return nextSongWithStyle;
     },
     [
       isElectron,

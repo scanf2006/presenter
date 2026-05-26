@@ -76,5 +76,6 @@ test('buildSongBackgroundFromSong and queue payload helpers are consistent', asy
     lyrics: 'L1\nL2',
     backgroundType: '',
     backgroundPath: '',
+    songStyle: null,
   });
 });
