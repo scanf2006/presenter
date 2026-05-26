@@ -328,6 +328,15 @@ async function fetchChristianStudyHymnLyrics(sourceUrl, options = {}) {
 }
 
 function registerBibleSongsIPC({ ipcMain, getBibleDb, getSongsDb, saveSongsDb }) {
+  const parseSongStyleJson = (raw) => {
+    if (!raw || typeof raw !== 'string') return null;
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch (_) {
+      return null;
+    }
+  };
   ipcMain.handle('bible-get-books', (_event, version) => {
     try {
       const db = getBibleDb(version);
@@ -398,7 +407,7 @@ function registerBibleSongsIPC({ ipcMain, getBibleDb, getSongsDb, saveSongsDb })
       const songsDb = getSongsDb();
       if (!songsDb) return [];
       const result = songsDb.exec(
-        'SELECT id, title, author, lyrics, background_type, background_path, created_at, updated_at FROM songs ORDER BY updated_at DESC'
+        'SELECT id, title, author, lyrics, background_type, background_path, style_json, created_at, updated_at FROM songs ORDER BY updated_at DESC'
       );
       if (!result.length) return [];
       return result[0].values.map((row) => ({
@@ -408,8 +417,9 @@ function registerBibleSongsIPC({ ipcMain, getBibleDb, getSongsDb, saveSongsDb })
         lyrics: row[3],
         backgroundType: row[4] || '',
         backgroundPath: row[5] || '',
-        createdAt: row[6],
-        updatedAt: row[7],
+        songStyle: parseSongStyleJson(row[6]),
+        createdAt: row[7],
+        updatedAt: row[8],
       }));
     } catch (err) {
       console.error('[SongsIPC] songs-list error:', err?.message);
@@ -430,25 +440,27 @@ function registerBibleSongsIPC({ ipcMain, getBibleDb, getSongsDb, saveSongsDb })
     try {
       if (song.id) {
         songsDb.run(
-          "UPDATE songs SET title=?, author=?, lyrics=?, background_type=?, background_path=?, updated_at=strftime('%s','now') WHERE id=?",
+          "UPDATE songs SET title=?, author=?, lyrics=?, background_type=?, background_path=?, style_json=?, updated_at=strftime('%s','now') WHERE id=?",
           [
             song.title,
             song.author || '',
             song.lyrics,
             song.backgroundType || '',
             song.backgroundPath || '',
+            JSON.stringify(song.songStyle || null),
             song.id,
           ]
         );
       } else {
         songsDb.run(
-          'INSERT INTO songs (title, author, lyrics, background_type, background_path) VALUES (?, ?, ?, ?, ?)',
+          'INSERT INTO songs (title, author, lyrics, background_type, background_path, style_json) VALUES (?, ?, ?, ?, ?, ?)',
           [
             song.title,
             song.author || '',
             song.lyrics,
             song.backgroundType || '',
             song.backgroundPath || '',
+            JSON.stringify(song.songStyle || null),
           ]
         );
       }

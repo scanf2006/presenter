@@ -102,6 +102,7 @@ async function initBibleAndSongsDatabases({
     lyrics TEXT NOT NULL,
     background_type TEXT DEFAULT '',
     background_path TEXT DEFAULT '',
+    style_json TEXT DEFAULT '',
     created_at INTEGER DEFAULT (strftime('%s','now')),
     updated_at INTEGER DEFAULT (strftime('%s','now'))
   )`);
@@ -114,6 +115,11 @@ async function initBibleAndSongsDatabases({
     songsDb.run(`ALTER TABLE songs ADD COLUMN background_path TEXT DEFAULT ''`);
   } catch (err) {
     console.warn('[SongsDB] add background_path column skipped:', err?.message || err);
+  }
+  try {
+    songsDb.run(`ALTER TABLE songs ADD COLUMN style_json TEXT DEFAULT ''`);
+  } catch (err) {
+    console.warn('[SongsDB] add style_json column skipped:', err?.message || err);
   }
   logger.log('[SongsDB] Songs database initialized');
 }
