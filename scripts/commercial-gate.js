@@ -2,9 +2,11 @@
 const { spawnSync } = require('node:child_process');
 
 const STEPS = [
+  { name: 'i18n-check', npmArgs: ['run', '-s', 'i18n:check'] },
   { name: 'lint', npmArgs: ['run', '-s', 'lint'] },
   { name: 'test', npmArgs: ['run', '-s', 'test'] },
   { name: 'build', npmArgs: ['run', '-s', 'build'] },
+  { name: 'zh-build-check', npmArgs: ['run', '-s', 'build:zh:check'] },
 ];
 
 function runStep(step) {

@@ -43,6 +43,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"tests/**/*.test.js\"",
+    "i18n:check": "node scripts/check-i18n-encoding.js",
+    "build:zh:check": "node scripts/check-zh-build-artifact.js",
     "commercial:gate": "node scripts/commercial-gate.js",
     "lint": "eslint \"src/**/*.{js,jsx}\" \"electron/**/*.js\"",
     "format": "prettier --write .",
