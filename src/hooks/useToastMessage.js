@@ -20,7 +20,7 @@ export default function useToastMessage() {
     if (!message) return;
     const channel = options?.channel === 'autosave' ? 'autosave' : 'default';
     const force = options?.force === true;
-    const dedupeWindowMs = Number(options?.dedupeWindowMs || 1800);
+    const dedupeWindowMs = Number(options?.dedupeWindowMs ?? 1800);
     const nextMessage = String(message);
     const now = Date.now();
     const last = lastToastRef.current[channel];

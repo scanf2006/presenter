@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { useProjectorContext } from '../../contexts/ProjectorContext';
 import { useQueueContext } from '../../contexts/QueueContext';
 import { useI18n } from '../../contexts/I18nContext';
