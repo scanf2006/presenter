@@ -1,7 +1,9 @@
 import React from 'react';
 import { useLicenseContext } from '../../contexts/LicenseContext';
+import { useI18n } from '../../contexts/I18nContext';
 
 function LegalModal() {
+  const { t } = useI18n();
   const {
     showLegalModal,
     handleCloseLegalModal,
@@ -56,29 +58,29 @@ function LegalModal() {
             marginBottom: '10px',
           }}
         >
-          <div style={{ fontSize: '16px', fontWeight: 600 }}>License</div>
+          <div style={{ fontSize: '16px', fontWeight: 600 }}>{t('legal.title', 'License')}</div>
           <button
             className="btn btn--ghost"
             onClick={handleCloseLegalModal}
             style={{ padding: '4px 10px' }}
           >
-            Close
+            {t('legal.close', 'Close')}
           </button>
         </div>
 
         <div
           style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: '10px' }}
         >
-          Current Status: {licenseStatus.isLicensed ? 'Licensed' : 'Unlicensed'} |{' '}
-          {licenseStatus.summary || 'Unlicensed'}
+          {t('legal.currentStatus', 'Current Status')}: {licenseStatus.isLicensed ? t('legal.licensed', 'Licensed') : t('legal.unlicensed', 'Unlicensed')} |{' '}
+          {licenseStatus.summary || t('legal.unlicensed', 'Unlicensed')}
         </div>
         <div
           style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: '12px' }}
         >
-          EULA:{' '}
+          {t('legal.eula', 'EULA')}:{' '}
           {licenseStatus.hasAcceptedEula
-            ? `Accepted (${licenseStatus.acceptedEulaAt || ''})`
-            : 'Not accepted'}
+            ? `${t('legal.accepted', 'Accepted')} (${licenseStatus.acceptedEulaAt || ''})`
+            : t('legal.notAccepted', 'Not accepted')}
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px' }}>
           <input
@@ -100,20 +102,23 @@ function LegalModal() {
             onClick={handleCopyDeviceId}
             disabled={!licenseDeviceId}
           >
-            Copy Device ID
+            {t('legal.copyDeviceId', 'Copy Device ID')}
           </button>
         </div>
         <div style={{ fontSize: '12px', color: '#f6d365', marginBottom: '12px' }}>
-          Copyright Notice:{' '}
+          {t('legal.copyrightNotice', 'Copyright Notice')}:{' '}
           {
-            '\u7248\u6743\u6240\u6709\u5f52 Aiden \u6240\u6709\uff1bChurchDisplay Pro \u591a\u4f26\u591a\u795e\u53ec\u4f1a\u6d3b\u77f3\u5802\u7248\u4e3a\u8d60\u4e0e\u7248\uff08non-transferable gifted edition\uff09\u3002'
+            t(
+              'legal.giftedEdition',
+              'All rights reserved by Aiden; ChurchDisplay Pro Toronto Living Stone Church edition is a non-transferable gifted edition.'
+            )
           }
         </div>
 
         <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
           <input
             type="text"
-            placeholder="Enter license key (CDP1....)"
+            placeholder={t('legal.enterLicenseKey', 'Enter license key (CDP1....)')}
             value={licenseInput}
             onChange={(e) => setLicenseInput(e.target.value)}
             style={{
@@ -130,20 +135,20 @@ function LegalModal() {
             className="btn btn--primary"
             onClick={handleActivateLicense}
             disabled={!eulaAccepted}
-            title={!eulaAccepted ? 'Please accept EULA before activation.' : ''}
+            title={!eulaAccepted ? t('legal.eulaRequiredBeforeActivation', 'Please accept EULA before activation.') : ''}
           >
-            Activate
+            {t('legal.activate', 'Activate')}
           </button>
           <button className="btn btn--ghost" onClick={handleClearLicense}>
-            Clear License
+            {t('legal.clearLicense', 'Clear License')}
           </button>
           <button className="btn btn--ghost" onClick={handleAcceptEula}>
-            Accept EULA
+            {t('legal.acceptEula', 'Accept EULA')}
           </button>
         </div>
         {!eulaAccepted && (
           <div style={{ color: '#f6d365', fontSize: '12px', marginBottom: '6px' }}>
-            Please click "Accept EULA" before activation.
+            {t('legal.acceptEulaHint', 'Please click "Accept EULA" before activation.')}
           </div>
         )}
 
@@ -159,7 +164,10 @@ function LegalModal() {
         )}
 
         <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--color-text-secondary)' }}>
-          Recommendation: use code signing, disable devtools in release, and issue keys server-side.
+          {t(
+            'legal.recommendation',
+            'Recommendation: use code signing, disable devtools in release, and issue keys server-side.'
+          )}
         </div>
         <pre
           style={{
@@ -175,7 +183,7 @@ function LegalModal() {
             overflow: 'auto',
           }}
         >
-          {eulaText || 'Loading EULA...'}
+          {eulaText || t('legal.loadingEula', 'Loading EULA...')}
         </pre>
       </div>
     </div>
