@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import PdfRenderer from '../../PdfRenderer';
 import { formatTime, getPreviewTextSize, getPreviewMediaUrl } from '../../../utils/preview';
 import { PREVIEW } from '../../../constants/ui';
@@ -444,3 +444,4 @@ function PreviewStage() {
 }
 
 export default PreviewStage;
+

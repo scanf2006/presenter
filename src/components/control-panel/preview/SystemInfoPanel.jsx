@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { useAppContext } from '../../../contexts/AppContext';
 import { useProjectorContext } from '../../../contexts/ProjectorContext';
 import { useI18n } from '../../../contexts/I18nContext';
