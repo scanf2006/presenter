@@ -32,6 +32,24 @@ function copyIfExists(src, destDir, copied, missing) {
   copied.push({ src, dest, bytes: fileSize(dest) });
 }
 
+function copyJsonRedacted(src, destDir, copied, missing, redactFn) {
+  if (!fs.existsSync(src)) {
+    missing.push(src);
+    return;
+  }
+  safeMkdir(destDir);
+  const name = path.basename(src);
+  const dest = path.join(destDir, name);
+  try {
+    const parsed = JSON.parse(fs.readFileSync(src, 'utf8'));
+    const redacted = typeof redactFn === 'function' ? redactFn(parsed) : parsed;
+    fs.writeFileSync(dest, JSON.stringify(redacted, null, 2), 'utf8');
+    copied.push({ src, dest, bytes: fileSize(dest), redacted: true });
+  } catch (_err) {
+    missing.push(`${src} (failed to parse for redaction)`);
+  }
+}
+
 function copyDirIfExists(srcDir, destDir, copiedDirs, missingDirs) {
   if (!fs.existsSync(srcDir)) {
     missingDirs.push(srcDir);
@@ -63,6 +81,7 @@ function readPackageMeta() {
 }
 
 function main() {
+  const includeSensitive = process.argv.includes('--include-sensitive');
   const pkg = readPackageMeta();
   const stamp = nowStamp();
   const repoRoot = path.join(__dirname, '..');
@@ -87,8 +106,22 @@ function main() {
     const base = path.join(filesDir, 'userData', path.basename(userDataDir));
     copyIfExists(path.join(userDataDir, 'bg-debug.log'), base, copiedFiles, missingFiles);
     copyIfExists(path.join(userDataDir, 'app.log'), base, copiedFiles, missingFiles);
-    copyIfExists(path.join(userDataDir, 'projector-queue.json'), base, copiedFiles, missingFiles);
-    copyIfExists(path.join(userDataDir, 'app-settings.json'), base, copiedFiles, missingFiles);
+    if (includeSensitive) {
+      copyIfExists(path.join(userDataDir, 'projector-queue.json'), base, copiedFiles, missingFiles);
+      copyIfExists(path.join(userDataDir, 'app-settings.json'), base, copiedFiles, missingFiles);
+    } else {
+      copyJsonRedacted(
+        path.join(userDataDir, 'app-settings.json'),
+        base,
+        copiedFiles,
+        missingFiles,
+        (doc) => ({
+          ...doc,
+          licenseKey: doc?.licenseKey ? '[REDACTED]' : '',
+          acceptedEulaProof: doc?.acceptedEulaProof ? '[REDACTED]' : '',
+        })
+      );
+    }
     copyDirIfExists(path.join(userDataDir, 'logs'), path.join(base, 'logs'), copiedDirs, missingDirs);
   }
 
@@ -100,13 +133,18 @@ function main() {
       platform: process.platform,
       release: os.release(),
       arch: process.arch,
-      hostname: os.hostname(),
+      hostname: includeSensitive ? os.hostname() : '[REDACTED]',
       node: process.version,
       locale: Intl.DateTimeFormat().resolvedOptions().locale,
       tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
     },
-    userDataCandidates,
-    existingUserDataDirs,
+    userDataCandidates: includeSensitive
+      ? userDataCandidates
+      : userDataCandidates.map((p) => path.basename(p)),
+    existingUserDataDirs: includeSensitive
+      ? existingUserDataDirs
+      : existingUserDataDirs.map((p) => path.basename(p)),
+    includeSensitive,
     copiedFiles,
     copiedDirs,
     missingFiles,
@@ -124,6 +162,9 @@ function main() {
       'Contains:',
       '- summary.json (host + copied file index)',
       '- files/ (logs and key runtime files if found)',
+      includeSensitive
+        ? '- mode: include-sensitive (full app-settings and queue copied)'
+        : '- mode: redacted default (license fields masked, queue file omitted)',
       '',
       'Share this folder with support/development for incident analysis.',
     ].join('\n'),
