@@ -12,6 +12,7 @@ import {
   isTextualSlideType,
 } from '../../../utils/freeTextLayout';
 import { useProjectorContext } from '../../../contexts/ProjectorContext';
+import { useI18n } from '../../../contexts/I18nContext';
 import CameraPane from './CameraPane';
 
 /**
@@ -20,6 +21,8 @@ import CameraPane from './CameraPane';
  * background media, camera split pane, and the transition mask overlay.
  */
 function PreviewStage() {
+  const { locale } = useI18n();
+  const isZh = String(locale || 'en').toLowerCase().startsWith('zh');
   const {
     previewStageRef,
     previewSlide,
@@ -83,7 +86,7 @@ function PreviewStage() {
       className="preview-screen"
       style={{ aspectRatio: PREVIEW.ASPECT_RATIO_16_9 }}
     >
-      <span className="preview-screen__label">Projector Output</span>
+      <span className="preview-screen__label">{isZh ? '投影输出' : 'Projector Output'}</span>
       <div className="preview-screen__content">
         {previewSlide ? (
           <div
@@ -293,11 +296,11 @@ function PreviewStage() {
                 (() => {
                   const embedUrl = getYouTubeEmbedUrl(previewSlide);
                   if (!embedUrl) {
-                    return <span style={{ fontSize: '11px' }}>YouTube preview unavailable</span>;
+                    return <span style={{ fontSize: '11px' }}>{isZh ? 'YouTube 预览不可用' : 'YouTube preview unavailable'}</span>;
                   }
                   return (
                     <iframe
-                      title={previewSlide.name || 'YouTube Preview'}
+                      title={previewSlide.name || (isZh ? 'YouTube 预览' : 'YouTube Preview')}
                       src={embedUrl}
                       allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
                       allowFullScreen
@@ -338,7 +341,7 @@ function PreviewStage() {
                       textAlign: 'left',
                     }}
                   >
-                    {previewSlide.name} | Page {previewSlide.page || 1}
+                    {previewSlide.name} | {isZh ? '页' : 'Page'} {previewSlide.page || 1}
                   </div>
                 </div>
               )}
@@ -433,7 +436,7 @@ function PreviewStage() {
             />
           </div>
         ) : (
-          <span style={{ fontSize: '11px' }}>No content</span>
+          <span style={{ fontSize: '11px' }}>{isZh ? '暂无内容' : 'No content'}</span>
         )}
       </div>
     </div>

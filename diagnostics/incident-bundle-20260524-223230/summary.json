@@ -1,0 +1,52 @@
+{
+  "generatedAt": "2026-05-25T02:32:30.133Z",
+  "bundleDir": "D:\\AI\\presenter\\diagnostics\\incident-bundle-20260524-223230",
+  "app": {
+    "name": "churchdisplay-pro",
+    "version": "0.3.194"
+  },
+  "host": {
+    "platform": "win32",
+    "release": "10.0.19045",
+    "arch": "x64",
+    "hostname": "DESKTOP-CDRHNLS",
+    "node": "v24.13.0",
+    "locale": "en-US",
+    "tz": "America/Toronto"
+  },
+  "userDataCandidates": [
+    "C:\\Users\\admin\\AppData\\Roaming\\churchdisplay-pro"
+  ],
+  "existingUserDataDirs": [
+    "C:\\Users\\admin\\AppData\\Roaming\\churchdisplay-pro"
+  ],
+  "copiedFiles": [
+    {
+      "src": "D:\\AI\\presenter\\app.log",
+      "dest": "D:\\AI\\presenter\\diagnostics\\incident-bundle-20260524-223230\\files\\repo-root\\app.log",
+      "bytes": 42801
+    },
+    {
+      "src": "C:\\Users\\admin\\AppData\\Roaming\\churchdisplay-pro\\bg-debug.log",
+      "dest": "D:\\AI\\presenter\\diagnostics\\incident-bundle-20260524-223230\\files\\userData\\churchdisplay-pro\\bg-debug.log",
+      "bytes": 141490
+    },
+    {
+      "src": "C:\\Users\\admin\\AppData\\Roaming\\churchdisplay-pro\\projector-queue.json",
+      "dest": "D:\\AI\\presenter\\diagnostics\\incident-bundle-20260524-223230\\files\\userData\\churchdisplay-pro\\projector-queue.json",
+      "bytes": 7104
+    },
+    {
+      "src": "C:\\Users\\admin\\AppData\\Roaming\\churchdisplay-pro\\app-settings.json",
+      "dest": "D:\\AI\\presenter\\diagnostics\\incident-bundle-20260524-223230\\files\\userData\\churchdisplay-pro\\app-settings.json",
+      "bytes": 193
+    }
+  ],
+  "copiedDirs": [],
+  "missingFiles": [
+    "C:\\Users\\admin\\AppData\\Roaming\\churchdisplay-pro\\app.log"
+  ],
+  "missingDirs": [
+    "C:\\Users\\admin\\AppData\\Roaming\\churchdisplay-pro\\logs"
+  ]
+}
