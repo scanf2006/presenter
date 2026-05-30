@@ -1,12 +1,15 @@
 import React from 'react';
 import { useAppContext } from '../../../contexts/AppContext';
 import { useProjectorContext } from '../../../contexts/ProjectorContext';
+import { useI18n } from '../../../contexts/I18nContext';
 
 /**
  * SystemInfoPanel renders system information (displays, projector status,
  * environment) and setup export/import buttons.
  */
 function SystemInfoPanel() {
+  const { locale } = useI18n();
+  const isZh = String(locale || 'en').toLowerCase().startsWith('zh');
   const { isElectron } = useAppContext();
   const {
     displays,
@@ -23,57 +26,57 @@ function SystemInfoPanel() {
   const healthSummary = startupHealthReport?.summary || { okCount: 0, warnCount: 0, errorCount: 0 };
   const healthStatusText = startupHealthReport
     ? healthSummary.errorCount > 0
-      ? `${healthSummary.errorCount} Error(s)`
+      ? `${healthSummary.errorCount} ${isZh ? '个错误' : 'Error(s)'}`
       : healthSummary.warnCount > 0
-        ? `${healthSummary.warnCount} Warning(s)`
-        : 'Healthy'
-    : 'Not checked';
+        ? `${healthSummary.warnCount} ${isZh ? '个警告' : 'Warning(s)'}`
+        : isZh ? '健康' : 'Healthy'
+    : isZh ? '未检查' : 'Not checked';
   const topIssues = (startupHealthReport?.checks || []).filter((c) => c.status !== 'ok').slice(0, 2);
 
   return (
     <>
       <div className="preview-panel__title" style={{ marginBottom: '12px' }}>
-        System Info
+        {isZh ? '系统信息' : 'System Info'}
       </div>
       <div className="cp-meta-list">
         <div className="cp-meta-row">
-          <span>Detected Displays</span>
+          <span>{isZh ? '检测到的显示器' : 'Detected Displays'}</span>
           <span className="cp-meta-value">{displays.length}</span>
         </div>
         <div className="cp-meta-row">
-          <span>Projector Status</span>
+          <span>{isZh ? '投影状态' : 'Projector Status'}</span>
           <span
             style={{
               color: projectorActive ? 'var(--color-success)' : 'var(--color-text-muted)',
             }}
           >
-            {projectorActive ? 'Running' : 'Stopped'}
+            {projectorActive ? (isZh ? '运行中' : 'Running') : (isZh ? '已停止' : 'Stopped')}
           </span>
         </div>
         <div className="cp-meta-row">
-          <span>Environment</span>
-          <span className="cp-meta-value">{isElectron ? 'Electron' : 'Browser'}</span>
+          <span>{isZh ? '运行环境' : 'Environment'}</span>
+          <span className="cp-meta-value">{isElectron ? 'Electron' : isZh ? '浏览器' : 'Browser'}</span>
         </div>
         <div className="cp-meta-row">
-          <span>NDI Output</span>
+          <span>{isZh ? 'NDI 输出' : 'NDI Output'}</span>
           <span
             style={{
               color: ndiStatus?.active ? 'var(--color-success)' : 'var(--color-text-muted)',
             }}
           >
-            {ndiStatus?.active ? 'Enabled' : 'Disabled'}
+            {ndiStatus?.active ? (isZh ? '已启用' : 'Enabled') : (isZh ? '已禁用' : 'Disabled')}
           </span>
         </div>
         <div className="cp-meta-row">
-          <span>NDI Receivers</span>
+          <span>{isZh ? 'NDI 接收端' : 'NDI Receivers'}</span>
           <span className="cp-meta-value">{ndiStatus?.connections ?? 0}</span>
         </div>
         <div className="cp-meta-row">
-          <span>Export Mode</span>
-          <span className="cp-meta-value">Smart Minimal Bundle</span>
+          <span>{isZh ? '导出模式' : 'Export Mode'}</span>
+          <span className="cp-meta-value">{isZh ? '智能最小包' : 'Smart Minimal Bundle'}</span>
         </div>
         <div className="cp-meta-row">
-          <span>Startup Check</span>
+          <span>{isZh ? '启动检查' : 'Startup Check'}</span>
           <span
             style={{
               color:
@@ -93,7 +96,7 @@ function SystemInfoPanel() {
           onClick={() => runStartupHealthCheck()}
           disabled={startupHealthBusy}
         >
-          {startupHealthBusy ? 'Checking...' : 'Run Startup Check'}
+          {startupHealthBusy ? (isZh ? '检查中...' : 'Checking...') : (isZh ? '运行启动检查' : 'Run Startup Check')}
         </button>
         {topIssues.map((issue) => (
           <div
@@ -114,7 +117,7 @@ function SystemInfoPanel() {
             onClick={handleExportSetupBundle}
             disabled={setupTransferBusy}
           >
-            Export Setup
+            {isZh ? '导出配置' : 'Export Setup'}
           </button>
           <button
             className="btn btn--ghost"
@@ -122,12 +125,12 @@ function SystemInfoPanel() {
             onClick={handleImportSetupBundle}
             disabled={setupTransferBusy}
           >
-            Import Setup
+            {isZh ? '导入配置' : 'Import Setup'}
           </button>
         </div>
         {setupTransferBusy && (
           <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>
-            Processing setup package...
+            {isZh ? '正在处理配置包...' : 'Processing setup package...'}
           </div>
         )}
       </div>

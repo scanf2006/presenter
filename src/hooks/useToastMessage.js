@@ -11,17 +11,30 @@ export default function useToastMessage() {
   const [toast, setToast] = useState(null);
   const [autosaveToast, setAutosaveToast] = useState(null);
   const toastTimerRef = useRef({ default: null, autosave: null });
+  const lastToastRef = useRef({
+    default: { message: '', at: 0 },
+    autosave: { message: '', at: 0 },
+  });
 
   const showToast = useCallback((message, tone = 'success', options = {}) => {
     if (!message) return;
     const channel = options?.channel === 'autosave' ? 'autosave' : 'default';
+    const force = options?.force === true;
+    const dedupeWindowMs = Number(options?.dedupeWindowMs || 1800);
+    const nextMessage = String(message);
+    const now = Date.now();
+    const last = lastToastRef.current[channel];
+    if (!force && last?.message === nextMessage && now - Number(last?.at || 0) < dedupeWindowMs) {
+      return;
+    }
     const setChannelToast = channel === 'autosave' ? setAutosaveToast : setToast;
 
     if (toastTimerRef.current[channel]) {
       clearTimeout(toastTimerRef.current[channel]);
       toastTimerRef.current[channel] = null;
     }
-    setChannelToast({ message, tone, token: Date.now(), channel });
+    setChannelToast({ message: nextMessage, tone, token: now, channel });
+    lastToastRef.current[channel] = { message: nextMessage, at: now };
     toastTimerRef.current[channel] = setTimeout(() => {
       setChannelToast(null);
       toastTimerRef.current[channel] = null;

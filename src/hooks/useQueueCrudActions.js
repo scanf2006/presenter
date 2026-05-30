@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { useI18n } from '../contexts/I18nContext';
 
 export default function useQueueCrudActions({
   addOrUpdateQueueItem,
@@ -12,6 +13,8 @@ export default function useQueueCrudActions({
   cancelRenameQueueItem,
   clearQueue,
 }) {
+  const { locale } = useI18n();
+  const isZh = String(locale || 'en').toLowerCase().startsWith('zh');
   const addSongQueueItem = useCallback((payload, title) => {
     if (!payload) return;
     const nextTitle = title || getQueueItemTitle(payload);
@@ -34,12 +37,12 @@ export default function useQueueCrudActions({
 
   const removeSelectedQueueItem = useCallback(async () => {
     const ok = await showConfirm(
-      'Delete Selected Queue Card',
-      'Are you sure you want to delete the selected queue card?'
+      isZh ? '删除选中队列卡片' : 'Delete Selected Queue Card',
+      isZh ? '确定要删除当前选中的队列卡片吗？' : 'Are you sure you want to delete the selected queue card?'
     );
     if (!ok) return;
     removeActiveQueueItem();
-  }, [removeActiveQueueItem, showConfirm]);
+  }, [isZh, removeActiveQueueItem, showConfirm]);
 
   const startRenameSelectedQueueItem = useCallback((item) => {
     startRenameQueueItem(item);
@@ -56,14 +59,14 @@ export default function useQueueCrudActions({
   const clearAllQueueItems = useCallback(() => {
     const run = async () => {
       const ok = await showConfirm(
-        'Clear Queue',
-        'Are you sure you want to clear all queue items?'
+        isZh ? '清空队列' : 'Clear Queue',
+        isZh ? '确定要清空所有队列项目吗？' : 'Are you sure you want to clear all queue items?'
       );
       if (!ok) return;
       clearQueue();
     };
     run();
-  }, [clearQueue, showConfirm]);
+  }, [clearQueue, isZh, showConfirm]);
 
   return {
     addSongQueueItem,

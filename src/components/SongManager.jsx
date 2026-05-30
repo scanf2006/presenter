@@ -278,7 +278,7 @@ function SongManager({
       ) {
         const queuePayload = buildSelectedSongQueuePayload(selectedSong, section, sectionIndex);
         if (queuePayload) {
-          onUpdateActiveQueueItem(queuePayload, selectedSong.title, 'songs');
+          onUpdateActiveQueueItem(queuePayload, selectedSong.title, 'songs', { silent: true });
         }
       }
     },
@@ -328,7 +328,7 @@ function SongManager({
         lines: [],
       });
       if (queuePayload) {
-        onUpdateActiveQueueItem(queuePayload, selectedSong.title, 'songs');
+        onUpdateActiveQueueItem(queuePayload, selectedSong.title, 'songs', { silent: true });
       }
     }
   }, [
@@ -551,7 +551,7 @@ function SongManager({
             textColor,
           },
         });
-        onUpdateActiveQueueItem(queuePayload, nextSongWithStyle.title, 'songs');
+        onUpdateActiveQueueItem(queuePayload, nextSongWithStyle.title, 'songs', { silent: true });
       }
       return nextSongWithStyle;
     },

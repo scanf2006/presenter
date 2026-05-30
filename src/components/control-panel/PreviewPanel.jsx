@@ -1,12 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { useProjectorContext } from '../../contexts/ProjectorContext';
 import { useQueueContext } from '../../contexts/QueueContext';
+import { useI18n } from '../../contexts/I18nContext';
 import PreviewStage from './preview/PreviewStage';
 import TransitionSettings from './preview/TransitionSettings';
 import CameraSettings from './preview/CameraSettings';
 import SystemInfoPanel from './preview/SystemInfoPanel';
 
 function PreviewPanel({ nextQueueTitle }) {
+  const { locale } = useI18n();
+  const isZh = String(locale || 'en').toLowerCase().startsWith('zh');
   const { previewSlide, transitionEnabled, transitionDelayMs, transitionDurationMs } =
     useProjectorContext();
   const { projectorQueue } = useQueueContext();
@@ -66,22 +69,22 @@ function PreviewPanel({ nextQueueTitle }) {
     <div className="preview-panel">
       <div className="preview-panel__live-block">
         <div className="preview-panel__head">
-          <div className="preview-panel__title">Live Preview</div>
+          <div className="preview-panel__title">{isZh ? '实时预览' : 'Live Preview'}</div>
           <div className="preview-panel__head-actions">
             <button
               className="btn btn--ghost preview-head-btn"
               onClick={() => setShowPreviewStatusStrip((v) => !v)}
-              title={showPreviewStatusStrip ? 'Hide status strip' : 'Show status strip'}
+              title={showPreviewStatusStrip ? (isZh ? '隐藏状态条' : 'Hide status strip') : (isZh ? '显示状态条' : 'Show status strip')}
             >
-              {showPreviewStatusStrip ? 'Hide Info' : 'Show Info'}
+              {showPreviewStatusStrip ? (isZh ? '隐藏信息' : 'Hide Info') : (isZh ? '显示信息' : 'Show Info')}
             </button>
             {showPreviewStatusStrip && (
               <button
                 className="btn btn--ghost preview-head-btn"
                 onClick={() => setCompactPreviewStatusStrip((v) => !v)}
-                title={compactPreviewStatusStrip ? 'Expand status strip' : 'Compact status strip'}
+                title={compactPreviewStatusStrip ? (isZh ? '展开状态条' : 'Expand status strip') : (isZh ? '紧凑状态条' : 'Compact status strip')}
               >
-                {compactPreviewStatusStrip ? 'Expand' : 'Compact'}
+                {compactPreviewStatusStrip ? (isZh ? '展开' : 'Expand') : (isZh ? '紧凑' : 'Compact')}
               </button>
             )}
           </div>
@@ -97,9 +100,9 @@ function PreviewPanel({ nextQueueTitle }) {
               {!compactPreviewStatusStrip && previewPrimaryLabel && (
                 <span className="preview-osd__text">{previewPrimaryLabel}</span>
               )}
-              <span className="preview-osd__text">Queue {projectorQueue.length}</span>
+              <span className="preview-osd__text">{isZh ? '队列' : 'Queue'} {projectorQueue.length}</span>
               <span className="preview-osd__text">
-                {transitionEnabled ? `Fade ${transitionDelayMs}/${transitionDurationMs}` : 'Cut'}
+                {transitionEnabled ? `${isZh ? '淡入淡出' : 'Fade'} ${transitionDelayMs}/${transitionDurationMs}` : isZh ? '硬切' : 'Cut'}
               </span>
             </div>
           )}
@@ -108,12 +111,12 @@ function PreviewPanel({ nextQueueTitle }) {
 
       <div className="preview-panel__rest-block">
         <div className="preview-screen preview-screen--next">
-          <span className="preview-screen__label">Next</span>
+          <span className="preview-screen__label">{isZh ? '下一条' : 'Next'}</span>
           <div className="preview-screen__content">
             {projectorQueue.length > 0 ? (
               <span className="preview-next-text">{nextQueueTitle}</span>
             ) : (
-              <span className="preview-next-text">No content</span>
+              <span className="preview-next-text">{isZh ? '暂无内容' : 'No content'}</span>
             )}
           </div>
         </div>
@@ -121,7 +124,7 @@ function PreviewPanel({ nextQueueTitle }) {
         <div className="preview-panel__rest-content">
           <TransitionSettings />
           <details className="preview-advanced" open={false}>
-            <summary className="preview-advanced__summary">Advanced</summary>
+            <summary className="preview-advanced__summary">{isZh ? '高级' : 'Advanced'}</summary>
             <div className="preview-advanced__body">
               <CameraSettings />
               <SystemInfoPanel />

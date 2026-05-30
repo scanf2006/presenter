@@ -55,10 +55,8 @@ function NavIcon({ type }) {
 }
 
 function SidebarQueue({ openDisplays, openText, openSongs, openBible, openMedia }) {
-  const { t } = useI18n();
-  const useChineseMenu = String(import.meta.env.VITE_MENU_LANG || 'en')
-    .toLowerCase()
-    .startsWith('zh');
+  const { t, locale } = useI18n();
+  const useChineseMenu = String(locale || 'en').toLowerCase().startsWith('zh');
   const [dropHint, setDropHint] = useState({ index: -1, position: 'before' });
   const queueListRef = useRef(null);
   const draggingQueueIdRef = useRef('');
