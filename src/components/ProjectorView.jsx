@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { SCENE } from '../constants/ui';
 import useProjectorChannelSync from '../hooks/useProjectorChannelSync';
 import ProjectorTextLayer from './projector/ProjectorTextLayer';
+import PdfRenderer from './PdfRenderer';
 import {
   clampFreeTextLayout,
   getFallbackTextBasePx,
@@ -405,6 +406,14 @@ function ProjectorView() {
               }}
             />
           </>
+        )}
+
+        {!isBlackout && content?.type === 'pdf' && (
+          <PdfRenderer
+            path={content.path}
+            pageNumber={content.page || 1}
+            fitMode={content.fitMode || 'contain'}
+          />
         )}
       </div>
 

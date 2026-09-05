@@ -13,7 +13,6 @@ export default function useProjectorPreviewDispatch({
   const [previewMaskVisible, setPreviewMaskVisible] = useState(false);
   const previewTimersRef = useRef([]);
   const deliveryTimeoutMsRef = useRef(1800);
-  const lastBackgroundSignatureRef = useRef('__init__');
 
   const waitForAckWithTimeout = useCallback(async (data) => {
     if (!isElectron || !window.churchDisplay) return { ok: true, mode: 'browser' };
@@ -37,18 +36,12 @@ export default function useProjectorPreviewDispatch({
     previewTimersRef.current = [];
   }, []);
 
-  const getBackgroundSignature = useCallback((bg) => {
-    if (!bg) return '__none__';
-    const type = String(bg.type || '');
-    const path = String(bg.path || '');
-    return `${type}|${path}`;
-  }, []);
-
   const applyPreviewTransition = useCallback(
     (nextSlide) => {
       clearPreviewTimers();
+      const skipTransitionOnce = nextSlide?.disableTransitionOnce === true;
 
-      if (!transitionEnabled) {
+      if (!transitionEnabled || skipTransitionOnce) {
         setPreviewSlide(nextSlide);
         setPreviewMaskVisible(false);
         return;
@@ -93,13 +86,6 @@ export default function useProjectorPreviewDispatch({
               showToast(`Projector delivery failed: ${err?.message || 'Unknown error'}`, 'error');
             }
           });
-        if (typeof window.churchDisplay.sendToProjectorBackground === 'function') {
-          const nextSig = getBackgroundSignature(data?.background || null);
-          if (nextSig !== lastBackgroundSignatureRef.current) {
-            lastBackgroundSignatureRef.current = nextSig;
-            window.churchDisplay.sendToProjectorBackground(data?.background || null);
-          }
-        }
       }
     },
     [
@@ -108,7 +94,6 @@ export default function useProjectorPreviewDispatch({
       waitForAckWithTimeout,
       showToast,
       suppressDeliveryWarnings,
-      getBackgroundSignature,
     ]
   );
 
@@ -116,15 +101,8 @@ export default function useProjectorPreviewDispatch({
     (data) => {
       if (!isElectron || !window.churchDisplay || !data) return;
       window.churchDisplay.sendToProjector(data);
-      if (typeof window.churchDisplay.sendToProjectorBackground === 'function') {
-        const nextSig = getBackgroundSignature(data?.background || null);
-        if (nextSig !== lastBackgroundSignatureRef.current) {
-          lastBackgroundSignatureRef.current = nextSig;
-          window.churchDisplay.sendToProjectorBackground(data?.background || null);
-        }
-      }
     },
-    [isElectron, getBackgroundSignature]
+    [isElectron]
   );
 
   const blackout = useCallback(() => {

@@ -71,6 +71,9 @@ function registerProjectorEventIPC({
     if (typeof setLatestProjectorContent === 'function') {
       setLatestProjectorContent(data || null);
     }
+    if (typeof setLatestProjectorBackground === 'function') {
+      setLatestProjectorBackground(data?.background || null);
+    }
 
     if (data?.type === 'youtube') {
       const youtubeUrl =

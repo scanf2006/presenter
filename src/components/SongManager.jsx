@@ -268,6 +268,7 @@ function SongManager({
         fontWeight: isBold ? 700 : 400,
         textColor,
         background: songBackground,
+        disableTransitionOnce: true,
       };
       lastProjectedSectionRef.current = { section };
       onProjectContent(payload);
@@ -308,6 +309,7 @@ function SongManager({
         fontWeight: isBold ? 700 : 400,
         textColor,
         background: songBackground,
+        disableTransitionOnce: true,
       };
     lastProjectedSectionRef.current = {
       section: {

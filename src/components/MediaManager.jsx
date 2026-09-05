@@ -207,6 +207,7 @@ function MediaManager({
             path: file.path,
             name: file.name,
             page: 1,
+            disableTransitionOnce: true,
           });
         }
       } catch (err) {
@@ -478,6 +479,7 @@ function MediaManager({
           path: activePdf.path,
           name: activePdf.name,
           page: nextPage,
+          disableTransitionOnce: true,
         });
         return;
       }
@@ -502,6 +504,7 @@ function MediaManager({
           name: `PPT - Page ${nextIndex + 1}`,
           fitMode: 'contain',
           originType: 'ppt',
+          disableTransitionOnce: true,
         });
       }
     };
@@ -785,6 +788,7 @@ function MediaManager({
                       path: activePdf.path,
                       name: activePdf.name,
                       page: pageNumber,
+                      disableTransitionOnce: true,
                     });
                   }}
                 />
@@ -864,6 +868,7 @@ function MediaManager({
                     name: `PPT - Page ${index + 1}`,
                     fitMode: 'contain',
                     originType: 'ppt',
+                    disableTransitionOnce: true,
                   });
                 }}
                 style={getSelectableThumbCardStyle(currentSlideIndex === index)}
