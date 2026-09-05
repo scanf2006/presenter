@@ -52,3 +52,11 @@ test('Unified projector dispatch keeps background dedupe guard', () => {
     'Expected conditional dedupe before sendToProjectorBackground'
   );
 });
+
+test('ProjectorView renders PDF content sent from the media selector', () => {
+  const content = read('src/components/ProjectorView.jsx');
+  assert.equal(content.includes("import PdfRenderer from './PdfRenderer'"), true);
+  assert.equal(content.includes("content?.type === 'pdf'"), true);
+  assert.equal(content.includes('pageNumber={content.page || 1}'), true);
+  assert.equal(content.includes("fitMode={content.fitMode || 'contain'}"), true);
+});

@@ -41,9 +41,7 @@ export default function useProjectorChannelSync({
 
     const applyProjectedContent = (nextContent) => {
       setContent(nextContent);
-      if (nextContent?.background) {
-        setBackgroundContent(nextContent.background);
-      }
+      setBackgroundContent(nextContent?.background || null);
       setIsBlackout(false);
       setFadeClass('projector-view__content--fade-in');
     };
@@ -64,7 +62,8 @@ export default function useProjectorChannelSync({
     const offProjectorContent = window.churchDisplay.onProjectorContent((data) => {
       clearTimers();
       const cfg = transitionRef.current;
-      if (!cfg.enabled) {
+      const skipTransitionOnce = data?.disableTransitionOnce === true;
+      if (!cfg.enabled || skipTransitionOnce) {
         applyProjectedContent(data);
         setFadeClass('');
         setTransitionMaskVisible(false);
