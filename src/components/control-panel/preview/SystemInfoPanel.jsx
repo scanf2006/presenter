@@ -14,7 +14,6 @@ function SystemInfoPanel() {
   const {
     displays,
     projectorActive,
-    ndiStatus,
     handleExportSetupBundle,
     handleImportSetupBundle,
     setupTransferBusy,
@@ -56,20 +55,6 @@ function SystemInfoPanel() {
         <div className="cp-meta-row">
           <span>{isZh ? '运行环境' : 'Environment'}</span>
           <span className="cp-meta-value">{isElectron ? 'Electron' : isZh ? '浏览器' : 'Browser'}</span>
-        </div>
-        <div className="cp-meta-row">
-          <span>{isZh ? 'NDI 输出' : 'NDI Output'}</span>
-          <span
-            style={{
-              color: ndiStatus?.active ? 'var(--color-success)' : 'var(--color-text-muted)',
-            }}
-          >
-            {ndiStatus?.active ? (isZh ? '已启用' : 'Enabled') : (isZh ? '已禁用' : 'Disabled')}
-          </span>
-        </div>
-        <div className="cp-meta-row">
-          <span>{isZh ? 'NDI 接收端' : 'NDI Receivers'}</span>
-          <span className="cp-meta-value">{ndiStatus?.connections ?? 0}</span>
         </div>
         <div className="cp-meta-row">
           <span>{isZh ? '导出模式' : 'Export Mode'}</span>

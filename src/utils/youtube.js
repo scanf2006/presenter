@@ -1,47 +1,6 @@
-export function normalizeYouTubeWatchUrl(rawUrl) {
-  const value = typeof rawUrl === 'string' ? rawUrl.trim() : '';
-  if (!value) return '';
+import youtube from '../../shared/youtube.cjs';
 
-  try {
-    const u = new URL(value);
-    const host = (u.hostname || '').toLowerCase();
-    const toWatch = (id) => `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
-
-    if (host === 'youtu.be') {
-      const id = (u.pathname || '').replace('/', '').trim();
-      return id ? toWatch(id) : '';
-    }
-    if (host.includes('youtube.com') || host === 'm.youtube.com' || host === 'music.youtube.com') {
-      if (u.pathname.startsWith('/watch')) {
-        const id = (u.searchParams.get('v') || '').trim();
-        return id ? toWatch(id) : '';
-      }
-      if (u.pathname.startsWith('/shorts/')) {
-        const id = (u.pathname.split('/')[2] || '').trim();
-        return id ? toWatch(id) : '';
-      }
-      if (u.pathname.startsWith('/embed/')) {
-        const id = (u.pathname.split('/')[2] || '').trim();
-        return id ? toWatch(id) : '';
-      }
-    }
-  } catch (_) {
-    return '';
-  }
-
-  return '';
-}
-
-export function getYouTubeVideoIdFromUrl(rawUrl) {
-  const watchUrl = normalizeYouTubeWatchUrl(rawUrl);
-  if (!watchUrl) return '';
-  try {
-    const u = new URL(watchUrl);
-    return (u.searchParams.get('v') || '').trim();
-  } catch (_) {
-    return '';
-  }
-}
+export const { normalizeYouTubeWatchUrl, getYouTubeVideoIdFromUrl } = youtube;
 
 export function getYouTubeVideoIdFromPayload(payload) {
   const directId = typeof payload?.videoId === 'string' ? payload.videoId.trim() : '';

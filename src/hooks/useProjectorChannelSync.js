@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { mergeSceneConfig, normalizeTransitionConfig } from '../utils/projectorChannel';
+import { normalizeTransitionConfig } from '../utils/projectorChannel';
 
 export default function useProjectorChannelSync({
   isElectron,
@@ -7,7 +7,6 @@ export default function useProjectorChannelSync({
   timeoutRef,
   videoRef,
   setTransitionConfig,
-  setSceneConfig,
   setContent,
   setBackgroundContent,
   setIsBlackout,
@@ -26,10 +25,6 @@ export default function useProjectorChannelSync({
       const next = normalizeTransitionConfig(data);
       transitionRef.current = next;
       setTransitionConfig(next);
-    });
-
-    const offProjectorScene = window.churchDisplay.onProjectorScene((data) => {
-      setSceneConfig((prev) => mergeSceneConfig(prev, data));
     });
 
     const queueTransitionMaskHide = (durationMs) => {
@@ -75,11 +70,6 @@ export default function useProjectorChannelSync({
       });
     });
 
-    const offProjectorBackground = window.churchDisplay.onProjectorBackground((data) => {
-      setBackgroundContent(data || null);
-      setIsBlackout(false);
-    });
-
     const offProjectorBlackout = window.churchDisplay.onProjectorBlackout(() => {
       clearTimers();
       const cfg = transitionRef.current;
@@ -115,11 +105,9 @@ export default function useProjectorChannelSync({
 
     return () => {
       if (typeof offProjectorContent === 'function') offProjectorContent();
-      if (typeof offProjectorBackground === 'function') offProjectorBackground();
       if (typeof offProjectorBlackout === 'function') offProjectorBlackout();
       if (typeof offMediaCommand === 'function') offMediaCommand();
       if (typeof offProjectorTransition === 'function') offProjectorTransition();
-      if (typeof offProjectorScene === 'function') offProjectorScene();
       clearTimers();
     };
   }, [
@@ -128,7 +116,6 @@ export default function useProjectorChannelSync({
     setContent,
     setFadeClass,
     setIsBlackout,
-    setSceneConfig,
     setTransitionConfig,
     setTransitionMaskVisible,
     timeoutRef,

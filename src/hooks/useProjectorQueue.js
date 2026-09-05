@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getQueueItemTitleFromPayload, resolveSectionForPayload } from '../utils/queueItemMeta';
-import { buildQueueEnvelope, migrateQueuePayload } from '../utils/queueSchema';
+import queueSchema from '../../shared/queue-schema.cjs';
 import { useI18n } from '../contexts/I18nContext';
 
 const DEFAULT_QUEUE_STORAGE_KEY = 'churchdisplay.projectorQueue.v1';
+const { buildQueueEnvelope, migrateQueuePayload } = queueSchema;
 
 export default function useProjectorQueue({
   isElectron,
@@ -33,22 +34,27 @@ export default function useProjectorQueue({
 
   useEffect(() => {
     const restoreQueue = async () => {
+      let restored = false;
       try {
         if (isElectron && typeof window.churchDisplay?.queueLoad === 'function') {
-          const parsed = await window.churchDisplay.queueLoad();
-          if (Array.isArray(parsed)) {
-            setProjectorQueue(parsed);
+          const result = await window.churchDisplay.queueLoad();
+          if (result?.success === true && Array.isArray(result.items)) {
+            setProjectorQueue(result.items);
+            restored = true;
           }
           return;
         }
         const raw = window.localStorage.getItem(storageKey);
-        if (!raw) return;
-        const parsed = JSON.parse(raw);
-        setProjectorQueue(migrateQueuePayload(parsed).items);
+        if (!raw) {
+          restored = true;
+          return;
+        }
+        setProjectorQueue(migrateQueuePayload(JSON.parse(raw)).items);
+        restored = true;
       } catch (err) {
         console.warn('[Queue] restore failed:', err);
       } finally {
-        setQueueHydrated(true);
+        setQueueHydrated(restored);
       }
     };
     restoreQueue();

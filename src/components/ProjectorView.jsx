@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { SCENE } from '../constants/ui';
 import useProjectorChannelSync from '../hooks/useProjectorChannelSync';
 import ProjectorTextLayer from './projector/ProjectorTextLayer';
 import PdfRenderer from './PdfRenderer';
@@ -30,19 +29,6 @@ function ProjectorView() {
   const sampleCanvasRef = useRef(null);
   const timeoutRef = useRef([]);
   const [adaptiveOverlayOpacity, setAdaptiveOverlayOpacity] = useState(0.1);
-  const [sceneConfig, setSceneConfig] = useState({
-    mode: 'normal',
-    splitDirection: 'content_left_camera_right',
-    cameraDeviceId: '',
-    cameraPanePercent: 30,
-    cameraMuted: true,
-    cameraCenterCropPercent: 100,
-    enableCameraTestMode: false,
-  });
-  const cameraPaneVideoRef = useRef(null);
-  const cameraPaneStreamRef = useRef(null);
-  const [cameraPaneStatus, setCameraPaneStatus] = useState('idle');
-  const [cameraTestNow, setCameraTestNow] = useState(0);
 
   const isElectron = typeof window.churchDisplay !== 'undefined';
 
@@ -52,7 +38,6 @@ function ProjectorView() {
     timeoutRef,
     videoRef,
     setTransitionConfig,
-    setSceneConfig,
     setContent,
     setBackgroundContent,
     setIsBlackout,
@@ -92,14 +77,12 @@ function ProjectorView() {
   };
 
   const getProjectorTextSize = () => {
-    const paneRatio = splitEnabled ? (100 - rightPanePercent) / 100 : 1;
-    const scale = splitEnabled ? Math.max(0.72, paneRatio) : 1;
-    const scaledPx = getScaledFreeTextFontPx(content?.fontSizePx, scale);
+    const scaledPx = getScaledFreeTextFontPx(content?.fontSizePx, 1);
     if (scaledPx !== null) {
       return `${scaledPx}px`;
     }
     const base = getFallbackTextBasePx(content?.fontSize);
-    return `${Math.round(base * scale)}px`;
+    return `${base}px`;
   };
 
   const getMediaUrl = (filePath) => {
@@ -143,79 +126,6 @@ function ProjectorView() {
   const textOverlayOpacity = hasVideoBackgroundForText ? 0 : adaptiveOverlayOpacity;
   const isFreeText = content?.type === 'text';
   const textLayout = clampFreeTextLayout(content?.textLayout);
-  const rightPanePercent = Math.max(
-    SCENE.CAMERA_PANE_MIN_PERCENT,
-    Math.min(SCENE.CAMERA_PANE_MAX_PERCENT, Number(sceneConfig.cameraPanePercent || SCENE.CAMERA_PANE_DEFAULT_PERCENT))
-  );
-  const rightCameraScale = Math.max(1, Number(sceneConfig.cameraCenterCropPercent || 100) / 100);
-  const splitEnabled = sceneConfig.mode === 'split_camera';
-  const contentPaneWidth = `${100 - rightPanePercent}%`;
-  const effectiveCameraPaneStatus = !splitEnabled
-    ? 'idle'
-    : sceneConfig.enableCameraTestMode
-      ? 'ok'
-      : cameraPaneStatus;
-
-  useEffect(() => {
-    const stop = () => {
-      const stream = cameraPaneStreamRef.current;
-      if (stream) {
-        stream.getTracks().forEach((t) => t.stop());
-        cameraPaneStreamRef.current = null;
-      }
-      if (cameraPaneVideoRef.current) {
-        cameraPaneVideoRef.current.srcObject = null;
-      }
-    };
-
-    if (!splitEnabled) {
-      stop();
-      return;
-    }
-
-    if (sceneConfig.enableCameraTestMode) {
-      stop();
-      return;
-    }
-
-    const start = async () => {
-      if (!navigator?.mediaDevices?.getUserMedia) {
-        setCameraPaneStatus('unsupported');
-        return;
-      }
-      try {
-        setCameraPaneStatus('loading');
-        stop();
-        const constraints = sceneConfig.cameraDeviceId
-          ? { video: { deviceId: { exact: sceneConfig.cameraDeviceId } }, audio: false }
-          : { video: true, audio: false };
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        cameraPaneStreamRef.current = stream;
-        if (cameraPaneVideoRef.current) {
-          cameraPaneVideoRef.current.srcObject = stream;
-          cameraPaneVideoRef.current.muted = true;
-          cameraPaneVideoRef.current.defaultMuted = true;
-          cameraPaneVideoRef.current.play().catch(() => {});
-        }
-        setCameraPaneStatus('ok');
-      } catch (err) {
-        setCameraPaneStatus('error');
-        console.warn('[ProjectorCamera] start failed:', err);
-      }
-    };
-    start();
-
-    return () => {
-      stop();
-    };
-  }, [splitEnabled, sceneConfig.cameraDeviceId, sceneConfig.enableCameraTestMode]);
-
-  useEffect(() => {
-    if (!(splitEnabled && sceneConfig.enableCameraTestMode)) return;
-    const t = setInterval(() => setCameraTestNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, [splitEnabled, sceneConfig.enableCameraTestMode]);
-
   const sampleAverageLuma = (drawable, width, height) => {
     try {
       if (!drawable || !width || !height) return null;
@@ -299,20 +209,12 @@ function ProjectorView() {
     borderRadius: 0,
   };
 
-  const contentStageStyle = splitEnabled
-    ? {
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        bottom: 0,
-        width: contentPaneWidth,
-      }
-    : {
-        position: 'fixed',
-        inset: 0,
-        width: '100%',
-        height: '100%',
-      };
+  const contentStageStyle = {
+    position: 'fixed',
+    inset: 0,
+    width: '100%',
+    height: '100%',
+  };
 
   return (
     <div
@@ -477,136 +379,6 @@ function ProjectorView() {
           getTextSizeClass={getTextSizeClass}
           getProjectorTextSize={getProjectorTextSize}
         />
-      )}
-
-      {splitEnabled && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            right: 0,
-            bottom: 0,
-            width: `${rightPanePercent}%`,
-            zIndex: 30,
-            background: '#000',
-            overflow: 'hidden',
-            borderLeft: '1px solid rgba(255,255,255,0.24)',
-          }}
-        >
-          {sceneConfig.enableCameraTestMode ? (
-            <div
-              style={{
-                width: '100%',
-                height: '100%',
-                transform: `scale(${rightCameraScale})`,
-                transformOrigin: 'center center',
-                background: 'linear-gradient(135deg, #081525 0%, #152b4a 50%, #1f3a63 100%)',
-                position: 'relative',
-                overflow: 'hidden',
-              }}
-            >
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  backgroundImage:
-                    'repeating-linear-gradient(45deg, rgba(255,255,255,0.06) 0 18px, rgba(255,255,255,0.02) 18px 36px)',
-                }}
-              />
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: '24px',
-                  border: '2px solid rgba(255,255,255,0.3)',
-                }}
-              />
-              <div
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  right: 0,
-                  top: '50%',
-                  height: '1px',
-                  background: 'rgba(255,255,255,0.35)',
-                }}
-              />
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  bottom: 0,
-                  left: '50%',
-                  width: '1px',
-                  background: 'rgba(255,255,255,0.35)',
-                }}
-              />
-              <div
-                style={{
-                  position: 'absolute',
-                  left: '20px',
-                  top: '16px',
-                  fontSize: '28px',
-                  color: '#8ee7ff',
-                  fontWeight: 700,
-                  letterSpacing: '1px',
-                }}
-              >
-                CAMERA
-              </div>
-              <div
-                style={{
-                  position: 'absolute',
-                  right: '20px',
-                  bottom: '16px',
-                  fontSize: '26px',
-                  color: 'rgba(255,255,255,0.95)',
-                  fontFamily: 'monospace',
-                }}
-              >
-                {new Date(cameraTestNow).toLocaleTimeString()}
-              </div>
-            </div>
-          ) : (
-            <video
-              ref={cameraPaneVideoRef}
-              autoPlay
-              playsInline
-              muted={sceneConfig.cameraMuted !== false}
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-                transform: `scale(${rightCameraScale})`,
-                transformOrigin: 'center center',
-              }}
-            />
-          )}
-          {!sceneConfig.enableCameraTestMode && effectiveCameraPaneStatus !== 'ok' && (
-            <div
-              style={{
-                position: 'absolute',
-                inset: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'rgba(255,255,255,0.92)',
-                fontSize: '28px',
-                textAlign: 'center',
-                background: 'rgba(0,0,0,0.55)',
-                padding: '28px',
-                lineHeight: 1.5,
-              }}
-            >
-              {effectiveCameraPaneStatus === 'loading'
-                ? 'Loading camera...'
-                : effectiveCameraPaneStatus === 'error'
-                  ? 'Camera unavailable'
-                  : effectiveCameraPaneStatus === 'unsupported'
-                    ? 'Camera not supported'
-                    : 'Camera idle'}
-            </div>
-          )}
-        </div>
       )}
 
       {isBlackout && (

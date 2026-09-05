@@ -65,7 +65,6 @@ const { createMainRuntimeCore } = require('./services/main-runtime-core');
 const { createProjectorControlBridge } = require('./services/projector-control-bridge');
 const { createProjectorRecoveryBridge } = require('./services/projector-recovery-bridge');
 const { createProjectorHealthMonitor } = require('./services/projector-health-monitor');
-const { createNdiOutputService } = require('./services/ndi-output');
 const {
   notifyProjectorUnavailable,
   notifyProjectorActive,
@@ -157,8 +156,6 @@ const {
   ytdlpService,
   licenseRuntime,
   controlCloseController,
-  projectorSceneState,
-  projectorLiveState,
 } = createMainRuntimeCore({
   session,
   logger: console,
@@ -245,9 +242,6 @@ const { controlWindowDeps, projectorWindowDeps } = buildWindowRuntimeDeps({
   createProjectorWindowInstance,
   projectorChannel,
   bindProjectorWindowEvents,
-  getProjectorScene: projectorSceneState.getScene,
-  getProjectorContent: projectorLiveState.getLatestContent,
-  getProjectorBackground: projectorLiveState.getLatestBackground,
   onProjectorDisplayResolved: (display) => {
     projectorDisplayId = display?.id ?? null;
     lastKnownProjectorDisplayId = display?.id ?? lastKnownProjectorDisplayId;
@@ -322,12 +316,6 @@ function stabilizeProjectorWindowAfterDisplayChange(reason = 'display-change') {
   }
 }
 
-const ndiOutputService = createNdiOutputService({
-  getProjectorWindow: () => projectorWindow,
-  logger: console,
-  defaultSourceName: `${app.getName()} NDI`,
-  defaultFps: 30,
-});
 const projectorHealthMonitor = createProjectorHealthMonitor({
   getProjectorWindow: () => projectorWindow,
   getProjectorDisplayId: () => projectorDisplayId,
@@ -346,8 +334,6 @@ const setupIPC = createMainSetupIpc({
   getControlWindow: () => controlWindow,
   getProjectorWindow: () => projectorWindow,
   appendBgDebug: (tag, payload) => bgDebug.append(tag, payload),
-  projectorSceneState,
-  projectorLiveState,
   resolveYouTubeStream,
   sanitizeMediaFileName,
   mediaState,
@@ -370,7 +356,6 @@ const setupIPC = createMainSetupIpc({
   formatBackupStamp,
   collectReferencedMediaPathsFromQueue,
   copyDirectoryMerge,
-  ndiOutputService,
 });
 
 // =================  =================
@@ -466,7 +451,6 @@ setupLifecycleRuntime(
     onBeforeQuitExtra: () => {
       globalShortcut.unregisterAll();
       projectorHealthMonitor.stop();
-      void ndiOutputService.stop();
       // M8: Close all SQLite databases before exit.
       dbStore.closeAll();
       bgDebug.close();

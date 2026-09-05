@@ -4,6 +4,7 @@ dist-electron/
 *.log
 .DS_Store
 tmp-yt-dlp.exe
+vendor/youtube-runtime/
 tmpasar/
 app.log
 keys/

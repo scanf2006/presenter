@@ -22,33 +22,3 @@ test('normalizeTransitionConfig applies defaults and clamps negatives', () => {
   assert.equal(b.delayMs, 0);
   assert.equal(b.durationMs, 0);
 });
-
-test('mergeSceneConfig enforces scene bounds and booleans', () => {
-  const prev = {
-    mode: 'normal',
-    splitDirection: 'content_left_camera_right',
-    cameraDeviceId: 'old',
-    cameraPanePercent: 30,
-    cameraMuted: true,
-    cameraCenterCropPercent: 100,
-    enableCameraTestMode: false,
-  };
-
-  const next = projectorChannel.mergeSceneConfig(prev, {
-    mode: 'split_camera',
-    splitDirection: 'x',
-    cameraDeviceId: 'new',
-    cameraPanePercent: 999,
-    cameraMuted: false,
-    cameraCenterCropPercent: -1,
-    enableCameraTestMode: true,
-  });
-
-  assert.equal(next.mode, 'split_camera');
-  assert.equal(next.splitDirection, 'x');
-  assert.equal(next.cameraDeviceId, 'new');
-  assert.equal(next.cameraPanePercent, 40);
-  assert.equal(next.cameraMuted, false);
-  assert.equal(next.cameraCenterCropPercent, 100);
-  assert.equal(next.enableCameraTestMode, true);
-});

@@ -17,7 +17,7 @@ function isPrivateHost(hostname) {
 }
 
 function createDownloadService({ networkTimeoutMs = 120000, debug = () => {} } = {}) {
-  function downloadUrlToFile(fileUrl, outputPath, headers = {}, maxRedirects = 6) {
+  function downloadUrlToFile(fileUrl, outputPath, headers = {}, maxRedirects = 6, onProgress = () => {}) {
     return new Promise((resolve, reject) => {
       const cleanupTmp = () => {
         const tmpPath = `${outputPath}.download`;
@@ -64,6 +64,16 @@ function createDownloadService({ networkTimeoutMs = 120000, debug = () => {} } =
           }
           const tmpPath = `${outputPath}.download`;
           const ws = fs.createWriteStream(tmpPath);
+          const totalBytes = Number(res.headers['content-length']) || 0;
+          let receivedBytes = 0;
+          res.on('data', (chunk) => {
+            receivedBytes += chunk.length;
+            onProgress({
+              receivedBytes,
+              totalBytes,
+              percent: totalBytes > 0 ? Math.min(100, Math.round((receivedBytes / totalBytes) * 100)) : null,
+            });
+          });
           // M9-R2: Handle errors on the response stream to prevent unhandled exceptions.
           res.on('error', (err) => {
             ws.destroy();
@@ -100,7 +110,7 @@ function createDownloadService({ networkTimeoutMs = 120000, debug = () => {} } =
     });
   }
 
-  async function downloadUrlToFileWithRetry(fileUrl, outputPath) {
+  async function downloadUrlToFileWithRetry(fileUrl, outputPath, onProgress = () => {}) {
     const attempts = [
       {},
       {
@@ -120,7 +130,7 @@ function createDownloadService({ networkTimeoutMs = 120000, debug = () => {} } =
       const hdr = attempts[i];
       try {
         debug('youtube-download-attempt', { index: i + 1, headers: Object.keys(hdr) });
-        await downloadUrlToFile(fileUrl, outputPath, hdr);
+        await downloadUrlToFile(fileUrl, outputPath, hdr, 6, onProgress);
         return;
       } catch (err) {
         lastErr = err;

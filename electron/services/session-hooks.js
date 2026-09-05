@@ -74,30 +74,6 @@ function createSessionHooks({ session, logger = console }) {
     youtubeHeaderHookInstalled = true;
   }
 
-  // H4: Only grant camera/microphone to the app's own origin, not to all content.
-  function setupMediaPermissionHandlers() {
-    try {
-      const ses = session.defaultSession;
-      if (!ses) return;
-      ses.setPermissionRequestHandler((webContents, permission, callback) => {
-        if (permission === 'media' || permission === 'camera' || permission === 'microphone') {
-          try {
-            const url = webContents.getURL();
-            const isLocalApp =
-              url.startsWith('file://') || (devMode && url.startsWith(`${devHttpOrigin}/`));
-            callback(isLocalApp);
-          } catch (_) {
-            callback(false);
-          }
-          return;
-        }
-        callback(false);
-      });
-    } catch (err) {
-      logger.warn('[MediaPermission] setup failed:', err.message);
-    }
-  }
-
   // H5: Inject Content Security Policy headers for all pages.
   function setupContentSecurityPolicy() {
     try {
@@ -156,7 +132,6 @@ function createSessionHooks({ session, logger = console }) {
 
   return {
     setupYouTubeRequestHeaders,
-    setupMediaPermissionHandlers,
     setupContentSecurityPolicy,
     setupNavigationRestrictions,
   };

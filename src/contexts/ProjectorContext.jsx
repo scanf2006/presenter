@@ -3,14 +3,11 @@ import useDisplayProjectorStatus from '../hooks/useDisplayProjectorStatus';
 import useProjectionSettings from '../hooks/useProjectionSettings';
 import useProjectorPreviewDispatch from '../hooks/useProjectorPreviewDispatch';
 import useWindowProjectorControls from '../hooks/useWindowProjectorControls';
-import useCameraPreview from '../hooks/useCameraPreview';
 import usePreviewVideoControls from '../hooks/usePreviewVideoControls';
 import useYouTubeProjection from '../hooks/useYouTubeProjection';
 import useObservedWidth from '../hooks/useObservedWidth';
 import useSetupBundleActions from '../hooks/useSetupBundleActions';
 import useStartupHealth from '../hooks/useStartupHealth';
-import useNdiOutput from '../hooks/useNdiOutput';
-import useProjectorSceneSync from '../hooks/useProjectorSceneSync';
 import usePreviewLayoutMetrics from '../hooks/usePreviewLayoutMetrics';
 import { useAppContext } from './AppContext';
 
@@ -43,8 +40,6 @@ export function ProjectorProvider({ children }) {
     setTransitionDelayMs,
     transitionDurationMs,
     setTransitionDurationMs,
-    sceneConfig,
-    setSceneConfig,
   } = useProjectionSettings({ isElectron });
 
   const {
@@ -52,7 +47,6 @@ export function ProjectorProvider({ children }) {
     previewSlide,
     previewMaskVisible,
     pushToProjector,
-    resendCurrentSlideToProjector,
     blackout: handleBlackout,
   } = useProjectorPreviewDispatch({
     isElectron,
@@ -65,11 +59,6 @@ export function ProjectorProvider({ children }) {
 
   const { normalizeYouTubeUrl, getYouTubeVideoId, getYouTubeEmbedUrl, resolveYouTubePayload } =
     useYouTubeProjection({ isElectron });
-
-  const { cameraDevices, cameraStatus, previewTestNow, cameraPreviewRef } = useCameraPreview({
-    sceneConfig,
-    setSceneConfig,
-  });
 
   const {
     startProjector: handleStartProjector,
@@ -110,34 +99,12 @@ export function ProjectorProvider({ children }) {
   } = usePreviewVideoControls();
 
   const previewStageWidth = useObservedWidth(previewStageRef, []);
-  const {
-    previewAspectRatio,
-    previewSplitEnabled,
-    previewContentPanePercent,
-    previewRightPanePercent,
-    previewCameraScale,
-  } = usePreviewLayoutMetrics({ sceneConfig });
+  const { previewAspectRatio } = usePreviewLayoutMetrics({ displays, projectorDisplayId });
 
   const { startupHealthBusy, startupHealthReport, runStartupHealthCheck } = useStartupHealth({
     isElectron,
     showToast,
   });
-  const { ndiStatus, refreshNdiStatus, startNdiOutput, stopNdiOutput, toggleNdiOutput } =
-    useNdiOutput({
-      isElectron,
-      showToast,
-      projectorActive,
-    });
-
-  useProjectorSceneSync({
-    isElectron,
-    projectorActive,
-    projectorDisplayId,
-    sceneConfig,
-    currentSlide,
-    resendCurrentSlideToProjector,
-  });
-
   const value = useMemo(
     () => ({
       // Display / projector status
@@ -163,26 +130,10 @@ export function ProjectorProvider({ children }) {
       setTransitionDelayMs,
       transitionDurationMs,
       setTransitionDurationMs,
-      sceneConfig,
-      setSceneConfig,
-      ndiStatus,
-      refreshNdiStatus,
-      startNdiOutput,
-      stopNdiOutput,
-      toggleNdiOutput,
       // Preview geometry
       previewStageRef,
       previewStageWidth,
       previewAspectRatio,
-      previewSplitEnabled,
-      previewContentPanePercent,
-      previewRightPanePercent,
-      previewCameraScale,
-      // Camera
-      cameraDevices,
-      cameraStatus,
-      previewTestNow,
-      cameraPreviewRef,
       // Video controls
       previewVideoRef,
       previewVideoCurrent,
@@ -230,23 +181,8 @@ export function ProjectorProvider({ children }) {
       setTransitionDelayMs,
       transitionDurationMs,
       setTransitionDurationMs,
-      sceneConfig,
-      setSceneConfig,
-      ndiStatus,
-      refreshNdiStatus,
-      startNdiOutput,
-      stopNdiOutput,
-      toggleNdiOutput,
       previewStageWidth,
       previewAspectRatio,
-      previewSplitEnabled,
-      previewContentPanePercent,
-      previewRightPanePercent,
-      previewCameraScale,
-      cameraDevices,
-      cameraStatus,
-      previewTestNow,
-      cameraPreviewRef,
       previewVideoRef,
       previewVideoCurrent,
       previewVideoDuration,

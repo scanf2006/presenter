@@ -1,3 +1,5 @@
+const path = require('path');
+
 async function runWhenReadyRuntime({
   sessionHooks,
   hydrateUserDataFromBundledSeed,
@@ -40,7 +42,6 @@ async function runWhenReadyRuntime({
   logger = console,
 }) {
   sessionHooks.setupYouTubeRequestHeaders();
-  sessionHooks.setupMediaPermissionHandlers();
   // H5: Apply Content Security Policy to all sessions.
   if (typeof sessionHooks.setupContentSecurityPolicy === 'function') {
     sessionHooks.setupContentSecurityPolicy();
@@ -61,6 +62,11 @@ async function runWhenReadyRuntime({
   setAppSettingsStore(appSettingsStore);
   mediaState.applyRuntimePaths(runtimePaths);
   ytdlpService.setBinaryPath(mediaState.getYtDlpBinPath());
+  ytdlpService.setBundledToolsPath(
+    app.isPackaged
+      ? path.join(process.resourcesPath, 'youtube-runtime')
+      : path.join(process.cwd(), 'vendor', 'youtube-runtime')
+  );
 
   // M3-R2: Wrap non-critical init in try/catch so a failure (e.g. corrupt DB)
   // doesn't kill the entire startup. The app can run in degraded mode.

@@ -11,8 +11,8 @@
 ## 2. 核心用户与场景 / Core Users and Scenarios
 - 核心用户：投影同工、敬拜团队、讲员支持同工。  
   Core users: projection operators, worship team members, and speaker support staff.
-- 场景：会前准备、会中快速切换、扩展屏直投、OBS/NDI 联动。  
-  Scenarios: pre-service prep, in-service fast switching, extended-display projection, OBS/NDI integration.
+- 场景：会前准备、会中快速切换、扩展屏直投。
+  Scenarios: pre-service prep, in-service fast switching, and extended-display projection.
 
 ## 3. 功能范围 / Functional Scope
 1. 内容管理 / Content Management
@@ -38,8 +38,6 @@
   Persist required per-item state by type (background, font, verse/page state, etc.).
 
 4. 集成能力 / Integrations
-- NDI 输出（供 OBS/vMix 等接收）。  
-  NDI output for OBS/vMix and similar tools.
 - 安装包发布与离线运行支持。  
   Installer-based distribution with offline operation support.
 
@@ -104,15 +102,7 @@
 - 预览框与实际投影应尽量一致，差异需可解释并可配置。  
   Preview and projected output should remain aligned; differences must be explainable/configurable.
 
-3. OBS/NDI 协作 / OBS and NDI Interop
-- NDI 输出作为一等能力，界面应能显示可用状态与接收端数量。  
-  NDI output is first-class and should expose availability and receiver count in UI.
-- OBS 模式不应把控制界面误作为主输出。  
-  OBS mode must not accidentally expose the control UI as primary output content.
-- 在不可投影状态下，相关模式应有清晰启用限制与低噪声提示。  
-  In non-projecting state, related mode gating and low-noise messaging are required.
-
-4. 队列与交互 / Queue and Interaction
+3. 队列与交互 / Queue and Interaction
 - `Del Selected`、`Clear Queue` 等高风险动作必须确认。  
   High-risk actions such as `Del Selected` and `Clear Queue` require confirmation.
 - 队列选中态要明显，键盘焦点与选中状态应同步。  

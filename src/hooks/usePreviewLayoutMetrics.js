@@ -1,29 +1,15 @@
 import { useMemo } from 'react';
-import { PREVIEW, SCENE } from '../constants/ui';
+import { PREVIEW } from '../constants/ui';
 
-export default function usePreviewLayoutMetrics({ sceneConfig }) {
+export default function usePreviewLayoutMetrics({ displays, projectorDisplayId }) {
   return useMemo(() => {
-    const previewSplitEnabled = false;
-    const previewRightPanePercent = Math.max(
-      SCENE.CAMERA_PANE_MIN_PERCENT,
-      Math.min(
-        SCENE.CAMERA_PANE_MAX_PERCENT,
-        sceneConfig.cameraPanePercent || SCENE.CAMERA_PANE_DEFAULT_PERCENT
-      )
-    );
-    const previewContentPanePercent = 100 - previewRightPanePercent;
-    const previewCameraScale = Math.max(
-      1,
-      Number(sceneConfig.cameraCenterCropPercent || SCENE.CAMERA_CROP_DEFAULT_PERCENT) /
-        SCENE.CAMERA_CROP_DEFAULT_PERCENT
-    );
+    const display = displays.find((item) => String(item.id) === String(projectorDisplayId));
+    const width = Number(display?.size?.width || display?.bounds?.width);
+    const height = Number(display?.size?.height || display?.bounds?.height);
+    const previewAspectRatio = width > 0 && height > 0 ? `${width} / ${height}` : PREVIEW.ASPECT_RATIO_16_9;
 
     return {
-      previewAspectRatio: PREVIEW.ASPECT_RATIO_16_9,
-      previewSplitEnabled,
-      previewContentPanePercent,
-      previewRightPanePercent,
-      previewCameraScale,
+      previewAspectRatio,
     };
-  }, [sceneConfig.cameraPanePercent, sceneConfig.cameraCenterCropPercent]);
+  }, [displays, projectorDisplayId]);
 }

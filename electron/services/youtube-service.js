@@ -1,33 +1,4 @@
-function normalizeYouTubeWatchUrl(rawUrl) {
-  try {
-    const u = new URL(rawUrl);
-    const host = u.hostname.toLowerCase();
-    const toWatch = (id) => `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
-
-    if (host === 'youtu.be') {
-      const id = u.pathname.replace('/', '').trim();
-      if (!id) return null;
-      return toWatch(id);
-    }
-    if (host.includes('youtube.com') || host === 'm.youtube.com' || host === 'music.youtube.com') {
-      if (u.pathname.startsWith('/watch')) {
-        const id = (u.searchParams.get('v') || '').trim();
-        return id ? toWatch(id) : null;
-      }
-      if (u.pathname.startsWith('/shorts/')) {
-        const id = (u.pathname.split('/')[2] || '').trim();
-        return id ? toWatch(id) : null;
-      }
-      if (u.pathname.startsWith('/embed/')) {
-        const id = (u.pathname.split('/')[2] || '').trim();
-        return id ? toWatch(id) : null;
-      }
-    }
-  } catch (_) {
-    return null;
-  }
-  return null;
-}
+const { normalizeYouTubeWatchUrl } = require('../../shared/youtube.cjs');
 
 function createYouTubeResolver({ playDl, ytdl }) {
   // R3-M: Timeout for YouTube resolution to prevent indefinite hangs.

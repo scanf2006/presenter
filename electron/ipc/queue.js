@@ -1,6 +1,6 @@
 const fsp = require('fs/promises');
 const path = require('path');
-const { buildQueueEnvelope, migrateQueuePayload } = require('../services/queue-schema');
+const { buildQueueEnvelope, migrateQueuePayload } = require('../../shared/queue-schema.cjs');
 
 function registerQueueIPC({ ipcMain, app }) {
   // R3-M: Size limit to prevent unbounded queue growth.
@@ -37,14 +37,14 @@ function registerQueueIPC({ ipcMain, app }) {
       try {
         raw = await fsp.readFile(queuePath, 'utf8');
       } catch (readErr) {
-        if (readErr?.code === 'ENOENT') return [];
+        if (readErr?.code === 'ENOENT') return { success: true, items: [] };
         throw readErr;
       }
       const parsed = JSON.parse(raw);
-      return migrateQueuePayload(parsed).items;
+      return { success: true, items: migrateQueuePayload(parsed).items };
     } catch (err) {
       console.warn('[Queue] load failed:', err.message);
-      return [];
+      return { success: false, items: [], error: err.message };
     }
   });
 }
