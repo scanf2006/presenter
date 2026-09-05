@@ -37,13 +37,15 @@ test('queue-save and queue-load persist queue file in userData', async () => {
   assert.ok(Array.isArray(persisted.items));
 
   const loaded = await invoke('queue-load');
-  assert.equal(loaded.length, 1);
-  assert.equal(loaded[0].id, '1');
-  assert.equal(loaded[0].title, 'Song A');
-  assert.equal(loaded[0].type, 'lyrics');
-  assert.equal(loaded[0].section, 'songs');
-  assert.deepEqual(loaded[0].payload, { type: 'lyrics', text: 'hello' });
-  assert.ok(Number.isFinite(loaded[0].createdAt));
+  assert.equal(loaded.success, true);
+  const items = loaded.items;
+  assert.equal(items.length, 1);
+  assert.equal(items[0].id, '1');
+  assert.equal(items[0].title, 'Song A');
+  assert.equal(items[0].type, 'lyrics');
+  assert.equal(items[0].section, 'songs');
+  assert.deepEqual(items[0].payload, { type: 'lyrics', text: 'hello' });
+  assert.ok(Number.isFinite(items[0].createdAt));
 
   fs.rmSync(userData, { recursive: true, force: true });
 });
@@ -62,11 +64,12 @@ test('queue-load migrates legacy v1 array payload', async () => {
   );
 
   const loaded = await invoke('queue-load');
-  assert.equal(loaded.length, 1);
-  assert.equal(loaded[0].title, 'Legacy');
-  assert.equal(loaded[0].section, 'bible');
-  assert.equal(loaded[0].type, 'bible');
-  assert.ok(Number.isFinite(loaded[0].createdAt));
+  assert.equal(loaded.success, true);
+  assert.equal(loaded.items.length, 1);
+  assert.equal(loaded.items[0].title, 'Legacy');
+  assert.equal(loaded.items[0].section, 'bible');
+  assert.equal(loaded.items[0].type, 'bible');
+  assert.ok(Number.isFinite(loaded.items[0].createdAt));
 
   fs.rmSync(userData, { recursive: true, force: true });
 });
@@ -77,11 +80,11 @@ test('queue-load returns empty array for missing or malformed file', async () =>
   const app = { getPath: () => userData };
   registerQueueIPC({ ipcMain, app });
 
-  assert.deepEqual(await invoke('queue-load'), []);
+  assert.deepEqual(await invoke('queue-load'), { success: true, items: [] });
 
   const queuePath = path.join(userData, 'projector-queue.json');
   fs.writeFileSync(queuePath, '{"bad":true', 'utf8');
-  assert.deepEqual(await invoke('queue-load'), []);
+  assert.equal((await invoke('queue-load')).success, false);
 
   fs.rmSync(userData, { recursive: true, force: true });
 });

@@ -1,19 +1,15 @@
 import React from 'react';
 import { useProjectorContext } from '../../../contexts/ProjectorContext';
-import { useAppContext } from '../../../contexts/AppContext';
 import { useI18n } from '../../../contexts/I18nContext';
 
 function DisplaysSection() {
   const { t } = useI18n();
-  const { showToast } = useAppContext();
   const {
     displays,
     projectorDisplayId,
     projectorActive,
     handleStartProjector,
     handleStopProjector,
-    ndiStatus,
-    toggleNdiOutput,
   } = useProjectorContext();
 
   return (
@@ -27,49 +23,6 @@ function DisplaysSection() {
           'Select an external display to start projection. Content will be fullscreen on the selected screen.'
         )}
       </p>
-      <div
-        className={`display-card ${ndiStatus?.active ? 'display-card--active' : ''}`}
-        style={{
-          marginBottom: '14px',
-          opacity: projectorActive ? 1 : 0.55,
-          cursor: projectorActive ? 'pointer' : 'not-allowed',
-        }}
-        role="button"
-        tabIndex={0}
-        onClick={() => {
-          if (!projectorActive) {
-            showToast(t('displays.startProjectorFirst', 'Start projector first, then enable NDI output.'), 'warning');
-            return;
-          }
-          void toggleNdiOutput();
-        }}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            if (!projectorActive) {
-              showToast(t('displays.startProjectorFirst', 'Start projector first, then enable NDI output.'), 'warning');
-              return;
-            }
-            void toggleNdiOutput();
-          }
-        }}
-      >
-        <span className="display-card__icon">NDI</span>
-        <div className="display-card__info">
-          <div className="display-card__name">{t('displays.ndiOutput', 'NDI Output')}</div>
-          <div className="display-card__resolution">
-            {t('displays.source', 'Source')}: {ndiStatus?.sourceName || 'ChurchDisplay Pro NDI'} | {t('displays.receivers', 'Receivers')}:{' '}
-            {ndiStatus?.connections ?? 0}
-          </div>
-        </div>
-        <span className="display-card__badge display-card__badge--projecting">
-          {ndiStatus?.active
-            ? t('displays.enabled', 'Enabled')
-            : projectorActive
-              ? t('displays.disabled', 'Disabled')
-              : t('displays.unavailable', 'Unavailable')}
-        </span>
-      </div>
       <div className="cp-stack-md">
         {displays.map((display) => (
           <div

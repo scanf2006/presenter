@@ -36,6 +36,7 @@ function MediaManager({
   const [selectedMediaKey, setSelectedMediaKey] = useState('');
   const [detailOpenedFromQueue, setDetailOpenedFromQueue] = useState(false);
   const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [youtubeDownload, setYoutubeDownload] = useState({ status: 'idle', percent: null });
   const dropRef = useRef(null);
   const pdfThumbRefs = useRef(new Map());
   const pptThumbRefs = useRef(new Map());
@@ -46,6 +47,16 @@ function MediaManager({
   const isElectron = typeof window.churchDisplay !== 'undefined';
   const { showToast, showConfirm, activeSection } = useAppContext();
   const isMediaSectionActive = activeSection === 'media';
+
+  useEffect(() => {
+    if (typeof window.churchDisplay?.onYouTubeCacheProgress !== 'function') return undefined;
+    return window.churchDisplay.onYouTubeCacheProgress((next) => {
+      setYoutubeDownload({
+        status: next?.status || 'idle',
+        percent: Number.isFinite(next?.percent) ? next.percent : null,
+      });
+    });
+  }, []);
 
   const logStaleDrop = useCallback((type) => {
     if (!import.meta.env.DEV) return;
@@ -318,50 +329,48 @@ function MediaManager({
     });
   }, [youtubeUrl, parseYouTubeId, onProjectMedia, showToast, t]);
 
-  const handleQueueYouTube = useCallback(async () => {
+  const handleQueueYouTube = useCallback(() => {
     const id = parseYouTubeId(youtubeUrl);
     if (!id) {
       showToast(t('media.invalidYoutubeUrl', 'Please enter a valid YouTube URL'), 'warning');
       return;
     }
     const normalizedUrl = normalizeYouTubeWatchUrl(youtubeUrl) || youtubeUrl.trim();
-    let cachedMeta = null;
+    if (!onAddPlaylist) return;
 
-    // Best-effort pre-cache at queue-time so first queue playback can start faster.
-    if (
-      typeof window !== 'undefined' &&
-      window.churchDisplay &&
-      typeof window.churchDisplay.youtubeCacheDownload === 'function'
-    ) {
-      try {
-        const resolved = await window.churchDisplay.youtubeCacheDownload(normalizedUrl);
-        if (resolved?.success && resolved?.localPath) {
-          cachedMeta = {
-            cachedLocalPath: resolved.localPath,
-            cachedAt: Date.now(),
-            cachedTitle: resolved.title || '',
-          };
-        }
-      } catch (_) {
-        // Ignore cache warm-up errors here; queue add should still succeed.
-      }
-    }
-
-    if (onAddPlaylist) {
-      onAddPlaylist({
+    onAddPlaylist({
+      type: 'youtube',
+      name: `YouTube - ${id}`,
+      payload: {
         type: 'youtube',
+        videoId: id,
+        url: normalizedUrl,
         name: `YouTube - ${id}`,
-        payload: {
-          type: 'youtube',
-          videoId: id,
-          url: normalizedUrl,
-          name: cachedMeta?.cachedTitle || `YouTube - ${id}`,
-          ...cachedMeta,
-        },
-      });
-      if (cachedMeta?.cachedLocalPath) {
-        showToast(t('media.youtubeCached', 'YouTube cached and added to queue'));
-      }
+      },
+    });
+    showToast(t('media.youtubeQueued', 'YouTube added to queue. Caching in background.'), 'info');
+
+    if (typeof window.churchDisplay?.youtubeCacheDownload === 'function') {
+      setYoutubeDownload({ status: 'resolving', percent: null });
+      void (async () => {
+        try {
+          const resolved = await window.churchDisplay.youtubeCacheDownload(normalizedUrl);
+          if (resolved?.success && resolved?.localPath) {
+            showToast(t('media.youtubeCached', 'YouTube cached and added to queue'));
+            return;
+          }
+          showToast(
+            t('media.youtubeCacheFailed', 'YouTube was added to queue, but offline caching failed.'),
+            'warning'
+          );
+        } catch (_) {
+          setYoutubeDownload({ status: 'failed', percent: null });
+          showToast(
+            t('media.youtubeCacheFailed', 'YouTube was added to queue, but offline caching failed.'),
+            'warning'
+          );
+        }
+      })();
     }
   }, [youtubeUrl, parseYouTubeId, onAddPlaylist, showToast, t]);
 
@@ -631,7 +640,10 @@ function MediaManager({
               type="text"
               placeholder={t('media.youtubePlaceholder', 'Paste YouTube URL (e.g. https://youtu.be/...)')}
               value={youtubeUrl}
-              onChange={(e) => setYoutubeUrl(e.target.value)}
+              onChange={(e) => {
+                setYoutubeUrl(e.target.value);
+                setYoutubeDownload({ status: 'idle', percent: null });
+              }}
               className="cp-input-inline cp-input-inline--sm"
             />
             <button className="btn btn--primary" onClick={handleProjectYouTube}>
@@ -641,6 +653,28 @@ function MediaManager({
               {t('media.queue', 'Queue')}
             </button>
           </div>
+          {youtubeDownload.status !== 'idle' && (
+            <div style={{ marginTop: '-6px', marginBottom: '12px', fontSize: '12px' }}>
+              {(youtubeDownload.status === 'resolving' || youtubeDownload.status === 'downloading') && (
+                <progress
+                  max="100"
+                  value={Number.isFinite(youtubeDownload.percent) ? youtubeDownload.percent : undefined}
+                  style={{ width: '100%', display: 'block', marginBottom: '4px' }}
+                />
+              )}
+              <span>
+                {youtubeDownload.status === 'resolving'
+                  ? t('media.youtubeDownloadResolving', 'Preparing YouTube download...')
+                  : youtubeDownload.status === 'downloading'
+                    ? Number.isFinite(youtubeDownload.percent)
+                      ? `${t('media.youtubeDownloading', 'Downloading YouTube...')} ${youtubeDownload.percent}%`
+                      : t('media.youtubeDownloading', 'Downloading YouTube...')
+                    : youtubeDownload.status === 'success'
+                      ? t('media.youtubeDownloadSuccess', 'YouTube download complete.')
+                      : t('media.youtubeDownloadFailed', 'YouTube download failed.')}
+              </span>
+            </div>
+          )}
 
           <div className="media-filter-bar">
             {filterOptions.map((opt) => (

@@ -13,12 +13,11 @@ import {
 } from '../../../utils/freeTextLayout';
 import { useProjectorContext } from '../../../contexts/ProjectorContext';
 import { useI18n } from '../../../contexts/I18nContext';
-import CameraPane from './CameraPane';
 
 /**
  * PreviewStage renders the main live-preview display area showing the current
  * projector slide content (text, image, video, YouTube, PDF, bible, lyrics),
- * background media, camera split pane, and the transition mask overlay.
+ * background media and the transition mask overlay.
  */
 function PreviewStage() {
   const { locale } = useI18n();
@@ -26,8 +25,7 @@ function PreviewStage() {
   const {
     previewStageRef,
     previewSlide,
-    previewSplitEnabled,
-    previewContentPanePercent,
+    previewAspectRatio,
     previewStageWidth,
     previewVideoRef,
     handleLoadedMetadata,
@@ -84,7 +82,7 @@ function PreviewStage() {
     <div
       ref={previewStageRef}
       className="preview-screen"
-      style={{ aspectRatio: PREVIEW.ASPECT_RATIO_16_9 }}
+      style={{ aspectRatio: previewAspectRatio || PREVIEW.ASPECT_RATIO_16_9 }}
     >
       <span className="preview-screen__label">{isZh ? '投影输出' : 'Projector Output'}</span>
       <div className="preview-screen__content">
@@ -148,7 +146,7 @@ function PreviewStage() {
                 position: 'absolute',
                 inset: 0,
                 zIndex: 2,
-                width: previewSplitEnabled ? `${previewContentPanePercent}%` : '100%',
+                width: '100%',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -314,35 +312,13 @@ function PreviewStage() {
                   style={{
                     width: '100%',
                     height: '100%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '6px',
                   }}
                 >
-                  <div
-                    style={{
-                      flex: 1,
-                      minHeight: 0,
-                      border: '1px solid rgba(255,255,255,0.15)',
-                      borderRadius: '4px',
-                      overflow: 'hidden',
-                    }}
-                  >
-                    <PdfRenderer
-                      path={previewSlide.path}
-                      pageNumber={previewSlide.page || 1}
-                      fitMode={previewSlide?.fitMode || 'contain'}
-                    />
-                  </div>
-                  <div
-                    style={{
-                      fontSize: '10px',
-                      color: 'rgba(255,255,255,0.7)',
-                      textAlign: 'left',
-                    }}
-                  >
-                    {previewSlide.name} | {isZh ? '页' : 'Page'} {previewSlide.page || 1}
-                  </div>
+                  <PdfRenderer
+                    path={previewSlide.path}
+                    pageNumber={previewSlide.page || 1}
+                    fitMode={previewSlide?.fitMode || 'contain'}
+                  />
                 </div>
               )}
 
@@ -420,8 +396,6 @@ function PreviewStage() {
                 </div>
               )}
             </div>
-
-            {previewSplitEnabled && <CameraPane />}
 
             <div
               style={{

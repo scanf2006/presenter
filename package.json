@@ -1,6 +1,6 @@
 {
   "name": "churchdisplay-pro",
-  "version": "0.3.195",
+  "version": "0.3.202",
   "description": "ChurchDisplay Pro - Worship projection system",
   "main": "electron/main.js",
   "build": {
@@ -8,17 +8,13 @@
     "productName": "churchdisplay-pro",
     "files": [
       "electron/**/*",
+      "shared/**/*",
       "dist/**/*",
-      "!node_modules/@stagetimerio/grandiose/build/**",
-      "!node_modules/@stagetimerio/grandiose/ndi/**",
       "package.json",
       "LICENSE",
       "EULA.md"
     ],
-    "asarUnpack": [
-      "electron/ppt-convert.ps1",
-      "node_modules/@stagetimerio/grandiose/dist/**"
-    ],
+    "asarUnpack": ["electron/ppt-convert.ps1"],
     "extraResources": [
       {
         "from": "data",
@@ -26,6 +22,10 @@
         "filter": [
           "bible_*.db"
         ]
+      },
+      {
+        "from": "vendor/youtube-runtime",
+        "to": "youtube-runtime"
       }
     ],
     "win": {
@@ -48,16 +48,12 @@
     "commercial:gate": "node scripts/commercial-gate.js",
     "lint": "eslint \"src/**/*.{js,jsx}\" \"electron/**/*.js\"",
     "format": "prettier --write .",
-    "ndi:prepare": "node scripts/prepare-ndi.js",
-    "ndi:verify:package": "node scripts/verify-ndi-package.js",
+    "runtime:prepare": "powershell -ExecutionPolicy Bypass -File scripts/prepare-youtube-runtime.ps1",
     "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5199 && electron .\"",
-    "electron:build:ndi": "npm run ndi:prepare && vite build && electron-builder",
-    "electron:build:ndi:unsigned": "npm run ndi:prepare && vite build && electron-builder --win nsis --x64 --config.win.signAndEditExecutable=false",
-    "electron:build:ndi:unsigned:verify": "npm run electron:build:ndi:unsigned && npm run ndi:verify:package",
-    "electron:build": "vite build && electron-builder",
-    "electron:build:unsigned": "vite build && electron-builder --win nsis --x64 --config.win.signAndEditExecutable=false",
-    "electron:build:zh:unsigned": "set VITE_APP_LOCALE=zh-CN&& vite build && electron-builder --win nsis --x64 --config electron-builder.zh.json --config.win.signAndEditExecutable=false",
-    "electron:build:lite:unsigned": "vite build && electron-builder --win nsis --x64 --config electron-builder.lite.json --config.win.signAndEditExecutable=false",
+    "electron:build": "npm run runtime:prepare && vite build && electron-builder",
+    "electron:build:unsigned": "npm run runtime:prepare && vite build && electron-builder --win nsis --x64 --config.win.signAndEditExecutable=false",
+    "electron:build:zh:unsigned": "npm run runtime:prepare && set VITE_APP_LOCALE=zh-CN&& vite build && electron-builder --win nsis --x64 --config electron-builder.zh.json --config.win.signAndEditExecutable=false",
+    "electron:build:lite:unsigned": "npm run runtime:prepare && vite build && electron-builder --win nsis --x64 --config electron-builder.lite.json --config.win.signAndEditExecutable=false",
     "license:generate": "node scripts/generate-license.js",
     "diagnostics:incident-bundle": "node scripts/incident-bundle.js"
   },
@@ -77,9 +73,6 @@
     "play-dl": "^1.9.7",
     "sql.js": "^1.14.1",
     "yt-dlp-wrap": "^2.3.12"
-  },
-  "optionalDependencies": {
-    "@stagetimerio/grandiose": "^0.2.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",

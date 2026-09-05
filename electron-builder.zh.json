@@ -4,25 +4,25 @@
   "artifactName": "${productName} Setup ${version}.${ext}",
   "files": [
     "electron/**/*",
+    "shared/**/*",
     "dist/**/*",
-    "!node_modules/@stagetimerio/grandiose/build/**",
-    "!node_modules/@stagetimerio/grandiose/ndi/**",
     "package.json",
     "LICENSE",
     "EULA.md"
   ],
-  "asarUnpack": [
-    "electron/ppt-convert.ps1",
-    "node_modules/@stagetimerio/grandiose/dist/**"
-  ],
+  "asarUnpack": ["electron/ppt-convert.ps1"],
   "extraResources": [
-    {
-      "from": "data",
-      "to": "data",
-      "filter": [
-        "bible_*.db"
-      ]
-    }
+      {
+        "from": "data",
+        "to": "data",
+        "filter": [
+          "bible_*.db"
+        ]
+      },
+      {
+        "from": "vendor/youtube-runtime",
+        "to": "youtube-runtime"
+      }
   ],
   "win": {
     "target": [

@@ -23,14 +23,12 @@
 - `ControlPanel` is reduced to orchestration and delegates UI blocks to:
   - `src/components/control-panel/TopBar.jsx`
   - `src/components/control-panel/SidebarQueue.jsx`
-  - `src/components/control-panel/MainContentArea.jsx`
   - `src/components/control-panel/PreviewPanel.jsx`
-  - `src/components/control-panel/LegalModal.jsx`
   - `src/components/control-panel/ToastOverlay.jsx`
 
 5. `src/hooks/*`
 - State/action domains extracted from `ControlPanel`:
-- queue, playback, projection settings, video controls, camera preview, editor transform, etc.
+- queue, playback, projection settings, video controls, and editor transform.
 
 6. `src/constants/ui.js`
 - Shared UI constants for transition limits, scene bounds, text layout/size bounds, preview constants.
@@ -50,6 +48,9 @@
 
 4. Setup bundle
 - Smart minimal export/import with media reference collection
+
+5. Development seed media
+- `data/seed` is used only in development and is excluded from production installers.
 
 ## Logging Strategy
 

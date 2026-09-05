@@ -7,10 +7,6 @@ function registerProjectorEventIPC({
   getControlWindow,
   ensureProjectionAccess,
   getTrialStatus,
-  getLatestProjectorScene,
-  setLatestProjectorScene,
-  setLatestProjectorContent,
-  setLatestProjectorBackground,
 }) {
   function notifyTrialWarning(payload) {
     const controlWindow = typeof getControlWindow === 'function' ? getControlWindow() : null;
@@ -68,13 +64,6 @@ function registerProjectorEventIPC({
       backgroundType: data?.background?.type,
       backgroundPath: data?.background?.path,
     });
-    if (typeof setLatestProjectorContent === 'function') {
-      setLatestProjectorContent(data || null);
-    }
-    if (typeof setLatestProjectorBackground === 'function') {
-      setLatestProjectorBackground(data?.background || null);
-    }
-
     if (data?.type === 'youtube') {
       const youtubeUrl =
         data?.url ||
@@ -110,64 +99,10 @@ function registerProjectorEventIPC({
     return dispatchToProjector(data, 'send-to-projector-ack');
   });
 
-  ipcMain.on('send-to-projector-background', (_event, data) => {
-    const projectorWindow = getProjectorWindow();
-    if (!projectorWindow || projectorWindow.isDestroyed()) return;
-
-    const access = gateProjection('send-to-projector-background');
-    if (!access.allowed) return;
-
-    appendBgDebug('send-to-projector-background', {
-      hasBackground: !!data,
-      backgroundType: data?.type,
-      backgroundPath: data?.path,
-    });
-    if (typeof setLatestProjectorBackground === 'function') {
-      setLatestProjectorBackground(data || null);
-    }
-    projectorWindow.webContents.send('projector-background', data);
-  });
-
   ipcMain.on('projector-transition', (_event, transitionData) => {
     const projectorWindow = getProjectorWindow();
     if (projectorWindow && !projectorWindow.isDestroyed()) {
       projectorWindow.webContents.send('projector-transition', transitionData);
-    }
-  });
-
-  ipcMain.on('projector-scene', (_event, sceneData) => {
-    // R3-C1: Allow-list properties to prevent prototype pollution from renderer.
-    const safe = sceneData && typeof sceneData === 'object' ? sceneData : {};
-    const picked = {};
-    const ALLOWED_KEYS = [
-      'mode',
-      'splitDirection',
-      'cameraDeviceId',
-      'cameraPanePercent',
-      'cameraMuted',
-      'cameraCenterCropPercent',
-      'enableCameraTestMode',
-    ];
-    for (const key of ALLOWED_KEYS) {
-      if (Object.prototype.hasOwnProperty.call(safe, key)) {
-        picked[key] = safe[key];
-      }
-    }
-    const nextScene = {
-      ...getLatestProjectorScene(),
-      ...picked,
-      mode: picked.mode === 'split_camera' ? 'split_camera' : 'normal',
-    };
-    setLatestProjectorScene(nextScene);
-    appendBgDebug('projector-scene', {
-      mode: nextScene.mode,
-      cameraPanePercent: nextScene.cameraPanePercent,
-      enableCameraTestMode: nextScene.enableCameraTestMode === true,
-      projectorActive: !!(getProjectorWindow() && !getProjectorWindow().isDestroyed()),
-    });
-    const projectorWindow = getProjectorWindow();
-    if (projectorWindow && !projectorWindow.isDestroyed()) {
-      projectorWindow.webContents.send('projector-scene', nextScene);
     }
   });
 

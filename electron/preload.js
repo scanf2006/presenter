@@ -30,24 +30,15 @@ const api = {
   // Content push
   sendToProjector: (data) => ipcRenderer.send('send-to-projector', data),
   sendToProjectorWithAck: (data) => ipcRenderer.invoke('send-to-projector-ack', data),
-  sendToProjectorBackground: (data) => ipcRenderer.send('send-to-projector-background', data),
   sendTransition: (transitionData) => ipcRenderer.send('projector-transition', transitionData),
-  sendProjectorScene: (sceneData) => ipcRenderer.send('projector-scene', sceneData),
   blackout: () => ipcRenderer.send('projector-blackout'),
   sendMediaCommand: (command) => ipcRenderer.send('projector-command', command),
-  ndiGetStatus: () => ipcRenderer.invoke('ndi-get-status'),
-  ndiStart: (options) => ipcRenderer.invoke('ndi-start', options),
-  ndiStop: () => ipcRenderer.invoke('ndi-stop'),
-  onNdiStatus: (callback) => onWithCleanup('ndi-status', (_e, status) => callback(status)),
 
   // Projector listeners
   onProjectorContent: (callback) =>
     onWithCleanup('projector-content', (_e, data) => callback(data)),
-  onProjectorBackground: (callback) =>
-    onWithCleanup('projector-background', (_e, data) => callback(data)),
   onProjectorTransition: (callback) =>
     onWithCleanup('projector-transition', (_e, data) => callback(data)),
-  onProjectorScene: (callback) => onWithCleanup('projector-scene', (_e, data) => callback(data)),
   onProjectorBlackout: (callback) => onWithCleanup('projector-blackout', () => callback()),
   onMediaCommand: (callback) =>
     onWithCleanup('projector-command', (_e, command) => callback(command)),
@@ -69,6 +60,8 @@ const api = {
   // YouTube
   youtubeResolve: (url) => ipcRenderer.invoke('youtube-resolve', url),
   youtubeCacheDownload: (url) => ipcRenderer.invoke('youtube-cache-download', url),
+  onYouTubeCacheProgress: (callback) =>
+    onWithCleanup('youtube-cache-progress', (_e, data) => callback(data)),
 
   // License / legal
   licenseGetStatus: () => ipcRenderer.invoke('license-get-status'),

@@ -15,9 +15,7 @@ function normalizeQueueItem(rawItem, index = 0) {
 
   return {
     id: String(rawItem?.id || `${createdAt}-${index}`),
-    title: String(
-      rawItem?.title || payload?.name || payload?.reference || payloadType || 'Untitled Content'
-    ),
+    title: String(rawItem?.title || payload?.name || payload?.reference || payloadType || 'Untitled Content'),
     type: payloadType || 'text',
     payload,
     section: String(rawItem?.section || resolveSectionFromPayloadType(payloadType)),
@@ -27,25 +25,10 @@ function normalizeQueueItem(rawItem, index = 0) {
 }
 
 function migrateQueuePayload(raw) {
-  // V1 legacy: raw array
-  if (Array.isArray(raw)) {
-    return {
-      schemaVersion: CURRENT_QUEUE_SCHEMA_VERSION,
-      items: raw.map((item, index) => normalizeQueueItem(item, index)),
-    };
-  }
-
-  // V2+ envelope
-  if (raw && typeof raw === 'object' && Array.isArray(raw.items)) {
-    return {
-      schemaVersion: CURRENT_QUEUE_SCHEMA_VERSION,
-      items: raw.items.map((item, index) => normalizeQueueItem(item, index)),
-    };
-  }
-
+  const items = Array.isArray(raw) ? raw : raw && typeof raw === 'object' && Array.isArray(raw.items) ? raw.items : null;
   return {
     schemaVersion: CURRENT_QUEUE_SCHEMA_VERSION,
-    items: [],
+    items: items ? items.map((item, index) => normalizeQueueItem(item, index)) : [],
   };
 }
 
@@ -56,8 +39,4 @@ function buildQueueEnvelope(items) {
   };
 }
 
-module.exports = {
-  CURRENT_QUEUE_SCHEMA_VERSION,
-  migrateQueuePayload,
-  buildQueueEnvelope,
-};
+module.exports = { CURRENT_QUEUE_SCHEMA_VERSION, migrateQueuePayload, buildQueueEnvelope };

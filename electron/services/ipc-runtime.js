@@ -11,11 +11,6 @@ function buildIpcRegistrationOptions({
   appendBgDebug,
   sendToProjectorShell,
   openYouTubeWatchInProjector,
-  projectorSceneState,
-  getLatestProjectorContent,
-  setLatestProjectorContent,
-  getLatestProjectorBackground,
-  setLatestProjectorBackground,
   resolveYouTubeStream,
   sanitizeMediaFileName,
   mediaYouTubeCacheDir,
@@ -43,7 +38,6 @@ function buildIpcRegistrationOptions({
   formatBackupStamp,
   collectReferencedMediaPathsFromQueue,
   copyDirectoryMerge,
-  ndiOutputService,
 }) {
   return {
     ipcMain,
@@ -56,12 +50,6 @@ function buildIpcRegistrationOptions({
     appendBgDebug,
     sendToProjectorShell,
     openYouTubeWatchInProjector,
-    getLatestProjectorScene: projectorSceneState.getScene,
-    setLatestProjectorScene: projectorSceneState.setScene,
-    getLatestProjectorContent,
-    setLatestProjectorContent,
-    getLatestProjectorBackground,
-    setLatestProjectorBackground,
     resolveYouTubeStream,
     sanitizeFileName: sanitizeMediaFileName,
     mediaYouTubeCacheDir,
@@ -93,7 +81,6 @@ function buildIpcRegistrationOptions({
     formatBackupStamp,
     collectReferencedMediaPathsFromQueue,
     copyDirectoryMerge,
-    ndiOutputService,
   };
 }
 

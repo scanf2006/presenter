@@ -13,8 +13,6 @@ function createMainSetupIpc({
   getControlWindow,
   getProjectorWindow,
   appendBgDebug,
-  projectorSceneState,
-  projectorLiveState,
   resolveYouTubeStream,
   sanitizeMediaFileName,
   mediaState,
@@ -37,7 +35,6 @@ function createMainSetupIpc({
   formatBackupStamp,
   collectReferencedMediaPathsFromQueue,
   copyDirectoryMerge,
-  ndiOutputService,
 }) {
   return createSetupIpcRuntime({
     registerIpcFromRuntime,
@@ -52,8 +49,6 @@ function createMainSetupIpc({
       getControlWindow,
       getProjectorWindow,
       appendBgDebug,
-      projectorSceneState,
-      projectorLiveState,
       resolveYouTubeStream,
       sanitizeMediaFileName,
       mediaState,
@@ -76,7 +71,6 @@ function createMainSetupIpc({
       formatBackupStamp,
       collectReferencedMediaPathsFromQueue,
       copyDirectoryMerge,
-      ndiOutputService,
     }),
   });
 }

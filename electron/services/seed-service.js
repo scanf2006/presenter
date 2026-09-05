@@ -2,9 +2,6 @@ const fs = require('fs');
 const path = require('path');
 
 function resolveBundledSeedDir(app) {
-  if (app.isPackaged) {
-    return path.join(process.resourcesPath, 'data-seed');
-  }
   return path.resolve(__dirname, '..', '..', 'data', 'seed');
 }
 
@@ -56,6 +53,8 @@ function sanitizeSeededAppSettings(settingsPath, logger = console) {
 
 function hydrateUserDataFromBundledSeed(app, markerName = '.seed-applied-v1', logger = console) {
   try {
+    // Seed media is development-only and is intentionally excluded from production installers.
+    if (app.isPackaged) return;
     const userDataDir = app.getPath('userData');
     const seedDir = resolveBundledSeedDir(app);
     const markerPath = path.join(userDataDir, markerName);

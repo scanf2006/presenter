@@ -4,7 +4,6 @@ import { useQueueContext } from '../../contexts/QueueContext';
 import { useI18n } from '../../contexts/I18nContext';
 import PreviewStage from './preview/PreviewStage';
 import TransitionSettings from './preview/TransitionSettings';
-import CameraSettings from './preview/CameraSettings';
 import SystemInfoPanel from './preview/SystemInfoPanel';
 
 function PreviewPanel({ nextQueueTitle }) {
@@ -126,7 +125,6 @@ function PreviewPanel({ nextQueueTitle }) {
           <details className="preview-advanced" open={false}>
             <summary className="preview-advanced__summary">{isZh ? '高级' : 'Advanced'}</summary>
             <div className="preview-advanced__body">
-              <CameraSettings />
               <SystemInfoPanel />
             </div>
           </details>

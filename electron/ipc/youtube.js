@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { getYouTubeVideoIdFromUrl } = require('../../shared/youtube.cjs');
 
 function registerYouTubeIPC({
   ipcMain,
@@ -62,24 +63,44 @@ function registerYouTubeIPC({
     }
   });
 
-  ipcMain.handle('youtube-cache-download', async (_event, inputUrl) => {
+  ipcMain.handle('youtube-cache-download', async (event, inputUrl) => {
     const raw = typeof inputUrl === 'string' ? inputUrl.trim() : '';
     if (!raw) return { success: false, error: 'YouTube URL is required.' };
+    const sendProgress = (status, extra = {}) => {
+      if (!event.sender.isDestroyed()) {
+        event.sender.send('youtube-cache-progress', { url: raw, status, ...extra });
+      }
+    };
+    sendProgress('resolving');
     appendBgDebug('youtube-cache-download-start', { url: raw });
-
-    const resolved = await resolveYouTubeStream(raw);
-    if (!resolved?.success || !resolved?.streamUrl) {
-      appendBgDebug('youtube-cache-download-resolve-failed', { url: raw, error: resolved?.error });
-      return { success: false, error: resolved?.error || 'No playable stream found.' };
-    }
 
     try {
       // Keep cache filenames short and deterministic on Windows to avoid rename/path issues.
-      const cacheKey = buildCacheKey(resolved, raw);
+      const cachedVideoId = getYouTubeVideoIdFromUrl(raw);
+      const cacheKey = buildCacheKey({ videoId: cachedVideoId }, raw);
       const safeBase = sanitizeFileName(cacheKey) || 'youtube_cache';
       const outputPath = path.join(mediaYouTubeCacheDir, `${safeBase}.mp4`);
 
       const existing = fs.existsSync(outputPath) ? fs.statSync(outputPath) : null;
+      if (existing && existing.size >= 1024 * 100) {
+        appendBgDebug('youtube-cache-download-reused', { url: raw, outputPath, size: existing.size });
+        sendProgress('success', { percent: 100 });
+        return {
+          success: true,
+          localPath: outputPath,
+          title: 'YouTube Video',
+          videoId: cachedVideoId,
+          originalUrl: raw,
+          reused: true,
+        };
+      }
+
+      const resolved = await resolveYouTubeStream(raw);
+      const useYtDlpFallback = !resolved?.success || !resolved?.streamUrl;
+      if (useYtDlpFallback) {
+        appendBgDebug('youtube-cache-download-resolve-failed', { url: raw, error: resolved?.error });
+      }
+
       if (!existing || existing.size < 1024 * 100) {
         if (inflightByCacheKey.has(cacheKey)) {
           await inflightByCacheKey.get(cacheKey);
@@ -90,15 +111,30 @@ function registerYouTubeIPC({
               if (fs.existsSync(outputPath) && fs.statSync(outputPath).size < 1024 * 100) {
                 fs.unlinkSync(outputPath);
               }
-              try {
-                await downloadUrlToFileWithRetry(resolved.streamUrl, outputPath);
-              } catch (primaryErr) {
-                appendBgDebug('youtube-download-primary-failed', {
-                  error: primaryErr?.message || String(primaryErr),
+              if (useYtDlpFallback) {
+                appendBgDebug('youtube-download-resolve-fallback-ytdlp-start', { url: raw });
+                sendProgress('downloading');
+                await downloadWithYtDlp(raw, outputPath, (progress) => {
+                  sendProgress('downloading', progress);
                 });
-                appendBgDebug('youtube-download-fallback-ytdlp-start', { url: raw });
-                await downloadWithYtDlp(raw, outputPath);
-                appendBgDebug('youtube-download-fallback-ytdlp-success', { outputPath });
+                appendBgDebug('youtube-download-resolve-fallback-ytdlp-success', { outputPath });
+              } else {
+                try {
+                  sendProgress('downloading');
+                  await downloadUrlToFileWithRetry(resolved.streamUrl, outputPath, (progress) => {
+                    sendProgress('downloading', progress);
+                  });
+                } catch (primaryErr) {
+                  appendBgDebug('youtube-download-primary-failed', {
+                    error: primaryErr?.message || String(primaryErr),
+                  });
+                  appendBgDebug('youtube-download-fallback-ytdlp-start', { url: raw });
+                  sendProgress('downloading');
+                  await downloadWithYtDlp(raw, outputPath, (progress) => {
+                    sendProgress('downloading', progress);
+                  });
+                  appendBgDebug('youtube-download-fallback-ytdlp-success', { outputPath });
+                }
               }
             } finally {
               inflightByCacheKey.delete(cacheKey);
@@ -113,18 +149,20 @@ function registerYouTubeIPC({
         outputPath,
         size: fs.existsSync(outputPath) ? fs.statSync(outputPath).size : 0,
       });
+      sendProgress('success', { percent: 100 });
       return {
         success: true,
         localPath: outputPath,
-        title: resolved.title || 'YouTube Video',
-        videoId: resolved.videoId || '',
-        originalUrl: resolved.originalUrl || raw,
+        title: resolved?.title || 'YouTube Video',
+        videoId: resolved?.videoId || '',
+        originalUrl: resolved?.originalUrl || raw,
       };
     } catch (err) {
       appendBgDebug('youtube-cache-download-failed', {
         url: raw,
         error: err?.message || 'Download failed.',
       });
+      sendProgress('failed');
       return { success: false, error: 'Download failed.' };
     }
   });

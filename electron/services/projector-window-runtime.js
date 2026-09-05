@@ -25,7 +25,6 @@ function bindProjectorWindowEvents({
   controlWindowRef,
   onClosed,
   forceWindowZoom100,
-  getProjectorScene,
 }) {
   projectorWindow.on('closed', () => {
     onClosed();
@@ -54,7 +53,6 @@ function bindProjectorWindowEvents({
         projectorWindow.setKiosk(true);
         forceWindowZoom100(projectorWindow);
         projectorWindow?.webContents?.setAudioMuted(false);
-        projectorWindow?.webContents?.send('projector-scene', getProjectorScene());
       } catch (err) {
         console.warn('[ProjectorWindow] did-finish-load post setup failed:', err?.message || err);
       }
