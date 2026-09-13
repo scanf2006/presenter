@@ -1,6 +1,6 @@
 {
   "name": "churchdisplay-pro",
-  "version": "0.3.203",
+  "version": "0.3.204",
   "description": "ChurchDisplay Pro - Worship projection system",
   "main": "electron/main.js",
   "build": {
@@ -14,7 +14,9 @@
       "LICENSE",
       "EULA.md"
     ],
-    "asarUnpack": ["electron/ppt-convert.ps1"],
+    "asarUnpack": [
+      "electron/ppt-convert.ps1"
+    ],
     "extraResources": [
       {
         "from": "data",
@@ -50,6 +52,8 @@
     "format": "prettier --write .",
     "runtime:prepare": "powershell -ExecutionPolicy Bypass -File scripts/prepare-youtube-runtime.ps1",
     "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5199 && electron .\"",
+    "tauri:check": "set PATH=%USERPROFILE%\\.cargo\\bin;%PATH%&& cargo check --manifest-path src-tauri/Cargo.toml",
+    "tauri:dev": "set PATH=%USERPROFILE%\\.cargo\\bin;%PATH%&& tauri dev",
     "electron:build": "npm run runtime:prepare && vite build && electron-builder",
     "electron:build:unsigned": "npm run runtime:prepare && vite build && electron-builder --win nsis --x64 --config.win.signAndEditExecutable=false",
     "electron:build:zh:unsigned": "npm run runtime:prepare && set VITE_APP_LOCALE=zh-CN&& vite build && electron-builder --win nsis --x64 --config electron-builder.zh.json --config.win.signAndEditExecutable=false",
@@ -69,12 +73,15 @@
     "@fontsource/zcool-qingke-huangyou": "^5.2.8",
     "@fontsource/zcool-xiaowei": "^5.2.8",
     "@fontsource/zhi-mang-xing": "^5.2.8",
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/plugin-dialog": "^2.7.3",
     "iconv-lite": "^0.7.2",
     "play-dl": "^1.9.7",
     "sql.js": "^1.14.1",
     "yt-dlp-wrap": "^2.3.12"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4",
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^9.1.0",
     "electron": "^33.2.0",

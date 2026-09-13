@@ -10,6 +10,7 @@ function DisplaysSection() {
     projectorActive,
     handleStartProjector,
     handleStopProjector,
+    refreshDisplays,
   } = useProjectorContext();
 
   return (
@@ -23,6 +24,9 @@ function DisplaysSection() {
           'Select an external display to start projection. Content will be fullscreen on the selected screen.'
         )}
       </p>
+      <button className="btn btn--ghost" onClick={refreshDisplays} style={{ marginBottom: '12px' }}>
+        {t('displays.refresh', 'Refresh Displays')}
+      </button>
       <div className="cp-stack-md">
         {displays.map((display) => (
           <div

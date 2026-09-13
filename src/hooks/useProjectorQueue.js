@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getQueueItemTitleFromPayload, resolveSectionForPayload } from '../utils/queueItemMeta';
-import queueSchema from '../../shared/queue-schema.cjs';
+import { buildQueueEnvelope, migrateQueuePayload } from '../utils/queueSchema';
 import { useI18n } from '../contexts/I18nContext';
+import { isTauriRuntime, loadTauriQueue, saveTauriQueue } from '../utils/tauriProjector';
 
 const DEFAULT_QUEUE_STORAGE_KEY = 'churchdisplay.projectorQueue.v1';
-const { buildQueueEnvelope, migrateQueuePayload } = queueSchema;
-
 export default function useProjectorQueue({
   isElectron,
   showToast,
@@ -44,6 +43,15 @@ export default function useProjectorQueue({
           }
           return;
         }
+        if (isTauriRuntime()) {
+          const result = await loadTauriQueue();
+          if (result?.success !== true) return;
+          if (result.found) {
+            setProjectorQueue(migrateQueuePayload({ items: result.items }).items);
+            restored = true;
+            return;
+          }
+        }
         const raw = window.localStorage.getItem(storageKey);
         if (!raw) {
           restored = true;
@@ -66,6 +74,10 @@ export default function useProjectorQueue({
       try {
         if (isElectron && typeof window.churchDisplay?.queueSave === 'function') {
           await window.churchDisplay.queueSave(projectorQueue);
+          return;
+        }
+        if (isTauriRuntime()) {
+          await saveTauriQueue(projectorQueue);
           return;
         }
         window.localStorage.setItem(storageKey, JSON.stringify(buildQueueEnvelope(projectorQueue)));

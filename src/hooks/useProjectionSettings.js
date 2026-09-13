@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 /* eslint-disable react-hooks/set-state-in-effect */
 import { TRANSITION } from '../constants/ui';
+import { isTauriRuntime, sendTauriProjectorTransition } from '../utils/tauriProjector';
 
 const TRANSITION_STORAGE_KEY = 'churchdisplay.transition.v1';
 
@@ -53,6 +54,12 @@ export default function useProjectionSettings({ isElectron }) {
 
     if (isElectron && typeof window.churchDisplay?.sendTransition === 'function') {
       window.churchDisplay.sendTransition({
+        enabled: transitionEnabled,
+        delayMs: transitionDelayMs,
+        durationMs: transitionDurationMs,
+      });
+    } else if (isTauriRuntime()) {
+      void sendTauriProjectorTransition({
         enabled: transitionEnabled,
         delayMs: transitionDelayMs,
         durationMs: transitionDurationMs,

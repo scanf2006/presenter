@@ -1,5 +1,7 @@
 ﻿import React, { useEffect, useRef, useState } from 'react';
 
+import { getMediaUrl } from '../utils/tauriProjector';
+
 /**
  * PdfRenderer - render one PDF page into a canvas with configurable fit behavior.
  */
@@ -54,7 +56,7 @@ const PdfRenderer = ({
         ).toString();
         pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
-        const fileUrl = `local-media://${encodeURIComponent(path)}`;
+        const fileUrl = getMediaUrl(path);
         const response = await fetch(fileUrl);
         if (!response.ok) {
           throw new Error(`Failed to load PDF: ${response.status} ${response.statusText}`);

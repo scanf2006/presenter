@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { listen } from '@tauri-apps/api/event';
 import useProjectorChannelSync from '../hooks/useProjectorChannelSync';
 import ProjectorTextLayer from './projector/ProjectorTextLayer';
 import PdfRenderer from './PdfRenderer';
@@ -8,6 +9,7 @@ import {
   getScaledFreeTextFontPx,
   isTextualSlideType,
 } from '../utils/freeTextLayout';
+import { getMediaUrl, isTauriRuntime } from '../utils/tauriProjector';
 function ProjectorView() {
   const [content, setContent] = useState(null);
   const [backgroundContent, setBackgroundContent] = useState(null);
@@ -31,6 +33,7 @@ function ProjectorView() {
   const [adaptiveOverlayOpacity, setAdaptiveOverlayOpacity] = useState(0.1);
 
   const isElectron = typeof window.churchDisplay !== 'undefined';
+  const isTauri = isTauriRuntime();
 
   useProjectorChannelSync({
     isElectron,
@@ -44,6 +47,66 @@ function ProjectorView() {
     setFadeClass,
     setTransitionMaskVisible,
   });
+
+  useEffect(() => {
+    if (!isTauri) return undefined;
+    const timers = timeoutRef.current;
+    const clearTimers = () => {
+      timers.forEach(clearTimeout);
+      timeoutRef.current = [];
+    };
+    const applyContent = (nextContent) => {
+      setContent(nextContent);
+      setBackgroundContent(nextContent?.background || null);
+      setIsBlackout(false);
+      setFadeClass('projector-view__content--fade-in');
+    };
+    let unlistenContent;
+    let unlistenTransition;
+    let unlistenMediaCommand;
+    listen('projector-transition', (event) => {
+      const next = event.payload || transitionRef.current;
+      transitionRef.current = next;
+      setTransitionConfig(next);
+    }).then((dispose) => { unlistenTransition = dispose; });
+    listen('projector-content', (event) => {
+      clearTimers();
+      const nextContent = event.payload;
+      const config = transitionRef.current;
+      if (!config.enabled || nextContent?.disableTransitionOnce) {
+        applyContent(nextContent);
+        setFadeClass('');
+        setTransitionMaskVisible(false);
+        return;
+      }
+      setTransitionMaskVisible(true);
+      setFadeClass('projector-view__content--fade-out');
+      const fadeTimer = setTimeout(() => {
+        const contentTimer = setTimeout(() => {
+          applyContent(nextContent);
+          const maskTimer = setTimeout(() => setTransitionMaskVisible(false), config.durationMs);
+          timeoutRef.current.push(maskTimer);
+        }, config.delayMs);
+        timeoutRef.current.push(contentTimer);
+      }, config.durationMs);
+      timeoutRef.current.push(fadeTimer);
+    }).then((dispose) => { unlistenContent = dispose; });
+    listen('projector-media-command', (event) => {
+      const video = videoRef.current;
+      if (!video) return;
+      const { type, value } = event.payload || {};
+      if (type === 'play') video.play().catch(() => {});
+      if (type === 'pause') video.pause();
+      if (type === 'seek' && Number.isFinite(value)) video.currentTime = value;
+      if (type === 'mute') video.muted = Boolean(value);
+    }).then((dispose) => { unlistenMediaCommand = dispose; });
+    return () => {
+      unlistenContent?.();
+      unlistenTransition?.();
+      unlistenMediaCommand?.();
+      clearTimers();
+    };
+  }, [isTauri, setBackgroundContent, setContent, setFadeClass, setIsBlackout, setTransitionConfig, setTransitionMaskVisible]);
 
   useEffect(() => {
     if (content?.type !== 'video') return;
@@ -83,12 +146,6 @@ function ProjectorView() {
     }
     const base = getFallbackTextBasePx(content?.fontSize);
     return `${base}px`;
-  };
-
-  const getMediaUrl = (filePath) => {
-    if (!filePath) return '';
-    if (/^https?:\/\//i.test(filePath)) return filePath;
-    return `local-media://${encodeURIComponent(filePath)}`;
   };
 
   const getYouTubeEmbedUrl = (videoId) => {

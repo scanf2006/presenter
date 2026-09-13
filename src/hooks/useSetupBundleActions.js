@@ -1,8 +1,11 @@
 import { useCallback } from 'react';
+import { open } from '@tauri-apps/plugin-dialog';
+import { exportTauriSetupBundle, importTauriSetupBundle } from '../utils/tauriProjector';
 import { useI18n } from '../contexts/I18nContext';
 
 export default function useSetupBundleActions({
   isElectron,
+  isTauri,
   setSetupTransferBusy,
   showToast,
   showAlert,
@@ -10,13 +13,17 @@ export default function useSetupBundleActions({
 }) {
   const { t } = useI18n();
   const exportSetupBundle = useCallback(async () => {
-    if (!isElectron || typeof window.churchDisplay?.exportSetupBundle !== 'function') {
+    if (!isElectron && !isTauri) {
       showToast(t('setup.exportDesktopOnly', 'Export is available in the desktop app only.'), 'warning');
       return;
     }
     try {
       setSetupTransferBusy(true);
-      const res = await window.churchDisplay.exportSetupBundle();
+      const folder = isTauri ? await open({ directory: true, multiple: false }) : null;
+      if (isTauri && !folder) return;
+      const res = isTauri
+        ? await exportTauriSetupBundle(String(folder))
+        : await window.churchDisplay.exportSetupBundle();
       if (res?.cancelled) return;
       if (res?.success) {
         const mb = Number((Number(res.totalBytes || 0) / (1024 * 1024)).toFixed(2));
@@ -37,10 +44,10 @@ export default function useSetupBundleActions({
     } finally {
       setSetupTransferBusy(false);
     }
-  }, [isElectron, setSetupTransferBusy, showToast, showAlert, t]);
+  }, [isElectron, isTauri, setSetupTransferBusy, showToast, showAlert, t]);
 
   const importSetupBundle = useCallback(async () => {
-    if (!isElectron || typeof window.churchDisplay?.importSetupBundle !== 'function') {
+    if (!isElectron && !isTauri) {
       showToast(t('setup.importDesktopOnly', 'Import is available in the desktop app only.'), 'warning');
       return;
     }
@@ -54,7 +61,11 @@ export default function useSetupBundleActions({
     if (!ok) return;
     try {
       setSetupTransferBusy(true);
-      const res = await window.churchDisplay.importSetupBundle();
+      const folder = isTauri ? await open({ directory: true, multiple: false }) : null;
+      if (isTauri && !folder) return;
+      const res = isTauri
+        ? await importTauriSetupBundle(String(folder))
+        : await window.churchDisplay.importSetupBundle();
       if (res?.cancelled) return;
       if (res?.success) {
         const mb = Number((Number(res.totalBytes || 0) / (1024 * 1024)).toFixed(2));
@@ -78,7 +89,7 @@ export default function useSetupBundleActions({
     } finally {
       setSetupTransferBusy(false);
     }
-  }, [isElectron, setSetupTransferBusy, showToast, showAlert, showConfirm, t]);
+  }, [isElectron, isTauri, setSetupTransferBusy, showToast, showAlert, showConfirm, t]);
 
   return {
     exportSetupBundle,

@@ -130,67 +130,13 @@ body {
    =========================================== */
 
 .app-container {
-  --ui-scale: 1;
   display: grid;
-  grid-template-columns: 340px 1fr 460px;
+  grid-template-columns: clamp(220px, 20vw, 340px) minmax(0, 1fr) clamp(280px, 27vw, 460px);
   grid-template-rows: 60px 1fr;
-  width: calc(100% / var(--ui-scale));
-  height: calc(100vh / var(--ui-scale));
-  transform: scale(var(--ui-scale));
-  transform-origin: top left;
+  width: 100%;
+  height: 100vh;
   gap: 1px;
   background: rgba(100, 100, 180, 0.08);
-}
-
-/* Fullscreen / large-window readability boost */
-@media (min-width: 1700px) and (min-height: 900px) {
-  .app-container {
-    --ui-scale: 1.1;
-  }
-}
-
-@media (min-width: 2200px) and (min-height: 1200px) {
-  .app-container {
-    --ui-scale: 1.18;
-  }
-}
-
-/* Small-screen ergonomics: widen left navigation, narrow center work area, enlarge tap targets. */
-@media (max-width: 1500px), (max-height: 900px) {
-  .app-container {
-    grid-template-columns: minmax(280px, 28vw) 1fr minmax(320px, 30vw);
-  }
-
-  .btn {
-    min-height: 44px;
-    padding: 11px 18px;
-    font-size: 16px;
-  }
-
-  .btn--icon {
-    width: 44px;
-    height: 44px;
-    font-size: 21px;
-  }
-
-  .sidebar-nav .sidebar__item {
-    min-height: 50px;
-    padding: 11px 13px;
-  }
-
-  .sidebar__item-label {
-    font-size: 15px;
-  }
-
-  .sidebar__item-hint {
-    font-size: 13px;
-  }
-}
-
-@media (max-width: 1280px) {
-  .app-container {
-    grid-template-columns: minmax(240px, 24vw) 1fr minmax(280px, 28vw);
-  }
 }
 
 /* --- 顶部导航栏 --- */
@@ -205,6 +151,12 @@ body {
   border-bottom: 1px solid var(--glass-border);
   -webkit-app-region: drag;
   user-select: none;
+}
+
+/* Tauri uses data-tauri-drag-region. The Electron-only drag style would
+   otherwise capture clicks on the custom window-control buttons. */
+.top-bar--tauri {
+  -webkit-app-region: no-drag;
 }
 
 .top-bar__brand {
@@ -301,6 +253,9 @@ body {
   align-items: center;
   gap: 10px;
   -webkit-app-region: no-drag;
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
 }
 .top-bar__status-group {
   display: inline-flex;

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { isTauriRuntime, sendToTauriProjector } from '../utils/tauriProjector';
 
 export default function useProjectorPreviewDispatch({
   isElectron,
@@ -15,6 +16,10 @@ export default function useProjectorPreviewDispatch({
   const deliveryTimeoutMsRef = useRef(1800);
 
   const waitForAckWithTimeout = useCallback(async (data) => {
+    if (isTauriRuntime()) {
+      await sendToTauriProjector(data);
+      return { ok: true, mode: 'tauri' };
+    }
     if (!isElectron || !window.churchDisplay) return { ok: true, mode: 'browser' };
     if (typeof window.churchDisplay.sendToProjectorWithAck !== 'function') {
       window.churchDisplay.sendToProjector(data);
@@ -69,7 +74,7 @@ export default function useProjectorPreviewDispatch({
     (data) => {
       setCurrentSlide(data);
       applyPreviewTransition(data);
-      if (isElectron && window.churchDisplay) {
+      if (isTauriRuntime() || (isElectron && window.churchDisplay)) {
         // Reliability layer: await main-process ACK with timeout and retry once on failure.
         Promise.resolve()
           .then(async () => {
@@ -99,8 +104,12 @@ export default function useProjectorPreviewDispatch({
 
   const resendCurrentSlideToProjector = useCallback(
     (data) => {
-      if (!isElectron || !window.churchDisplay || !data) return;
-      window.churchDisplay.sendToProjector(data);
+      if (!data) return;
+      if (isTauriRuntime()) {
+        void sendToTauriProjector(data);
+        return;
+      }
+      if (isElectron && window.churchDisplay) window.churchDisplay.sendToProjector(data);
     },
     [isElectron]
   );
@@ -108,9 +117,9 @@ export default function useProjectorPreviewDispatch({
   const blackout = useCallback(() => {
     setCurrentSlide(null);
     applyPreviewTransition(null);
-    if (isElectron && window.churchDisplay) {
-      window.churchDisplay.blackout();
-    }
+    if (isTauriRuntime()) {
+      void sendToTauriProjector(null);
+    } else if (isElectron && window.churchDisplay) window.churchDisplay.blackout();
   }, [isElectron, applyPreviewTransition]);
 
   return {

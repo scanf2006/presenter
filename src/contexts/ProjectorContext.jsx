@@ -9,6 +9,7 @@ import useObservedWidth from '../hooks/useObservedWidth';
 import useSetupBundleActions from '../hooks/useSetupBundleActions';
 import useStartupHealth from '../hooks/useStartupHealth';
 import usePreviewLayoutMetrics from '../hooks/usePreviewLayoutMetrics';
+import { isTauriRuntime, sendTauriProjectorMediaCommand } from '../utils/tauriProjector';
 import { useAppContext } from './AppContext';
 
 const ProjectorContext = createContext(null);
@@ -21,6 +22,7 @@ export function useProjectorContext() {
 
 export function ProjectorProvider({ children }) {
   const { isElectron, showToast, showAlert, showConfirm } = useAppContext();
+  const isTauri = isTauriRuntime();
 
   const previewStageRef = useRef(null);
   const [setupTransferBusy, setSetupTransferBusy] = useState(false);
@@ -31,7 +33,8 @@ export function ProjectorProvider({ children }) {
     projectorDisplayId,
     setProjectorActive,
     setProjectorDisplayId,
-  } = useDisplayProjectorStatus({ isElectron });
+    refreshDisplays,
+  } = useDisplayProjectorStatus({ isElectron, isTauri });
 
   const {
     transitionEnabled,
@@ -50,6 +53,7 @@ export function ProjectorProvider({ children }) {
     blackout: handleBlackout,
   } = useProjectorPreviewDispatch({
     isElectron,
+    isTauri,
     transitionEnabled,
     transitionDelayMs,
     transitionDurationMs,
@@ -76,6 +80,7 @@ export function ProjectorProvider({ children }) {
   const { exportSetupBundle: handleExportSetupBundle, importSetupBundle: handleImportSetupBundle } =
     useSetupBundleActions({
       isElectron,
+      isTauri,
       setSetupTransferBusy,
       showToast,
       showAlert,
@@ -96,7 +101,9 @@ export function ProjectorProvider({ children }) {
     togglePauseResume,
     stopPlayback,
     toggleMute,
-  } = usePreviewVideoControls();
+  } = usePreviewVideoControls({
+    onMediaCommand: isTauri ? sendTauriProjectorMediaCommand : undefined,
+  });
 
   const previewStageWidth = useObservedWidth(previewStageRef, []);
   const { previewAspectRatio } = usePreviewLayoutMetrics({ displays, projectorDisplayId });
@@ -111,6 +118,7 @@ export function ProjectorProvider({ children }) {
       displays,
       projectorActive,
       projectorDisplayId,
+      refreshDisplays,
       // Projector controls
       handleStartProjector,
       handleStopProjector,
@@ -165,6 +173,7 @@ export function ProjectorProvider({ children }) {
       displays,
       projectorActive,
       projectorDisplayId,
+      refreshDisplays,
       handleStartProjector,
       handleStopProjector,
       handleMinimizeWindow,

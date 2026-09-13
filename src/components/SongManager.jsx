@@ -22,6 +22,7 @@ import useSongSectionNavigation from '../hooks/useSongSectionNavigation';
 import { useAppContext } from '../contexts/AppContext';
 import { useI18n } from '../contexts/I18nContext';
 import { PROJECTION_FONT_OPTIONS } from '../constants/fontOptions';
+import { deleteTauriSong, isTauriRuntime, listTauriSongs, saveTauriSong } from '../utils/tauriProjector';
 const BLANK_SECTION_INDEX = -2;
 const SONG_STYLE_DEFAULTS = {
   fontSize: 'large',
@@ -79,6 +80,7 @@ function SongManager({
   const blankSectionCardRef = useRef(null);
 
   const isElectron = typeof window.churchDisplay !== 'undefined';
+  const isTauri = isTauriRuntime();
   const fileInputRef = useRef(null);
   const { showToast, showConfirm, activeSection } = useAppContext();
   const { t } = useI18n();
@@ -109,8 +111,8 @@ function SongManager({
 
   // 加载歌曲列表
   const loadSongs = useCallback(async () => {
-    if (isElectron) {
-      const list = await window.churchDisplay.songsList();
+    if (isElectron || isTauri) {
+      const list = isElectron ? await window.churchDisplay.songsList() : await listTauriSongs();
       setSongs(list);
     } else {
       // Browser fallback demo data
@@ -134,7 +136,7 @@ function SongManager({
         },
       ]);
     }
-  }, [isElectron]);
+  }, [isElectron, isTauri]);
 
   useEffect(() => {
     loadSongs();
@@ -164,9 +166,8 @@ function SongManager({
       },
     };
     try {
-      if (isElectron) {
-        await window.churchDisplay.songsSave(song);
-      }
+      if (isElectron) await window.churchDisplay.songsSave(song);
+      else if (isTauri) await saveTauriSong(song);
     } catch (err) {
       console.warn('[SongManager] save failed:', err?.message || err);
     }
@@ -190,6 +191,7 @@ function SongManager({
     isBold,
     textColor,
     isElectron,
+    isTauri,
     loadSongs,
     showToast,
   ]);
@@ -199,16 +201,15 @@ function SongManager({
     async (songId) => {
       if (!(await showConfirm(t('songs.deleteConfirm', 'Delete this song?')))) return;
       try {
-        if (isElectron) {
-          await window.churchDisplay.songsDelete(songId);
-        }
+        if (isElectron) await window.churchDisplay.songsDelete(songId);
+        else if (isTauri) await deleteTauriSong(songId);
       } catch (err) {
         console.warn('[SongManager] delete failed:', err?.message || err);
       }
       if (selectedSong?.id === songId) setSelectedSong(null);
       await loadSongs();
     },
-    [isElectron, selectedSong, loadSongs, showConfirm]
+    [isElectron, isTauri, selectedSong, loadSongs, showConfirm]
   );
 
   // start editing
@@ -453,13 +454,14 @@ function SongManager({
     setSelectedSong(nextSong);
     setSongs((prev) => prev.map((s) => (s.id === nextSong.id ? { ...s, songStyle: style } : s)));
 
-    if (!isElectron) return;
+    if (!isElectron && !isTauri) return;
     const saveInput = buildSongSaveInput(nextSong);
     if (!saveInput) return;
-    window.churchDisplay.songsSave(saveInput).catch((err) => {
+    const save = isElectron ? window.churchDisplay.songsSave(saveInput) : saveTauriSong(saveInput);
+    save.catch((err) => {
       console.warn('[SongManager] persist song style failed:', err?.message || err);
     });
-  }, [selectedSong?.id, editingSong, fontSize, fontSizePx, fontFamily, isBold, textColor, isElectron]);
+  }, [selectedSong?.id, editingSong, fontSize, fontSizePx, fontFamily, isBold, textColor, isElectron, isTauri]);
 
   // Keep active song queue card style in sync with current controls.
   // This lets different queue cards preserve their own font family/size/color settings.
@@ -521,11 +523,11 @@ function SongManager({
       setSongs((prev) => prev.map((s) => (s.id === nextSongWithStyle.id ? nextSongWithStyle : s)));
 
       try {
-        if (isElectron) {
-          const saveInput = buildSongSaveInput(nextSongWithStyle);
-          if (saveInput) {
-            await window.churchDisplay.songsSave(saveInput);
-          }
+        const saveInput = buildSongSaveInput(nextSongWithStyle);
+        if (saveInput && isElectron) {
+          await window.churchDisplay.songsSave(saveInput);
+        } else if (saveInput && isTauri) {
+          await saveTauriSong(saveInput);
         }
       } catch (err) {
         console.warn('[SongManager] persist background failed:', err?.message || err);
@@ -559,6 +561,7 @@ function SongManager({
     },
     [
       isElectron,
+      isTauri,
       onUpdateActiveQueueItem,
       fontSize,
       fontSizePx,
