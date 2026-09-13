@@ -1,0 +1,62 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "churchdisplay-pro",
+  "version": "0.3.204",
+  "identifier": "com.aiden.churchdisplaypro",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5199",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "ChurchDisplay Pro",
+        "width": 800,
+        "height": 600,
+        "resizable": true,
+        "decorations": false,
+        "fullscreen": false
+      },
+      {
+        "label": "projector",
+        "title": "ChurchDisplay Pro Projector",
+        "url": "index.html#/projector",
+        "visible": false,
+        "decorations": false,
+        "skipTaskbar": true,
+        "fullscreen": true
+      }
+    ],
+    "security": {
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$APPDATA/**"]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": {
+      "../data/bible_cuvs.db": "bible_cuvs.db",
+      "../data/bible_kjv.db": "bible_kjv.db",
+      "../electron/ppt-convert.ps1": "ppt-convert.ps1",
+      "../vendor/youtube-runtime/yt-dlp.exe": "youtube-runtime/yt-dlp.exe",
+      "../vendor/youtube-runtime/ffmpeg.exe": "youtube-runtime/ffmpeg.exe",
+      "../vendor/youtube-runtime/deno.exe": "youtube-runtime/deno.exe"
+    },
+    "android": {
+      "debugApplicationIdSuffix": ".debug"
+    }
+  }
+}

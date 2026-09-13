@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { listen } from '@tauri-apps/api/event';
 import PdfThumbnail from './PdfThumbnail';
 import { getYouTubeVideoIdFromUrl, normalizeYouTubeWatchUrl } from '../utils/youtube';
 import {
@@ -8,6 +9,16 @@ import {
 } from '../utils/thumbnail';
 import { useAppContext } from '../contexts/AppContext';
 import { useI18n } from '../contexts/I18nContext';
+import {
+  deleteTauriMedia,
+  downloadTauriYouTube,
+  convertTauriPpt,
+  getMediaUrl,
+  importTauriMedia,
+  isTauriRuntime,
+  listTauriMedia,
+  selectTauriMediaFiles,
+} from '../utils/tauriProjector';
 
 const MEDIA_TYPE_ORDER = ['image', 'video', 'pdf', 'ppt'];
 
@@ -26,6 +37,7 @@ function MediaManager({
   const [isDragging, setIsDragging] = useState(false);
   const [importing, setImporting] = useState(false);
   const [pptConverting, setPptConverting] = useState(false);
+  const [pptError, setPptError] = useState('');
   const [pptSlides, setPptSlides] = useState(null);
   const [pptSourcePath, setPptSourcePath] = useState('');
   const [currentSlideIndex, setCurrentSlideIndex] = useState(-1);
@@ -45,18 +57,27 @@ function MediaManager({
   const staleDropStatsRef = useRef({ pdf: 0, ppt: 0 });
 
   const isElectron = typeof window.churchDisplay !== 'undefined';
+  const isTauri = isTauriRuntime();
   const { showToast, showConfirm, activeSection } = useAppContext();
   const isMediaSectionActive = activeSection === 'media';
 
   useEffect(() => {
-    if (typeof window.churchDisplay?.onYouTubeCacheProgress !== 'function') return undefined;
-    return window.churchDisplay.onYouTubeCacheProgress((next) => {
+    const updateProgress = (next) => {
       setYoutubeDownload({
         status: next?.status || 'idle',
         percent: Number.isFinite(next?.percent) ? next.percent : null,
       });
+    };
+    if (typeof window.churchDisplay?.onYouTubeCacheProgress === 'function') {
+      return window.churchDisplay.onYouTubeCacheProgress(updateProgress);
+    }
+    if (!isTauri) return undefined;
+    let unlisten;
+    listen('youtube-download-progress', (event) => updateProgress(event.payload)).then((dispose) => {
+      unlisten = dispose;
     });
-  }, []);
+    return () => unlisten?.();
+  }, [isTauri]);
 
   const logStaleDrop = useCallback((type) => {
     if (!import.meta.env.DEV) return;
@@ -73,6 +94,12 @@ function MediaManager({
       const type = activeFilter === 'all' ? undefined : activeFilter;
       const files = await window.churchDisplay.getMediaList(type);
       setMediaFiles(files);
+      return;
+    }
+
+    if (isTauri) {
+      const type = activeFilter === 'all' ? undefined : activeFilter;
+      setMediaFiles(await listTauriMedia(type));
       return;
     }
 
@@ -100,7 +127,7 @@ function MediaManager({
         createdAt: Date.now() - 3000,
       },
     ]);
-  }, [isElectron, activeFilter]);
+  }, [isElectron, isTauri, activeFilter]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -111,16 +138,22 @@ function MediaManager({
 
   const handleSelectFiles = useCallback(
     async (type) => {
-      if (!isElectron) return;
-      const filePaths = await window.churchDisplay.selectFiles({ type });
+      if (!isElectron && !isTauri) return;
+      const filePaths = isElectron
+        ? await window.churchDisplay.selectFiles({ type })
+        : await selectTauriMediaFiles(type);
       if (!Array.isArray(filePaths) || filePaths.length === 0) return;
 
       setImporting(true);
-      await window.churchDisplay.importFiles(filePaths);
-      await loadMediaFiles();
-      setImporting(false);
+      try {
+        if (isElectron) await window.churchDisplay.importFiles(filePaths);
+        else await importTauriMedia(filePaths);
+        await loadMediaFiles();
+      } finally {
+        setImporting(false);
+      }
     },
-    [isElectron, loadMediaFiles]
+    [isElectron, isTauri, loadMediaFiles]
   );
 
   const handleDragEnter = (e) => {
@@ -144,7 +177,7 @@ function MediaManager({
       e.stopPropagation();
       setIsDragging(false);
 
-      if (!isElectron) return;
+      if (!isElectron && !isTauri) return;
 
       const files = Array.from(e.dataTransfer.files || []);
       if (files.length === 0) return;
@@ -153,20 +186,25 @@ function MediaManager({
       if (filePaths.length === 0) return;
 
       setImporting(true);
-      await window.churchDisplay.importFiles(filePaths);
-      await loadMediaFiles();
-      setImporting(false);
+      try {
+        if (isElectron) await window.churchDisplay.importFiles(filePaths);
+        else await importTauriMedia(filePaths);
+        await loadMediaFiles();
+      } finally {
+        setImporting(false);
+      }
     },
-    [isElectron, loadMediaFiles]
+    [isElectron, isTauri, loadMediaFiles]
   );
 
   const handleDelete = useCallback(
     async (file) => {
-      if (!isElectron) return;
-      await window.churchDisplay.deleteMedia(file.path);
+      if (!isElectron && !isTauri) return;
+      if (isElectron) await window.churchDisplay.deleteMedia(file.path);
+      else await deleteTauriMedia(file.path);
       await loadMediaFiles();
     },
-    [isElectron, loadMediaFiles]
+    [isElectron, isTauri, loadMediaFiles]
   );
 
   const handleLoadPdfGrid = useCallback(
@@ -192,7 +230,7 @@ function MediaManager({
         ).toString();
         pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
-        const fileUrl = `local-media://${encodeURIComponent(file.path)}`;
+        const fileUrl = getMediaUrl(file.path);
         const response = await fetch(fileUrl);
         if (!response.ok) throw new Error(`Network load failed: ${response.status}`);
         const dataBuffer = await response.arrayBuffer();
@@ -236,7 +274,7 @@ function MediaManager({
 
   const handleConvertPpt = useCallback(
     async (file) => {
-      if (!isElectron) return;
+      if (!isElectron && !isTauri) return;
       const requestSeq = ++pptConvertRequestSeqRef.current;
       // Switching to PPT invalidates any previous PDF load result.
       pdfLoadRequestSeqRef.current += 1;
@@ -247,8 +285,16 @@ function MediaManager({
       });
       setCurrentPdfPage(1);
       setPptSourcePath(file?.path || '');
+      setPptError('');
       setPptConverting(true);
-      const result = await window.churchDisplay.convertPpt(file.path);
+      let result;
+      try {
+        result = isElectron
+          ? await window.churchDisplay.convertPpt(file.path)
+          : await convertTauriPpt(file.path);
+      } catch (error) {
+        result = { success: false, error: error?.message || String(error) };
+      }
       if (requestSeq !== pptConvertRequestSeqRef.current) {
         logStaleDrop('ppt');
         return;
@@ -272,10 +318,11 @@ function MediaManager({
         );
       } else {
         setPptSourcePath('');
+        setPptError(result.error || t('media.unknownError', 'Unknown error'));
         showToast(`${t('media.pptFailed', 'PPT conversion failed')}: ${result.error || t('media.unknownError', 'Unknown error')}`, 'error');
       }
     },
-    [isElectron, showToast, t, logStaleDrop]
+    [isElectron, isTauri, showToast, t, logStaleDrop]
   );
 
   const handleProjectMedia = useCallback(
@@ -315,18 +362,20 @@ function MediaManager({
     return id || null;
   }, []);
 
-  const handleProjectYouTube = useCallback(() => {
+  const handleProjectYouTube = useCallback(async () => {
     const id = parseYouTubeId(youtubeUrl);
     if (!id) {
       showToast(t('media.invalidYoutubeUrl', 'Please enter a valid YouTube URL'), 'warning');
       return;
     }
-    onProjectMedia({
+    setYoutubeDownload({ status: 'resolving', percent: null });
+    const projected = await onProjectMedia({
       type: 'youtube',
       videoId: id,
       url: normalizeYouTubeWatchUrl(youtubeUrl) || youtubeUrl.trim(),
       name: `YouTube - ${id}`,
     });
+    setYoutubeDownload({ status: projected === false ? 'failed' : 'success', percent: null });
   }, [youtubeUrl, parseYouTubeId, onProjectMedia, showToast, t]);
 
   const handleQueueYouTube = useCallback(() => {
@@ -350,15 +399,19 @@ function MediaManager({
     });
     showToast(t('media.youtubeQueued', 'YouTube added to queue. Caching in background.'), 'info');
 
-    if (typeof window.churchDisplay?.youtubeCacheDownload === 'function') {
+    if (typeof window.churchDisplay?.youtubeCacheDownload === 'function' || isTauri) {
       setYoutubeDownload({ status: 'resolving', percent: null });
       void (async () => {
         try {
-          const resolved = await window.churchDisplay.youtubeCacheDownload(normalizedUrl);
+          const resolved = isTauri
+            ? await downloadTauriYouTube(normalizedUrl)
+            : await window.churchDisplay.youtubeCacheDownload(normalizedUrl);
           if (resolved?.success && resolved?.localPath) {
+            setYoutubeDownload({ status: 'success', percent: null });
             showToast(t('media.youtubeCached', 'YouTube cached and added to queue'));
             return;
           }
+          setYoutubeDownload({ status: 'failed', percent: null });
           showToast(
             t('media.youtubeCacheFailed', 'YouTube was added to queue, but offline caching failed.'),
             'warning'
@@ -372,7 +425,7 @@ function MediaManager({
         }
       })();
     }
-  }, [youtubeUrl, parseYouTubeId, onAddPlaylist, showToast, t]);
+  }, [youtubeUrl, parseYouTubeId, onAddPlaylist, showToast, t, isTauri]);
 
   useEffect(() => {
     if (!activePreloadItem) return;
@@ -610,6 +663,11 @@ function MediaManager({
       <p className="cp-page-intro">
         {t('media.intro', 'Import image, video, PDF and PPT files. Click to project.')}
       </p>
+      {pptError && (
+        <div className="cp-alert cp-alert--error" role="alert">
+          {t('media.pptFailed', 'PPT conversion failed')}: {pptError}
+        </div>
+      )}
 
       {!isViewingDetail && (
         <>
@@ -912,7 +970,7 @@ function MediaManager({
                   <div style={getSelectableThumbSelectedTagStyle()}>SEL</div>
                 )}
                 <img
-                  src={`local-media://${encodeURIComponent(slide.path)}`}
+                  src={getMediaUrl(slide.path)}
                   alt={`Slide ${index + 1}`}
                   style={{
                     width: '100%',
@@ -999,13 +1057,13 @@ function MediaManager({
                           )}
                           {file.type === 'image' ? (
                             <img
-                              src={`local-media://${encodeURIComponent(file.path)}`}
+                              src={getMediaUrl(file.path)}
                               alt={file.name}
                               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                             />
                           ) : file.type === 'video' ? (
                             <video
-                              src={`local-media://${encodeURIComponent(file.path)}`}
+                              src={getMediaUrl(file.path)}
                               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                             />
                           ) : (

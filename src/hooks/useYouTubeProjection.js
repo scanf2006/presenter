@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { normalizeYouTubeWatchUrl, getYouTubeVideoIdFromPayload, buildYouTubeEmbedUrl } from '../utils/youtube';
+import { downloadTauriYouTube, isTauriRuntime } from '../utils/tauriProjector';
 
 export default function useYouTubeProjection({ isElectron }) {
   const normalizeYouTubeUrl = useCallback((payload) => {
@@ -34,6 +35,21 @@ export default function useYouTubeProjection({ isElectron }) {
     }
 
     if (!inputUrl) return payload;
+
+    if (isTauriRuntime()) {
+      const resolved = await downloadTauriYouTube(inputUrl);
+      if (!resolved?.success || !resolved?.localPath) {
+        throw new Error(resolved?.error || 'YouTube cache download failed.');
+      }
+      return {
+        type: 'video',
+        path: resolved.localPath,
+        name: resolved.title || payload.name || 'YouTube Video',
+        source: 'youtube-cache',
+        videoId: resolved.videoId || payload.videoId || '',
+        originalUrl: resolved.originalUrl || inputUrl,
+      };
+    }
 
     if (!isElectron) {
       return {

@@ -109,14 +109,6 @@ function SidebarQueue({ openDisplays, openText, openSongs, openBible, openMedia 
     return Math.max(0, Math.min(maxIndex, adjusted));
   };
 
-  const readDraggingId = (event) => {
-    const transferId =
-      event?.dataTransfer?.getData('application/x-cdp-queue-id') ||
-      event?.dataTransfer?.getData('text/plain') ||
-      '';
-    return transferId || draggingQueueIdRef.current || draggingQueueId || '';
-  };
-
   const autoScrollQueueList = (clientY) => {
     const listEl = queueListRef.current;
     if (!listEl) return;
@@ -189,28 +181,6 @@ function SidebarQueue({ openDisplays, openText, openSongs, openBible, openMedia 
         <div
           ref={queueListRef}
           className="cp-queue-list"
-          onDragOver={(e) => {
-            if (!draggingQueueId) return;
-            e.preventDefault();
-            autoScrollQueueList(e.clientY);
-            if (e.target === e.currentTarget && projectorQueue.length > 0) {
-              setDropHint({ index: projectorQueue.length - 1, position: 'after' });
-            }
-          }}
-          onDrop={(e) => {
-            const draggingId = readDraggingId(e);
-            if (!draggingId) return;
-            e.preventDefault();
-            const fromIndex = projectorQueue.findIndex((q) => q.id === draggingId);
-            if (fromIndex < 0) return;
-            const hintIndex = dropHint.index >= 0 ? dropHint.index : projectorQueue.length - 1;
-            const hintPos = dropHint.index >= 0 ? dropHint.position : 'after';
-            const targetIndex = resolveDropTargetIndex(fromIndex, hintIndex, hintPos);
-            moveQueueItemByIndex(fromIndex, targetIndex);
-            setDraggingQueueId(null);
-            draggingQueueIdRef.current = '';
-            setDropHint({ index: -1, position: 'before' });
-          }}
         >
           {projectorQueue.length === 0 && (
             <div className="cp-queue-empty">
@@ -222,53 +192,50 @@ function SidebarQueue({ openDisplays, openText, openSongs, openBible, openMedia 
           {projectorQueue.map((item, index) => (
             <div
               key={item.id}
-              draggable
-              onDragStart={(e) => {
-                setDraggingQueueId(item.id);
-                draggingQueueIdRef.current = item.id;
-                if (e.dataTransfer) {
-                  e.dataTransfer.effectAllowed = 'move';
-                  e.dataTransfer.setData('application/x-cdp-queue-id', item.id);
-                  e.dataTransfer.setData('text/plain', item.id);
-                }
-              }}
-              onDragEnd={() => {
-                setDraggingQueueId(null);
-                draggingQueueIdRef.current = '';
-                setDropHint({ index: -1, position: 'before' });
-              }}
-              onDragOver={(e) => {
-                const draggingId = readDraggingId(e);
-                if (!draggingId || draggingId === item.id) return;
-                e.preventDefault();
-                e.stopPropagation();
-                autoScrollQueueList(e.clientY);
-                const rect = e.currentTarget.getBoundingClientRect();
-                const y = e.clientY - rect.top;
-                const position = y > rect.height / 2 ? 'after' : 'before';
-                setDropHint((prev) =>
-                  prev.index === index && prev.position === position
-                    ? prev
-                    : { index, position }
-                );
-              }}
-              onDrop={(e) => {
-                const draggingId = readDraggingId(e);
-                if (!draggingId || draggingId === item.id) return;
-                e.preventDefault();
-                e.stopPropagation();
-                const fromIndex = projectorQueue.findIndex((q) => q.id === draggingId);
-                if (fromIndex < 0) return;
-                const targetIndex = resolveDropTargetIndex(fromIndex, index, dropHint.position);
-                moveQueueItemByIndex(fromIndex, targetIndex);
-                setDraggingQueueId(null);
-                draggingQueueIdRef.current = '';
-                setDropHint({ index: -1, position: 'before' });
-              }}
+              data-queue-id={item.id}
               className={`cp-queue-card ${index === activeQueueIndex ? 'cp-queue-card--active' : ''} ${draggingQueueId === item.id ? 'cp-queue-card--dragging' : ''} ${dropHint.index === index && dropHint.position === 'before' ? 'cp-queue-card--drop-before' : ''} ${dropHint.index === index && dropHint.position === 'after' ? 'cp-queue-card--drop-after' : ''}`}
             >
               <div className="cp-queue-row">
-                <span title="Drag to reorder" className="cp-queue-drag">
+                <span
+                  title={useChineseMenu ? '按住并拖动排序' : 'Hold and drag to reorder'}
+                  className="cp-queue-drag"
+                  onPointerDown={(e) => {
+                    if (e.button !== 0) return;
+                    e.preventDefault();
+                    e.currentTarget.setPointerCapture?.(e.pointerId);
+                    setDraggingQueueId(item.id);
+                    draggingQueueIdRef.current = item.id;
+                  }}
+                  onPointerMove={(e) => {
+                    if (draggingQueueIdRef.current !== item.id) return;
+                    autoScrollQueueList(e.clientY);
+                    const target = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-queue-id]');
+                    const targetId = target?.getAttribute('data-queue-id');
+                    const targetIndex = projectorQueue.findIndex((queueItem) => queueItem.id === targetId);
+                    if (targetIndex < 0 || targetId === item.id) return;
+                    const rect = target.getBoundingClientRect();
+                    setDropHint({ index: targetIndex, position: e.clientY - rect.top > rect.height / 2 ? 'after' : 'before' });
+                  }}
+                  onPointerUp={(e) => {
+                    if (draggingQueueIdRef.current !== item.id) return;
+                    const target = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-queue-id]');
+                    const targetId = target?.getAttribute('data-queue-id');
+                    const targetIndex = projectorQueue.findIndex((queueItem) => queueItem.id === targetId);
+                    if (targetIndex >= 0 && targetId !== item.id) {
+                      const rect = target.getBoundingClientRect();
+                      const position = e.clientY - rect.top > rect.height / 2 ? 'after' : 'before';
+                      moveQueueItemByIndex(index, resolveDropTargetIndex(index, targetIndex, position));
+                    }
+                    setDraggingQueueId(null);
+                    draggingQueueIdRef.current = '';
+                    setDropHint({ index: -1, position: 'before' });
+                  }}
+                  onPointerCancel={() => {
+                    setDraggingQueueId(null);
+                    draggingQueueIdRef.current = '';
+                    setDropHint({ index: -1, position: 'before' });
+                  }}
+                >
                   ::
                 </span>
                 <span className="cp-queue-index">{index + 1}.</span>

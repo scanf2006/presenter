@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { getTauriDisplays } from '../utils/tauriProjector';
 
 const BROWSER_FALLBACK_DISPLAYS = [
   {
@@ -17,22 +18,27 @@ const BROWSER_FALLBACK_DISPLAYS = [
   },
 ];
 
-export default function useDisplayProjectorStatus({ isElectron }) {
+export default function useDisplayProjectorStatus({ isElectron, isTauri }) {
   const [displays, setDisplays] = useState(() => (isElectron ? [] : BROWSER_FALLBACK_DISPLAYS));
   const [projectorActive, setProjectorActive] = useState(false);
   const [projectorDisplayId, setProjectorDisplayId] = useState(null);
 
+  const refreshDisplays = useCallback(async () => {
+    try {
+      if (isElectron) {
+        setDisplays(await window.churchDisplay.getDisplays());
+      } else if (isTauri) {
+        setDisplays(await getTauriDisplays());
+      }
+    } catch (err) {
+      console.warn('[useDisplayProjectorStatus] getDisplays failed:', err);
+    }
+  }, [isElectron, isTauri]);
+
   useEffect(() => {
     if (isElectron) {
       let isMounted = true;
-      window.churchDisplay
-        .getDisplays()
-        .then((data) => {
-          if (isMounted) setDisplays(data);
-        })
-        .catch((err) => {
-          console.warn('[useDisplayProjectorStatus] getDisplays failed:', err);
-        });
+      void refreshDisplays();
       const offDisplaysChanged = window.churchDisplay.onDisplaysChanged(setDisplays);
       const offProjectorStatus = window.churchDisplay.onProjectorStatus((status) => {
         setProjectorActive(status.active);
@@ -54,13 +60,17 @@ export default function useDisplayProjectorStatus({ isElectron }) {
       };
     }
 
+    if (isTauri) {
+      void refreshDisplays();
+    }
     // browser fallback is initialized in useState
-  }, [isElectron]);
+  }, [isElectron, isTauri, refreshDisplays]);
 
   return {
     displays,
     projectorActive,
     projectorDisplayId,
+    refreshDisplays,
     setProjectorActive,
     setProjectorDisplayId,
   };

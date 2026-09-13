@@ -19,7 +19,6 @@ export function getPreviewTextSize(slide, fallbackPx, previewStageWidth) {
 }
 
 export function getPreviewMediaUrl(filePath) {
-  if (!filePath) return '';
-  if (/^https?:\/\//i.test(filePath)) return filePath;
-  return `local-media://${encodeURIComponent(filePath)}`;
+  return getMediaUrl(filePath);
 }
+import { getMediaUrl } from './tauriProjector';

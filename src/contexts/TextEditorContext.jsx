@@ -171,8 +171,10 @@ export function TextEditorProvider({ children }) {
               })
             : mediaData;
         pushToProjector(playableData);
+        return true;
       } catch (err) {
         showToast(`YouTube play failed: ${err.message || 'Unknown error'}`, 'error');
+        return false;
       }
     },
     [pushToProjector, normalizeYouTubeUrl, getYouTubeVideoId, resolveYouTubePayload, showToast]

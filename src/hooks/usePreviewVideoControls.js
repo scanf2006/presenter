@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 
-export default function usePreviewVideoControls() {
+export default function usePreviewVideoControls({ onMediaCommand } = {}) {
   const [previewVideoCurrent, setPreviewVideoCurrent] = useState(0);
   const [previewVideoDuration, setPreviewVideoDuration] = useState(0);
   const [previewVideoPaused, setPreviewVideoPaused] = useState(false);
@@ -35,9 +35,14 @@ export default function usePreviewVideoControls() {
   const togglePauseResume = useCallback(() => {
     const v = previewVideoRef.current;
     if (!v) return;
-    if (v.paused) v.play().catch(() => {});
-    else v.pause();
-  }, []);
+    if (v.paused) {
+      v.play().catch(() => {});
+      onMediaCommand?.({ type: 'play' });
+    } else {
+      v.pause();
+      onMediaCommand?.({ type: 'pause' });
+    }
+  }, [onMediaCommand]);
 
   const stopPlayback = useCallback(() => {
     const v = previewVideoRef.current;
@@ -45,14 +50,17 @@ export default function usePreviewVideoControls() {
     v.pause();
     v.currentTime = 0;
     setPreviewVideoCurrent(0);
-  }, []);
+    onMediaCommand?.({ type: 'pause' });
+    onMediaCommand?.({ type: 'seek', value: 0 });
+  }, [onMediaCommand]);
 
   const toggleMute = useCallback(() => {
     const v = previewVideoRef.current;
     if (!v) return;
     v.muted = !v.muted;
     setPreviewVideoMuted(v.muted);
-  }, []);
+    onMediaCommand?.({ type: 'mute', value: v.muted });
+  }, [onMediaCommand]);
 
   return {
     previewVideoRef,
