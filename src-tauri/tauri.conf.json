@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "churchdisplay-pro",
-  "version": "0.3.204",
+  "version": "0.3.205",
   "identifier": "com.aiden.churchdisplaypro",
   "build": {
     "frontendDist": "../dist",
@@ -54,6 +54,13 @@
       "../vendor/youtube-runtime/yt-dlp.exe": "youtube-runtime/yt-dlp.exe",
       "../vendor/youtube-runtime/ffmpeg.exe": "youtube-runtime/ffmpeg.exe",
       "../vendor/youtube-runtime/deno.exe": "youtube-runtime/deno.exe"
+    },
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico",
+        "installerHooks": "installer-hooks.nsh"
+      }
     },
     "android": {
       "debugApplicationIdSuffix": ".debug"

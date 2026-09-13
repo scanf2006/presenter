@@ -42,6 +42,21 @@ test('ProjectorView renders PDF content sent from the media selector', () => {
   assert.equal(content.includes("fitMode={content.fitMode || 'contain'}"), true);
 });
 
+test('Preview media uses the same local-file URL resolver as the projector', () => {
+  const content = read('src/utils/preview.js');
+  assert.equal(content.includes("import { getMediaUrl } from './tauriProjector'"), true);
+  assert.equal(content.includes('return getMediaUrl(filePath)'), true);
+});
+
+test('Tauri restores the latest payload when the projector window becomes ready', () => {
+  const rust = read('src-tauri/src/lib.rs');
+  const projector = read('src/components/ProjectorView.jsx');
+  assert.equal(rust.includes('struct ProjectorContentState'), true);
+  assert.equal(rust.includes('fn get_projector_content'), true);
+  assert.equal(projector.includes('getTauriProjectorContent()'), true);
+  assert.equal(projector.includes('projectorContentRevisionRef'), true);
+});
+
 test('PreviewStage uses the selected projector display aspect ratio', () => {
   const content = read('src/components/control-panel/preview/PreviewStage.jsx');
   assert.equal(content.includes('aspectRatio: previewAspectRatio || PREVIEW.ASPECT_RATIO_16_9'), true);

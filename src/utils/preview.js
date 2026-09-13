@@ -1,4 +1,5 @@
 import { PREVIEW } from '../constants/ui';
+import { getMediaUrl } from './tauriProjector';
 
 export function formatTime(seconds) {
   if (!Number.isFinite(seconds) || seconds < 0) return '00:00';
@@ -21,4 +22,3 @@ export function getPreviewTextSize(slide, fallbackPx, previewStageWidth) {
 export function getPreviewMediaUrl(filePath) {
   return getMediaUrl(filePath);
 }
-import { getMediaUrl } from './tauriProjector';
