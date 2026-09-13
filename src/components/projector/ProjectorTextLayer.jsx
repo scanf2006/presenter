@@ -24,7 +24,9 @@ function ProjectorTextLayer({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: 'clamp(24px, 5vh, 72px) clamp(28px, 6vw, 120px)',
+        padding: isFreeText
+          ? 'clamp(24px, 5vh, 72px) clamp(12px, 3.125vw, 60px)'
+          : 'clamp(24px, 5vh, 72px) clamp(28px, 6vw, 120px)',
         pointerEvents: 'none',
       }}
     >
