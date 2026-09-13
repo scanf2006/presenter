@@ -1,5 +1,6 @@
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 
 export function isTauriRuntime() {
   return typeof window !== 'undefined' && Boolean(window.__TAURI_INTERNALS__);
@@ -18,6 +19,7 @@ export async function getTauriDisplays() {
 export const showTauriProjector = (displayId) => invoke('show_projector', { displayId: String(displayId) });
 export const hideTauriProjector = () => invoke('hide_projector');
 export const sendToTauriProjector = (payload) => invoke('send_to_projector', { payload });
+export const getTauriProjectorContent = () => invoke('get_projector_content');
 export const sendTauriProjectorTransition = (payload) => invoke('send_projector_transition', { payload });
 export const sendTauriProjectorMediaCommand = (payload) => invoke('send_projector_media_command', { payload });
 export const exportTauriSetupBundle = (folder) => invoke('export_setup_bundle', { folder });
@@ -37,6 +39,7 @@ export const deleteTauriSong = (songId) => invoke('songs_delete', { songId });
 export const minimizeTauriWindow = () => invoke('minimize_main_window');
 export const toggleMaximizeTauriWindow = () => invoke('toggle_maximize_main_window');
 export const closeTauriWindow = () => invoke('close_main_window');
+export const startTauriWindowDragging = () => getCurrentWindow().startDragging();
 export const downloadTauriYouTube = (inputUrl) => invoke('youtube_cache_download', { inputUrl });
 export const loadTauriQueue = () => invoke('queue_load');
 export const saveTauriQueue = (items) => invoke('queue_save', { items });

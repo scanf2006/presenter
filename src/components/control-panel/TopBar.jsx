@@ -7,6 +7,7 @@ import {
   closeTauriWindow,
   isTauriRuntime,
   minimizeTauriWindow,
+  startTauriWindowDragging,
   toggleMaximizeTauriWindow,
 } from '../../utils/tauriProjector';
 
@@ -104,6 +105,13 @@ function TopBar({ appVersion, onClear }) {
     if (isElectron) handleToggleMaximizeWindow();
     else toggleMaximizeTauriWindow().catch((error) => reportWindowError('Maximize', error));
   };
+  const handleDragStart = (event) => {
+    if (isTauri && event.button === 0) {
+      startTauriWindowDragging().catch((error) =>
+        console.warn('[Window] drag failed:', error)
+      );
+    }
+  };
   const handleClose = async () => {
     if (isElectron) {
       handleCloseWindow();
@@ -123,6 +131,7 @@ function TopBar({ appVersion, onClear }) {
       <div
         className="top-bar__brand"
         data-tauri-drag-region
+        onMouseDown={handleDragStart}
         onDoubleClick={handleMaximize}
       >
         <div className="top-bar__logo">CD</div>

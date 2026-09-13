@@ -161,6 +161,8 @@ body {
 
 .top-bar__brand {
   display: flex;
+  flex: 1;
+  min-width: 0;
   align-items: center;
   gap: var(--spacing-sm);
 }

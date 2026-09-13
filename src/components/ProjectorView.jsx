@@ -9,7 +9,11 @@ import {
   getScaledFreeTextFontPx,
   isTextualSlideType,
 } from '../utils/freeTextLayout';
-import { getMediaUrl, isTauriRuntime } from '../utils/tauriProjector';
+import {
+  getMediaUrl,
+  getTauriProjectorContent,
+  isTauriRuntime,
+} from '../utils/tauriProjector';
 function ProjectorView() {
   const [content, setContent] = useState(null);
   const [backgroundContent, setBackgroundContent] = useState(null);
@@ -30,6 +34,7 @@ function ProjectorView() {
   const mediaSampleVideoRef = useRef(null);
   const sampleCanvasRef = useRef(null);
   const timeoutRef = useRef([]);
+  const projectorContentRevisionRef = useRef(0);
   const [adaptiveOverlayOpacity, setAdaptiveOverlayOpacity] = useState(0.1);
 
   const isElectron = typeof window.churchDisplay !== 'undefined';
@@ -69,11 +74,14 @@ function ProjectorView() {
       transitionRef.current = next;
       setTransitionConfig(next);
     }).then((dispose) => { unlistenTransition = dispose; });
-    listen('projector-content', (event) => {
+    const applyIncomingContent = (snapshot, { skipTransition = false } = {}) => {
+      if (!snapshot || !Number.isFinite(snapshot.revision)) return;
+      if (snapshot.revision < projectorContentRevisionRef.current) return;
+      projectorContentRevisionRef.current = snapshot.revision;
       clearTimers();
-      const nextContent = event.payload;
+      const nextContent = snapshot.payload;
       const config = transitionRef.current;
-      if (!config.enabled || nextContent?.disableTransitionOnce) {
+      if (skipTransition || !config.enabled || nextContent?.disableTransitionOnce) {
         applyContent(nextContent);
         setFadeClass('');
         setTransitionMaskVisible(false);
@@ -90,7 +98,15 @@ function ProjectorView() {
         timeoutRef.current.push(contentTimer);
       }, config.durationMs);
       timeoutRef.current.push(fadeTimer);
-    }).then((dispose) => { unlistenContent = dispose; });
+    };
+    listen('projector-content', (event) => {
+      applyIncomingContent(event.payload);
+    }).then((dispose) => {
+      unlistenContent = dispose;
+      getTauriProjectorContent()
+        .then((snapshot) => applyIncomingContent(snapshot, { skipTransition: true }))
+        .catch((error) => console.warn('[ProjectorView] content recovery failed:', error));
+    });
     listen('projector-media-command', (event) => {
       const video = videoRef.current;
       if (!video) return;
@@ -256,11 +272,15 @@ function ProjectorView() {
   const fadeAnimationStyle = transitionConfig.enabled
     ? { animationDuration: `${transitionConfig.durationMs}ms` }
     : { animationDuration: '0ms' };
+  const mediaObjectFit =
+    isPptImage || (content?.type === 'video' && content?.fitMode === 'contain')
+      ? 'contain'
+      : 'cover';
 
   const fullScreenMediaStyle = {
     width: '100%',
     height: '100%',
-    objectFit: isPptImage ? 'contain' : 'cover',
+    objectFit: mediaObjectFit,
     objectPosition: 'center center',
     display: 'block',
     borderRadius: 0,

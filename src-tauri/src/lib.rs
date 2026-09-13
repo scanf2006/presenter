@@ -9,6 +9,7 @@ use std::{
     io::{BufRead, BufReader, Read},
     path::{Path, PathBuf},
     process::{Command, Stdio},
+    sync::Mutex,
     thread,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -24,6 +25,14 @@ struct DisplayInfo {
     width: u32,
     height: u32,
 }
+
+#[derive(Clone, Serialize)]
+struct ProjectorContentSnapshot {
+    revision: u64,
+    payload: serde_json::Value,
+}
+
+struct ProjectorContentState(Mutex<ProjectorContentSnapshot>);
 
 #[derive(Serialize)]
 struct BibleBook {
@@ -139,7 +148,20 @@ struct QueueLoadResult {
 }
 
 #[derive(Serialize)]
-struct SetupTransferResult { success: bool, cancelled: bool, #[serde(rename = "backupDir")] backup_dir: String, #[serde(rename = "copiedCount")] copied_count: usize, #[serde(rename = "skippedCount")] skipped_count: usize, #[serde(rename = "totalBytes")] total_bytes: u64, warnings: Vec<String>, error: Option<String> }
+struct SetupTransferResult {
+    success: bool,
+    cancelled: bool,
+    #[serde(rename = "backupDir")]
+    backup_dir: String,
+    #[serde(rename = "copiedCount")]
+    copied_count: usize,
+    #[serde(rename = "skippedCount")]
+    skipped_count: usize,
+    #[serde(rename = "totalBytes")]
+    total_bytes: u64,
+    warnings: Vec<String>,
+    error: Option<String>,
+}
 
 #[derive(Serialize)]
 struct YouTubeDownloadResult {
@@ -188,12 +210,26 @@ fn migrate_legacy_queue_if_needed(app: &AppHandle, queue_path: &Path) -> Result<
     Ok(())
 }
 
-fn copy_tree(source: &Path, target: &Path, overwrite: bool, counts: &mut (usize, usize, u64)) -> Result<(), String> {
+fn copy_tree(
+    source: &Path,
+    target: &Path,
+    overwrite: bool,
+    counts: &mut (usize, usize, u64),
+) -> Result<(), String> {
     for entry in fs::read_dir(source).map_err(|e| e.to_string())?.flatten() {
-        let from = entry.path(); let to = target.join(entry.file_name());
-        if from.is_dir() { fs::create_dir_all(&to).map_err(|e| e.to_string())?; copy_tree(&from, &to, overwrite, counts)?; }
-        else if overwrite || !to.exists() { fs::create_dir_all(target).map_err(|e| e.to_string())?; fs::copy(&from, &to).map_err(|e| e.to_string())?; counts.0 += 1; counts.2 += fs::metadata(&from).map(|m| m.len()).unwrap_or(0); }
-        else { counts.1 += 1; }
+        let from = entry.path();
+        let to = target.join(entry.file_name());
+        if from.is_dir() {
+            fs::create_dir_all(&to).map_err(|e| e.to_string())?;
+            copy_tree(&from, &to, overwrite, counts)?;
+        } else if overwrite || !to.exists() {
+            fs::create_dir_all(target).map_err(|e| e.to_string())?;
+            fs::copy(&from, &to).map_err(|e| e.to_string())?;
+            counts.0 += 1;
+            counts.2 += fs::metadata(&from).map(|m| m.len()).unwrap_or(0);
+        } else {
+            counts.1 += 1;
+        }
     }
     Ok(())
 }
@@ -286,7 +322,10 @@ fn media_file(path: PathBuf, media_type: &str) -> Result<MediaFile, String> {
 }
 
 fn is_youtube_temporary_file(path: &Path) -> bool {
-    let name = path.file_name().and_then(|value| value.to_str()).unwrap_or_default();
+    let name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default();
     if !name.starts_with("youtube_") {
         return false;
     }
@@ -297,7 +336,9 @@ fn is_youtube_temporary_file(path: &Path) -> bool {
             .map(|part| {
                 part.starts_with('f')
                     && part.len() > 1
-                    && part[1..].chars().all(|character| character.is_ascii_digit() || character == '-')
+                    && part[1..]
+                        .chars()
+                        .all(|character| character.is_ascii_digit() || character == '-')
             })
             .unwrap_or(false)
 }
@@ -334,8 +375,13 @@ fn youtube_video_id(raw_url: &str) -> Result<String, String> {
     let host = host.to_ascii_lowercase();
     let id = if host == "youtu.be" || host == "www.youtu.be" {
         path_and_query.split(['/', '?']).next().unwrap_or("")
-    } else if ["youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com"]
-        .contains(&host.as_str())
+    } else if [
+        "youtube.com",
+        "www.youtube.com",
+        "m.youtube.com",
+        "music.youtube.com",
+    ]
+    .contains(&host.as_str())
     {
         if let Some(short_path) = path_and_query.strip_prefix("shorts/") {
             short_path.split(['/', '?']).next().unwrap_or("")
@@ -351,7 +397,11 @@ fn youtube_video_id(raw_url: &str) -> Result<String, String> {
     } else {
         return Err("Only YouTube URLs are supported.".to_string());
     };
-    if id.is_empty() || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+    if id.is_empty()
+        || !id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
         return Err("Invalid YouTube video ID.".to_string());
     }
     Ok(id.to_string())
@@ -365,7 +415,11 @@ fn youtube_tool_path(app: &AppHandle, name: &str) -> Option<PathBuf> {
             .join("youtube-runtime")
             .join(name)
     } else {
-        app.path().resource_dir().ok()?.join("youtube-runtime").join(name)
+        app.path()
+            .resource_dir()
+            .ok()?
+            .join("youtube-runtime")
+            .join(name)
     };
     if bundled.is_file() {
         return Some(bundled);
@@ -410,7 +464,10 @@ async fn youtube_cache_download(app: AppHandle, input_url: String) -> YouTubeDow
             Ok(root) => root.join("video").join(format!("youtube_{video_id}.mp4")),
             Err(error) => return fail(error),
         };
-        if fs::metadata(&output_path).map(|meta| meta.len() >= 1024 * 100).unwrap_or(false) {
+        if fs::metadata(&output_path)
+            .map(|meta| meta.len() >= 1024 * 100)
+            .unwrap_or(false)
+        {
             return YouTubeDownloadResult {
                 success: true,
                 local_path: output_path.to_string_lossy().into_owned(),
@@ -426,35 +483,61 @@ async fn youtube_cache_download(app: AppHandle, input_url: String) -> YouTubeDow
         };
         let mut command = Command::new(ytdlp);
         command.args([
-            "--no-playlist", "--no-warnings", "--no-part", "--retries", "3", "--fragment-retries", "3",
-            "--concurrent-fragments", "1", "-f", "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]/b[height<=720]",
-            "--merge-output-format", "mp4", "--newline", "--progress-template", "download:PROGRESS:%(progress._percent_str)s", "--output",
+            "--no-playlist",
+            "--no-warnings",
+            "--no-part",
+            "--retries",
+            "3",
+            "--fragment-retries",
+            "3",
+            "--concurrent-fragments",
+            "1",
+            "-f",
+            "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]/b[height<=720]",
+            "--merge-output-format",
+            "mp4",
+            "--newline",
+            "--progress-template",
+            "download:PROGRESS:%(progress._percent_str)s",
+            "--output",
         ]);
         command.arg(&output_path);
         if let Some(ffmpeg) = youtube_tool_path(&app, "ffmpeg.exe") {
             command.arg("--ffmpeg-location").arg(ffmpeg);
         }
         if let Some(deno) = youtube_tool_path(&app, "deno.exe") {
-            command.arg("--js-runtimes").arg(format!("deno:{}", deno.to_string_lossy()));
+            command
+                .arg("--js-runtimes")
+                .arg(format!("deno:{}", deno.to_string_lossy()));
         }
         command.stdout(Stdio::piped()).stderr(Stdio::piped());
         let mut child = match command.arg(&input_url).creation_flags(0x08000000).spawn() {
             Ok(child) => child,
             Err(error) => return fail(error.to_string()),
         };
-        let stderr = child.stderr.take().map(|stream| thread::spawn(move || {
-            let mut detail = String::new();
-            let _ = BufReader::new(stream).read_to_string(&mut detail);
-            detail
-        }));
+        let stderr = child.stderr.take().map(|stream| {
+            thread::spawn(move || {
+                let mut detail = String::new();
+                let _ = BufReader::new(stream).read_to_string(&mut detail);
+                detail
+            })
+        });
         if let Some(stdout) = child.stdout.take() {
             for line in BufReader::new(stdout).lines().map_while(Result::ok) {
                 if let Some(raw_percent) = line.strip_prefix("PROGRESS:") {
-                    let percent = raw_percent.trim().trim_end_matches('%').trim().parse::<f64>().ok();
-                    let _ = app.emit("youtube-download-progress", serde_json::json!({
-                        "status": "downloading",
-                        "percent": percent,
-                    }));
+                    let percent = raw_percent
+                        .trim()
+                        .trim_end_matches('%')
+                        .trim()
+                        .parse::<f64>()
+                        .ok();
+                    let _ = app.emit(
+                        "youtube-download-progress",
+                        serde_json::json!({
+                            "status": "downloading",
+                            "percent": percent,
+                        }),
+                    );
                 }
             }
         }
@@ -467,8 +550,16 @@ async fn youtube_cache_download(app: AppHandle, input_url: String) -> YouTubeDow
             .unwrap_or_default()
             .trim()
             .to_string();
-        if !status.success() || !fs::metadata(&output_path).map(|meta| meta.len() >= 1024 * 100).unwrap_or(false) {
-            return fail(if detail.is_empty() { "YouTube download failed.".to_string() } else { detail });
+        if !status.success()
+            || !fs::metadata(&output_path)
+                .map(|meta| meta.len() >= 1024 * 100)
+                .unwrap_or(false)
+        {
+            return fail(if detail.is_empty() {
+                "YouTube download failed.".to_string()
+            } else {
+                detail
+            });
         }
         YouTubeDownloadResult {
             success: true,
@@ -482,7 +573,13 @@ async fn youtube_cache_download(app: AppHandle, input_url: String) -> YouTubeDow
     })
     .await
     .unwrap_or_else(|error| YouTubeDownloadResult {
-        success: false, local_path: String::new(), title: String::new(), video_id: String::new(), original_url: String::new(), reused: false, error: Some(error.to_string()),
+        success: false,
+        local_path: String::new(),
+        title: String::new(),
+        video_id: String::new(),
+        original_url: String::new(),
+        reused: false,
+        error: Some(error.to_string()),
     })
 }
 
@@ -511,7 +608,8 @@ fn songs_list(app: AppHandle) -> Result<Vec<Song>, String> {
             })
         })
         .map_err(|e| e.to_string())?;
-    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -520,7 +618,10 @@ fn songs_save(app: AppHandle, song: SongInput) -> Result<SongSaveResult, String>
         return Err("Song title is required.".to_string());
     }
     let connection = songs_database(&app)?;
-    let style_json = song.song_style.map(|style| style.to_string()).unwrap_or_default();
+    let style_json = song
+        .song_style
+        .map(|style| style.to_string())
+        .unwrap_or_default();
     let author = song.author.unwrap_or_default();
     let background_type = song.background_type.unwrap_or_default();
     let background_path = song.background_path.unwrap_or_default();
@@ -1078,7 +1179,12 @@ fn queue_load(app: AppHandle) -> QueueLoadResult {
         return fail(error);
     }
     if !queue_path.is_file() {
-        return QueueLoadResult { success: true, found: false, items: vec![], error: None };
+        return QueueLoadResult {
+            success: true,
+            found: false,
+            items: vec![],
+            error: None,
+        };
     }
     let raw = match fs::read_to_string(&queue_path) {
         Ok(raw) => raw,
@@ -1097,7 +1203,12 @@ fn queue_load(app: AppHandle) -> QueueLoadResult {
             .unwrap_or_default(),
         _ => vec![],
     };
-    QueueLoadResult { success: true, found: true, items, error: None }
+    QueueLoadResult {
+        success: true,
+        found: true,
+        items,
+        error: None,
+    }
 }
 
 #[tauri::command]
@@ -1132,8 +1243,27 @@ fn queue_save(app: AppHandle, items: Vec<serde_json::Value>) -> Result<SuccessRe
 
 #[tauri::command]
 fn send_to_projector(app: AppHandle, payload: serde_json::Value) -> Result<(), String> {
-    app.emit_to("projector", "projector-content", payload)
+    let snapshot = {
+        let state = app.state::<ProjectorContentState>();
+        let mut content = state
+            .0
+            .lock()
+            .map_err(|_| "Projector state is unavailable.")?;
+        content.revision = content.revision.saturating_add(1);
+        content.payload = payload;
+        content.clone()
+    };
+    app.emit_to("projector", "projector-content", snapshot)
         .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn get_projector_content(app: AppHandle) -> Result<ProjectorContentSnapshot, String> {
+    app.state::<ProjectorContentState>()
+        .0
+        .lock()
+        .map(|content| content.clone())
+        .map_err(|_| "Projector state is unavailable.".to_string())
 }
 
 #[tauri::command]
@@ -1150,31 +1280,117 @@ fn send_projector_media_command(app: AppHandle, payload: serde_json::Value) -> R
 
 #[tauri::command]
 fn export_setup_bundle(app: AppHandle, folder: String) -> SetupTransferResult {
-    let fail = |error| SetupTransferResult { success: false, cancelled: false, backup_dir: String::new(), copied_count: 0, skipped_count: 0, total_bytes: 0, warnings: vec![], error: Some(error) };
-    let data = match app.path().app_data_dir() { Ok(path) => path, Err(error) => return fail(error.to_string()) };
-    let target = PathBuf::from(folder).join(format!("churchdisplay-pro-export-{}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()));
-    if let Err(error) = fs::create_dir_all(&target) { return fail(error.to_string()); }
+    let fail = |error| SetupTransferResult {
+        success: false,
+        cancelled: false,
+        backup_dir: String::new(),
+        copied_count: 0,
+        skipped_count: 0,
+        total_bytes: 0,
+        warnings: vec![],
+        error: Some(error),
+    };
+    let data = match app.path().app_data_dir() {
+        Ok(path) => path,
+        Err(error) => return fail(error.to_string()),
+    };
+    let target = PathBuf::from(folder).join(format!(
+        "churchdisplay-pro-export-{}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs()
+    ));
+    if let Err(error) = fs::create_dir_all(&target) {
+        return fail(error.to_string());
+    }
     let mut counts = (0, 0, 0);
-    for name in ["projector-queue.json", "songs.db"] { let source = data.join(name); if source.is_file() { if let Err(error) = fs::copy(&source, target.join(name)) { return fail(error.to_string()); } counts.0 += 1; counts.2 += fs::metadata(source).map(|m| m.len()).unwrap_or(0); } }
-    let media = data.join("media"); if media.is_dir() { if let Err(error) = copy_tree(&media, &target.join("media"), true, &mut counts) { return fail(error); } }
-    SetupTransferResult { success: true, cancelled: false, backup_dir: target.to_string_lossy().into_owned(), copied_count: counts.0, skipped_count: counts.1, total_bytes: counts.2, warnings: vec![], error: None }
+    for name in ["projector-queue.json", "songs.db"] {
+        let source = data.join(name);
+        if source.is_file() {
+            if let Err(error) = fs::copy(&source, target.join(name)) {
+                return fail(error.to_string());
+            }
+            counts.0 += 1;
+            counts.2 += fs::metadata(source).map(|m| m.len()).unwrap_or(0);
+        }
+    }
+    let media = data.join("media");
+    if media.is_dir() {
+        if let Err(error) = copy_tree(&media, &target.join("media"), true, &mut counts) {
+            return fail(error);
+        }
+    }
+    SetupTransferResult {
+        success: true,
+        cancelled: false,
+        backup_dir: target.to_string_lossy().into_owned(),
+        copied_count: counts.0,
+        skipped_count: counts.1,
+        total_bytes: counts.2,
+        warnings: vec![],
+        error: None,
+    }
 }
 
 #[tauri::command]
 fn import_setup_bundle(app: AppHandle, folder: String) -> SetupTransferResult {
-    let fail = |error| SetupTransferResult { success: false, cancelled: false, backup_dir: String::new(), copied_count: 0, skipped_count: 0, total_bytes: 0, warnings: vec![], error: Some(error) };
+    let fail = |error| SetupTransferResult {
+        success: false,
+        cancelled: false,
+        backup_dir: String::new(),
+        copied_count: 0,
+        skipped_count: 0,
+        total_bytes: 0,
+        warnings: vec![],
+        error: Some(error),
+    };
     let source = PathBuf::from(folder);
-    let data = match app.path().app_data_dir() { Ok(path) => path, Err(error) => return fail(error.to_string()) };
-    if !source.is_dir() { return fail("Selected backup folder is unavailable.".to_string()); }
+    let data = match app.path().app_data_dir() {
+        Ok(path) => path,
+        Err(error) => return fail(error.to_string()),
+    };
+    if !source.is_dir() {
+        return fail("Selected backup folder is unavailable.".to_string());
+    }
     let mut counts = (0, 0, 0);
-    for name in ["projector-queue.json", "songs.db"] { let from = source.join(name); if from.is_file() { if let Err(error) = fs::copy(&from, data.join(name)) { return fail(error.to_string()); } counts.0 += 1; counts.2 += fs::metadata(from).map(|m| m.len()).unwrap_or(0); } }
-    let media = source.join("media"); if media.is_dir() { if let Err(error) = copy_tree(&media, &data.join("media"), false, &mut counts) { return fail(error); } }
-    SetupTransferResult { success: true, cancelled: false, backup_dir: source.to_string_lossy().into_owned(), copied_count: counts.0, skipped_count: counts.1, total_bytes: counts.2, warnings: vec![], error: None }
+    for name in ["projector-queue.json", "songs.db"] {
+        let from = source.join(name);
+        if from.is_file() {
+            if let Err(error) = fs::copy(&from, data.join(name)) {
+                return fail(error.to_string());
+            }
+            counts.0 += 1;
+            counts.2 += fs::metadata(from).map(|m| m.len()).unwrap_or(0);
+        }
+    }
+    let media = source.join("media");
+    if media.is_dir() {
+        if let Err(error) = copy_tree(&media, &data.join("media"), false, &mut counts) {
+            return fail(error);
+        }
+    }
+    SetupTransferResult {
+        success: true,
+        cancelled: false,
+        backup_dir: source.to_string_lossy().into_owned(),
+        copied_count: counts.0,
+        skipped_count: counts.1,
+        total_bytes: counts.2,
+        warnings: vec![],
+        error: None,
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(ProjectorContentState(Mutex::new(
+            ProjectorContentSnapshot {
+                revision: 0,
+                payload: serde_json::Value::Null,
+            },
+        )))
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             #[cfg(debug_assertions)]
@@ -1211,9 +1427,11 @@ pub fn run() {
             show_projector,
             hide_projector,
             send_to_projector,
+            get_projector_content,
             send_projector_transition,
-            send_projector_media_command
-            ,export_setup_bundle, import_setup_bundle
+            send_projector_media_command,
+            export_setup_bundle,
+            import_setup_bundle
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

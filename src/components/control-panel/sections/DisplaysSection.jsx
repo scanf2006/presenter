@@ -37,7 +37,7 @@ function DisplaysSection() {
             <span className="display-card__icon">{display.isPrimary ? 'P' : 'E'}</span>
             <div className="display-card__info">
               <div className="display-card__name">
-                {display.label || `${t('displays.displayLabel', 'Display')} ${display.id}`}
+                {(display.label || `${t('displays.displayLabel', 'Display')} ${display.id}`).replace(/^\\\\\.\\/, '')}
               </div>
               <div className="display-card__resolution">
                 {display.size?.width ?? '?'} x {display.size?.height ?? '?'}
