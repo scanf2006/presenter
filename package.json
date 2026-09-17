@@ -1,6 +1,6 @@
 {
   "name": "churchdisplay-pro",
-  "version": "0.3.205",
+  "version": "0.3.206",
   "description": "ChurchDisplay Pro - Worship projection system",
   "main": "electron/main.js",
   "build": {

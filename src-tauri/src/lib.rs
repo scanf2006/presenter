@@ -1,3 +1,7 @@
+mod projector_events;
+mod queue_store;
+mod setup_store;
+
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 #[cfg(target_os = "windows")]
@@ -1146,12 +1150,18 @@ async fn show_projector(app: AppHandle, display_id: String) -> Result<(), String
         .get_webview_window("projector")
         .ok_or("Projector window is unavailable.")?;
     projector
+        .set_fullscreen(false)
+        .map_err(|error| error.to_string())?;
+    projector
         .set_position(*monitor.position())
         .map_err(|error| error.to_string())?;
     projector
         .set_size(*monitor.size())
         .map_err(|error| error.to_string())?;
     projector.show().map_err(|error| error.to_string())?;
+    projector
+        .set_fullscreen(true)
+        .map_err(|error| error.to_string())?;
     projector.set_focus().map_err(|error| error.to_string())
 }
 
@@ -1190,18 +1200,9 @@ fn queue_load(app: AppHandle) -> QueueLoadResult {
         Ok(raw) => raw,
         Err(error) => return fail(error.to_string()),
     };
-    let parsed: serde_json::Value = match serde_json::from_str(&raw) {
-        Ok(value) => value,
+    let items = match queue_store::parse_items(&raw) {
+        Ok(items) => items,
         Err(error) => return fail(error.to_string()),
-    };
-    let items = match parsed {
-        serde_json::Value::Array(items) => items,
-        serde_json::Value::Object(ref object) => object
-            .get("items")
-            .and_then(serde_json::Value::as_array)
-            .cloned()
-            .unwrap_or_default(),
-        _ => vec![],
     };
     QueueLoadResult {
         success: true,
@@ -1213,31 +1214,8 @@ fn queue_load(app: AppHandle) -> QueueLoadResult {
 
 #[tauri::command]
 fn queue_save(app: AppHandle, items: Vec<serde_json::Value>) -> Result<SuccessResult, String> {
-    const MAX_QUEUE_SIZE: usize = 500;
-    const MAX_QUEUE_BYTES: usize = 2 * 1024 * 1024;
     let queue_path = queue_file_path(&app)?;
-    let envelope = serde_json::json!({
-        "schemaVersion": 2,
-        "items": items.into_iter().take(MAX_QUEUE_SIZE).collect::<Vec<_>>(),
-    });
-    let json = serde_json::to_vec_pretty(&envelope).map_err(|error| error.to_string())?;
-    if json.len() > MAX_QUEUE_BYTES {
-        return Err("Queue data exceeds maximum size.".to_string());
-    }
-    let temporary_path = queue_path.with_extension(format!("json.tmp.{}", std::process::id()));
-    let backup_path = queue_path.with_extension("json.bak");
-    fs::write(&temporary_path, json).map_err(|error| error.to_string())?;
-    if queue_path.exists() {
-        let _ = fs::remove_file(&backup_path);
-        fs::rename(&queue_path, &backup_path).map_err(|error| error.to_string())?;
-    }
-    if let Err(error) = fs::rename(&temporary_path, &queue_path) {
-        if backup_path.exists() {
-            let _ = fs::rename(&backup_path, &queue_path);
-        }
-        return Err(error.to_string());
-    }
-    let _ = fs::remove_file(backup_path);
+    queue_store::save_items(&queue_path, &items)?;
     Ok(SuccessResult { success: true })
 }
 
@@ -1267,13 +1245,21 @@ fn get_projector_content(app: AppHandle) -> Result<ProjectorContentSnapshot, Str
 }
 
 #[tauri::command]
-fn send_projector_transition(app: AppHandle, payload: serde_json::Value) -> Result<(), String> {
+fn send_projector_transition(
+    app: AppHandle,
+    payload: projector_events::ProjectorTransition,
+) -> Result<(), String> {
+    payload.validate()?;
     app.emit_to("projector", "projector-transition", payload)
         .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
-fn send_projector_media_command(app: AppHandle, payload: serde_json::Value) -> Result<(), String> {
+fn send_projector_media_command(
+    app: AppHandle,
+    payload: projector_events::ProjectorMediaCommand,
+) -> Result<(), String> {
+    payload.validate()?;
     app.emit_to("projector", "projector-media-command", payload)
         .map_err(|error| error.to_string())
 }
@@ -1353,11 +1339,14 @@ fn import_setup_bundle(app: AppHandle, folder: String) -> SetupTransferResult {
     if !source.is_dir() {
         return fail("Selected backup folder is unavailable.".to_string());
     }
+    if let Err(error) = setup_store::validate_import(&source) {
+        return fail(error);
+    }
     let mut counts = (0, 0, 0);
-    for name in ["projector-queue.json", "songs.db"] {
+    for name in setup_store::CORE_FILES {
         let from = source.join(name);
         if from.is_file() {
-            if let Err(error) = fs::copy(&from, data.join(name)) {
+            if let Err(error) = setup_store::replace_file(&from, &data.join(name)) {
                 return fail(error.to_string());
             }
             counts.0 += 1;
