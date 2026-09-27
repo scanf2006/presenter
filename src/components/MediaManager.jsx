@@ -12,6 +12,7 @@ import { useI18n } from '../contexts/I18nContext';
 import {
   deleteTauriMedia,
   downloadTauriYouTube,
+  cancelTauriYouTube,
   convertTauriPpt,
   getMediaUrl,
   importTauriMedia,
@@ -391,6 +392,10 @@ function MediaManager({
             showToast(t('media.youtubeCached', 'YouTube cached and added to queue'));
             return;
           }
+          if (resolved?.error === 'Task cancelled.') {
+            setYoutubeDownload({ status: 'idle', percent: null });
+            return;
+          }
           setYoutubeDownload({ status: 'failed', percent: null });
           showToast(
             t('media.youtubeCacheFailed', 'YouTube was added to queue, but offline caching failed.'),
@@ -687,12 +692,17 @@ function MediaManager({
             <button className="btn btn--primary" onClick={handleProjectYouTube}>
               {t('media.play', 'Play')}
             </button>
-            <button className="btn btn--ghost" onClick={handleQueueYouTube}>
+            <button className="btn btn--ghost" onClick={handleQueueYouTube} disabled={['resolving', 'downloading'].includes(youtubeDownload.status)}>
               {t('media.queue', 'Queue')}
             </button>
           </div>
           {youtubeDownload.status !== 'idle' && (
             <div style={{ marginTop: '-6px', marginBottom: '12px', fontSize: '12px' }}>
+              {isTauri && ['resolving', 'downloading'].includes(youtubeDownload.status) && (
+                <button className="btn btn--ghost" onClick={() => cancelTauriYouTube().catch(() => showToast(t('media.youtubeDownloadFailed', 'YouTube download failed.'), 'error'))}>
+                  {t('media.cancel', 'Cancel')}
+                </button>
+              )}
               {(youtubeDownload.status === 'resolving' || youtubeDownload.status === 'downloading') && (
                 <progress
                   max="100"

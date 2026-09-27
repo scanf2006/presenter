@@ -1,13 +1,16 @@
 ﻿import React from 'react';
 import { useProjectorContext } from '../../../contexts/ProjectorContext';
+import { useState } from 'react';
 import { useI18n } from '../../../contexts/I18nContext';
-import { isTauriRuntime } from '../../../utils/tauriProjector';
+import { exportTauriDiagnostics, isTauriRuntime } from '../../../utils/tauriProjector';
 
 /**
  * SystemInfoPanel renders system information (displays, projector status,
  * environment) and setup export/import buttons.
  */
 function SystemInfoPanel() {
+  const [diagnosticMessage, setDiagnosticMessage] = useState('');
+  const [exporting, setExporting] = useState(false);
   const { locale } = useI18n();
   const isZh = String(locale || 'en').toLowerCase().startsWith('zh');
   const isTauri = isTauriRuntime();
@@ -38,6 +41,17 @@ function SystemInfoPanel() {
         {isZh ? '系统信息' : 'System Info'}
       </div>
       <div className="cp-meta-list">
+        {isTauri && <button className="btn btn--ghost" disabled={exporting} onClick={async () => {
+          setExporting(true);
+          setDiagnosticMessage('');
+          try {
+            const path = await exportTauriDiagnostics();
+            if (path) setDiagnosticMessage(isZh ? '诊断信息已导出，不含媒体内容或许可证。' : 'Diagnostics exported without media or license data.');
+          } catch {
+            setDiagnosticMessage(isZh ? '导出失败，请选择可写入的文件夹。' : 'Export failed. Choose a writable folder.');
+          } finally { setExporting(false); }
+        }}>{isZh ? '导出诊断信息' : 'Export diagnostics'}</button>}
+        {diagnosticMessage && <div role="status">{diagnosticMessage}</div>}
         <div className="cp-meta-row">
           <span>{isZh ? '检测到的显示器' : 'Detected Displays'}</span>
           <span className="cp-meta-value">{displays.length}</span>
