@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "churchdisplay-pro",
-  "version": "0.3.208",
+  "version": "0.3.209",
   "identifier": "com.aiden.churchdisplaypro",
   "build": {
     "frontendDist": "../dist",
@@ -55,6 +55,7 @@
       "scripts/ppt-convert.ps1": "ppt-convert.ps1",
       "../vendor/youtube-runtime/yt-dlp.exe": "youtube-runtime/yt-dlp.exe",
       "../vendor/youtube-runtime/ffmpeg.exe": "youtube-runtime/ffmpeg.exe",
+      "../vendor/youtube-runtime/ffmpeg-LGPL.txt": "youtube-runtime/ffmpeg-LGPL.txt",
       "../vendor/youtube-runtime/deno.exe": "youtube-runtime/deno.exe"
     },
     "windows": {

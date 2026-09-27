@@ -51,6 +51,8 @@ struct TrialRuntime {
 }
 
 static TRIAL_RUNTIME: OnceLock<Mutex<TrialRuntime>> = OnceLock::new();
+// Serialize read-modify-write operations, including trial ticks and activation.
+static STORAGE_LOCK: Mutex<()> = Mutex::new(());
 #[derive(Deserialize)]
 struct Token {
     product: String,
@@ -101,35 +103,64 @@ fn storage_path(app: &AppHandle) -> Result<PathBuf, String> {
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     Ok(dir.join("license.json"))
 }
-fn load(path: &Path) -> Stored {
-    fs::read_to_string(path)
-        .ok()
-        .and_then(|raw| serde_json::from_str(&raw).ok())
-        .unwrap_or_default()
+fn load(path: &Path, legacy: bool) -> Result<Option<Stored>, String> {
+    let raw = match fs::read(path) {
+        Ok(raw) => raw,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(_) => {
+            return Err("Unable to read license data; original file has been preserved.".into())
+        }
+    };
+    let damaged = || "License data is damaged; original file has been preserved.".to_string();
+    let mut value: serde_json::Value = serde_json::from_slice(&raw).map_err(|_| damaged())?;
+    if legacy {
+        // Electron settings may predate these fields; current license files remain strict.
+        let object = value.as_object_mut().ok_or_else(damaged)?;
+        let defaults = serde_json::to_value(Stored::default()).map_err(|_| damaged())?;
+        for (key, default) in defaults.as_object().unwrap() {
+            object.entry(key.clone()).or_insert_with(|| default.clone());
+        }
+    }
+    serde_json::from_value(value)
+        .map(Some)
+        .map_err(|_| damaged())
 }
 fn save(path: &Path, data: &Stored) -> Result<(), String> {
-    fs::write(
-        path,
-        serde_json::to_vec_pretty(data).map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| e.to_string())
+    use std::io::Write;
+    load(path, false)?;
+    let bytes = serde_json::to_vec_pretty(data).map_err(|e| e.to_string())?;
+    let temporary = path.with_extension("json.tmp");
+    let write = || -> std::io::Result<()> {
+        let mut file = fs::File::create(&temporary)?;
+        file.write_all(&bytes)?;
+        file.sync_all()?;
+        drop(file);
+        fs::rename(&temporary, path)
+    };
+    let result = write();
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result.map_err(|_| "Unable to save license data; original file has been preserved.".into())
 }
 fn load_with_legacy_migration(app: &AppHandle) -> Result<(PathBuf, Stored), String> {
     let path = storage_path(app)?;
-    if path.is_file() {
-        return Ok((path.clone(), load(&path)));
+    if let Some(data) = load(&path, false)? {
+        return Ok((path, data));
     }
     let app_data_dir = app
         .path()
         .app_data_dir()
         .map_err(|error| error.to_string())?;
-    let legacy = app_data_dir.parent().and_then(|roaming_dir| {
-        ["churchdisplay-pro", "churchdisplay-pro-dev"]
-            .into_iter()
-            .map(|name| roaming_dir.join(name).join("app-settings.json"))
-            .find(|candidate| candidate.is_file())
-    });
-    let data = legacy.as_deref().map(load).unwrap_or_default();
+    let mut data = Stored::default();
+    if let Some(roaming_dir) = app_data_dir.parent() {
+        for name in ["churchdisplay-pro", "churchdisplay-pro-dev"] {
+            if let Some(legacy) = load(&roaming_dir.join(name).join("app-settings.json"), true)? {
+                data = legacy;
+                break;
+            }
+        }
+    }
     if !data.key.is_empty() || data.accepted_at.is_some() || data.trial_consumed_ms > 0 {
         save(&path, &data)?;
     }
@@ -147,18 +178,20 @@ fn format_duration_ms(ms: u64) -> String {
     let seconds = ms.div_ceil(1000);
     format!("{:02}:{:02}", seconds / 60, seconds % 60)
 }
-fn trial_status(app: &AppHandle, licensed: bool) -> serde_json::Value {
+fn trial_status(
+    path: &Path,
+    persisted: &Stored,
+    licensed: bool,
+) -> Result<serde_json::Value, String> {
     if licensed {
-        return serde_json::json!({
+        return Ok(serde_json::json!({
             "enabled": false, "active": false, "expired": false,
             "durationMs": TRIAL_DURATION_MS, "startedAtMs": null, "elapsedMs": 0,
             "remainingMs": null, "remainingLabel": null, "clockTampered": false,
             "message": "Licensed"
-        });
+        }));
     }
 
-    let (path, persisted) = load_with_legacy_migration(app).ok().unzip();
-    let persisted = persisted.unwrap_or_default();
     let runtime = TRIAL_RUNTIME.get_or_init(|| {
         Mutex::new(TrialRuntime {
             base_consumed_ms: persisted.trial_consumed_ms,
@@ -166,7 +199,7 @@ fn trial_status(app: &AppHandle, licensed: bool) -> serde_json::Value {
             started_at: Instant::now(),
         })
     });
-    let mut runtime = runtime.lock().expect("trial runtime lock");
+    let mut runtime = runtime.lock().map_err(|_| "Trial state unavailable.")?;
     let elapsed_ms = runtime.base_consumed_ms.saturating_add(
         runtime
             .started_at
@@ -179,25 +212,22 @@ fn trial_status(app: &AppHandle, licensed: bool) -> serde_json::Value {
     if consumed_ms.saturating_sub(runtime.last_persisted_ms) >= 1000
         || consumed_ms == TRIAL_DURATION_MS
     {
-        if let Some(path) = path {
-            let mut next = load(&path);
-            next.trial_consumed_ms = consumed_ms;
-            if save(&path, &next).is_ok() {
-                runtime.base_consumed_ms = consumed_ms;
-                runtime.last_persisted_ms = consumed_ms;
-                runtime.started_at = Instant::now();
-            }
-        }
+        let mut next = load(path, false)?.unwrap_or_default();
+        next.trial_consumed_ms = consumed_ms;
+        save(path, &next)?;
+        runtime.base_consumed_ms = consumed_ms;
+        runtime.last_persisted_ms = consumed_ms;
+        runtime.started_at = Instant::now();
     }
     let remaining_ms = TRIAL_DURATION_MS.saturating_sub(consumed_ms);
     let expired = remaining_ms == 0;
-    serde_json::json!({
+    Ok(serde_json::json!({
         "enabled": true, "active": !expired, "expired": expired,
         "durationMs": TRIAL_DURATION_MS, "startedAtMs": now_ms().saturating_sub(consumed_ms),
         "elapsedMs": consumed_ms, "remainingMs": remaining_ms,
         "remainingLabel": format_duration_ms(remaining_ms), "clockTampered": false,
         "message": if expired { "Trial expired. Please activate license to continue projection." } else { "Trial active." }
-    })
+    }))
 }
 fn command(program: &str, args: &[&str]) -> String {
     let mut command = Command::new(program);
@@ -393,10 +423,14 @@ fn validate_token(
 }
 
 pub fn status(app: &AppHandle) -> Result<Status, String> {
-    let stored = load_with_legacy_migration(app)
-        .ok()
-        .map(|(_, data)| data)
-        .unwrap_or_default();
+    let _guard = STORAGE_LOCK
+        .lock()
+        .map_err(|_| "License storage unavailable.")?;
+    status_locked(app)
+}
+
+fn status_locked(app: &AppHandle) -> Result<Status, String> {
+    let (path, stored) = load_with_legacy_migration(app)?;
     // An unavailable identity is not an invalid license; leave persisted state untouched.
     if stored.accepted_at.is_some() || !stored.key.is_empty() {
         device_id()?;
@@ -408,7 +442,7 @@ pub fn status(app: &AppHandle) -> Result<Status, String> {
     let version = app.package_info().version.to_string();
     let result = (!stored.key.trim().is_empty()).then(|| verify(&stored.key, &version));
     let licensed = matches!(result, Some(Ok(_)));
-    let trial = Some(trial_status(app, licensed));
+    let trial = Some(trial_status(&path, &stored, licensed)?);
     Ok(match result {
         Some(Ok(license)) => Status {
             is_licensed: true,
@@ -466,6 +500,9 @@ impl Status {
 }
 
 pub fn accept_eula(app: &AppHandle) -> Result<Action, String> {
+    let _guard = STORAGE_LOCK
+        .lock()
+        .map_err(|_| "License storage unavailable.")?;
     let (path, mut data) = load_with_legacy_migration(app)?;
     let accepted_at = OffsetDateTime::now_utc()
         .format(&Rfc3339)
@@ -475,12 +512,15 @@ pub fn accept_eula(app: &AppHandle) -> Result<Action, String> {
     save(&path, &data)?;
     Ok(Action {
         success: true,
-        status: status(app)?,
+        status: status_locked(app)?,
         error: None,
     })
 }
 pub fn activate(app: &AppHandle, key: String) -> Result<Action, String> {
-    let current = status(app)?;
+    let _guard = STORAGE_LOCK
+        .lock()
+        .map_err(|_| "License storage unavailable.")?;
+    let current = status_locked(app)?;
     if !current.has_accepted_eula {
         return Ok(Action {
             success: false,
@@ -500,11 +540,14 @@ pub fn activate(app: &AppHandle, key: String) -> Result<Action, String> {
     save(&path, &data)?;
     Ok(Action {
         success: true,
-        status: status(app)?,
+        status: status_locked(app)?,
         error: None,
     })
 }
 pub fn clear(app: &AppHandle) -> Result<Action, String> {
+    let _guard = STORAGE_LOCK
+        .lock()
+        .map_err(|_| "License storage unavailable.")?;
     let (path, mut data) = load_with_legacy_migration(app)?;
     data.key.clear();
     data.accepted_at = None;
@@ -512,7 +555,7 @@ pub fn clear(app: &AppHandle) -> Result<Action, String> {
     save(&path, &data)?;
     Ok(Action {
         success: true,
-        status: status(app)?,
+        status: status_locked(app)?,
         error: None,
     })
 }
@@ -523,6 +566,78 @@ pub fn eula() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn storage_test_dir() -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "presenter-license-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir(&dir).unwrap();
+        dir
+    }
+    #[test]
+    fn missing_corrupt_and_unreadable_license_files_are_distinct() {
+        let dir = storage_test_dir();
+        let path = dir.join("license.json");
+        assert!(load(&path, false).unwrap().is_none());
+        for bytes in [b"{".as_slice(), b"{}", b"null", b"\xff"] {
+            fs::write(&path, bytes).unwrap();
+            assert!(load(&path, false).is_err());
+            assert!(save(&path, &Stored::default()).is_err());
+            assert_eq!(fs::read(&path).unwrap(), bytes);
+        }
+        fs::remove_file(&path).unwrap();
+        fs::create_dir(&path).unwrap();
+        assert!(load(&path, false).is_err());
+        assert!(save(&path, &Stored::default()).is_err());
+        fs::remove_dir(path).unwrap();
+        fs::remove_dir(dir).unwrap();
+    }
+    #[test]
+    fn atomic_license_save_preserves_previous_data_on_failure() {
+        let dir = storage_test_dir();
+        let path = dir.join("license.json");
+        let temporary = path.with_extension("json.tmp");
+        let mut data = Stored {
+            key: "test-license".into(),
+            trial_consumed_ms: 1234,
+            ..Stored::default()
+        };
+        save(&path, &data).unwrap();
+        let original = fs::read(&path).unwrap();
+        fs::write(&temporary, b"{").unwrap();
+        assert_eq!(load(&path, false).unwrap().unwrap().key, "test-license");
+        fs::remove_file(&temporary).unwrap();
+        fs::create_dir(&temporary).unwrap();
+        data.trial_consumed_ms = 2345;
+        assert!(save(&path, &data).is_err());
+        assert_eq!(fs::read(&path).unwrap(), original);
+        fs::remove_dir(&temporary).unwrap();
+        save(&path, &data).unwrap();
+        let restored = load(&path, false).unwrap().unwrap();
+        assert_eq!(restored.key, "test-license");
+        assert_eq!(restored.trial_consumed_ms, 2345);
+        assert!(!temporary.exists());
+        fs::remove_file(path).unwrap();
+        fs::remove_dir(dir).unwrap();
+    }
+    #[test]
+    fn legacy_settings_allow_absent_fields_but_not_invalid_values() {
+        let dir = storage_test_dir();
+        let path = dir.join("app-settings.json");
+        fs::write(&path, br#"{"licenseKey":"old-license","theme":"dark"}"#).unwrap();
+        let data = load(&path, true).unwrap().unwrap();
+        assert_eq!(data.key, "old-license");
+        assert_eq!(data.trial_consumed_ms, 0);
+        assert!(load(&path, false).is_err());
+        fs::write(&path, br#"{"trialConsumedMs":"invalid"}"#).unwrap();
+        assert!(load(&path, true).is_err());
+        fs::remove_file(path).unwrap();
+        fs::remove_dir(dir).unwrap();
+    }
     fn token(expiry: &str) -> Token {
         serde_json::from_value(serde_json::json!({"product":PRODUCT,"deviceId":"device","issuedAt":"2026-01-01T00:00:00Z","expiresAt":expiry,"maxVersion":"0.3.208"})).unwrap()
     }

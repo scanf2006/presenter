@@ -1,0 +1,30 @@
+{
+  "provenance": "Archive SHA-256 values verified against upstream GitHub release asset digests on 2026-09-27; extracted file hashes computed from those verified archives.",
+  "assets": [
+    {
+      "name": "yt-dlp 2026.08.19",
+      "url": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp.exe",
+      "sha256": "66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a",
+      "files": [
+        { "name": "yt-dlp.exe", "sha256": "66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a" }
+      ]
+    },
+    {
+      "name": "Deno 2.9.6",
+      "url": "https://github.com/denoland/deno/releases/download/v2.9.6/deno-x86_64-pc-windows-msvc.zip",
+      "sha256": "15e5300b0ba3c3695a7621d90160a746ec9e710228cee639afa9d580f6e3cd11",
+      "files": [
+        { "name": "deno.exe", "entry": "deno.exe", "sha256": "2ff9493dfa356be2975f477025ea770088e9e9cb2c83d983236d13561b96b7a6" }
+      ]
+    },
+    {
+      "name": "FFmpeg n8.1.3-2-g45e8e0a3ff (2026-09-27)",
+      "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-27-13-04/ffmpeg-n8.1.3-2-g45e8e0a3ff-win64-lgpl-8.1.zip",
+      "sha256": "c7e6b5ab8b09cd670a2ab1ef403b46ca3b410470f2b0b8a6cd3e0e61a2dae759",
+      "files": [
+        { "name": "ffmpeg.exe", "entry": "ffmpeg-n8.1.3-2-g45e8e0a3ff-win64-lgpl-8.1/bin/ffmpeg.exe", "sha256": "9d7c91234b1ef468b8309ce17d866713e545e6870b9ac53e35fc5dfc47803c7a" },
+        { "name": "ffmpeg-LGPL.txt", "entry": "ffmpeg-n8.1.3-2-g45e8e0a3ff-win64-lgpl-8.1/LICENSE.txt", "sha256": "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768" }
+      ]
+    }
+  ]
+}
