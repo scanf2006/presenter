@@ -52,6 +52,13 @@
 - Tauri uses `tauri-plugin-log` in debug builds.
 - All builds also keep the latest 200 structured diagnostic events in the app log directory. System Info exports a JSON report containing only the app version, allowlisted event names and timestamps; it excludes license data, media paths and URLs.
 - Device identity queries run hidden with a five-second timeout per command; only complete successful identities are cached for the process lifetime.
+- Incomplete device queries return an unavailable error, preserving stored authorization and the last displayed status. EULA acceptance cannot persist a proof based on a partial identity.
+- Download cancellation is tied to a reserved task ID before the worker starts. Windows background processes are assigned kill-on-close jobs; destroying the main window exits the app so hidden windows cannot keep jobs alive.
+- Display selection uses the OS monitor name rather than list order (unnamed displays fall back to position). Polling hides output after disconnection and restores the selected display on reconnection or geometry change; manual Stop clears that recovery intent.
+- Manual projection and recovery share a serialized controller with request revisions. Old completions cannot publish state after a newer selection or stop, and stale display refreshes cannot override user intent.
+- PPT cache reuse requires a completion marker and the exact expected set of nonempty slides. Failed attempts are cleaned before retry; conversions are serialized to avoid sharing partially written output.
+- PPT stdout and stderr are drained concurrently throughout conversion, retaining at most 64 KiB per stream for errors. Timeout uses the shared monotonic process deadline.
+- Diagnostics use a flushed temporary file and same-directory replacement. Corrupt logs are preserved and export reports the read error instead of silently exporting an empty log.
 - YouTube downloads run one at a time with a 30-minute overall deadline and a Cancel action. Partial downloads retain the downloader's temporary suffix and failed final output is removed. PPT timeout handling terminates and reaps the converter process tree.
 
 2. Goal
@@ -69,3 +76,4 @@ npm run tauri:check
 ```
 
 Current baseline uses Node built-in `node:test` for zero-dependency CI-friendly checks.
+The Windows quality gate also runs Rust formatting, locked compilation and tests on master, codex branch pushes, and pull requests targeting master. Runtime resources are prepared before native compilation.

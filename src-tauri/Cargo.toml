@@ -32,3 +32,6 @@ time = { version = "0.3", features = ["parsing", "formatting"] }
 encoding_rs = "0.8"
 regex = "1.11"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading"] }

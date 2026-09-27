@@ -31,8 +31,8 @@ export function ProjectorProvider({ children }) {
     displays,
     projectorActive,
     projectorDisplayId,
-    setProjectorActive,
-    setProjectorDisplayId,
+    startProjector,
+    stopProjector,
     refreshDisplays,
   } = useDisplayProjectorStatus({ isTauri });
 
@@ -69,8 +69,8 @@ export function ProjectorProvider({ children }) {
     toggleMaximizeWindow: handleToggleMaximizeWindow,
     closeWindow: handleCloseWindow,
   } = useWindowProjectorControls({
-    setProjectorActive,
-    setProjectorDisplayId,
+    startProjector,
+    stopProjector,
     showConfirm,
   });
 

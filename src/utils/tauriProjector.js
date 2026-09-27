@@ -42,8 +42,24 @@ export const minimizeTauriWindow = () => invoke('minimize_main_window');
 export const toggleMaximizeTauriWindow = () => invoke('toggle_maximize_main_window');
 export const closeTauriWindow = () => invoke('close_main_window');
 export const startTauriWindowDragging = () => getCurrentWindow().startDragging();
-export const downloadTauriYouTube = (inputUrl) => invoke('youtube_cache_download', { inputUrl });
-export const cancelTauriYouTube = () => invoke('cancel_youtube_download');
+let activeDownload = null;
+export async function downloadTauriYouTube(inputUrl) {
+  if (activeDownload) throw new Error('A download is already running.');
+  const reservation = invoke('begin_youtube_download');
+  activeDownload = reservation;
+  let taskId;
+  try {
+    taskId = await reservation;
+    return await invoke('youtube_cache_download', { inputUrl, taskId });
+  } finally {
+    try { if (taskId !== undefined) await invoke('finish_youtube_download', { taskId }); }
+    finally { if (activeDownload === reservation) activeDownload = null; }
+  }
+}
+export async function cancelTauriYouTube() {
+  const reservation = activeDownload;
+  if (reservation) await invoke('cancel_youtube_download', { taskId: await reservation });
+}
 export async function exportTauriDiagnostics() {
   const folder = await open({ directory: true, multiple: false });
   return folder ? invoke('export_diagnostics', { folder }) : null;

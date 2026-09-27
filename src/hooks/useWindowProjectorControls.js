@@ -1,30 +1,12 @@
 import { useCallback } from 'react';
 import {
   closeTauriWindow,
-  hideTauriProjector,
   isTauriRuntime,
   minimizeTauriWindow,
-  showTauriProjector,
   toggleMaximizeTauriWindow,
 } from '../utils/tauriProjector';
 
-export default function useWindowProjectorControls({ setProjectorActive, setProjectorDisplayId, showConfirm }) {
-  const startProjector = useCallback(
-    async (displayId) => {
-      if (isTauriRuntime()) {
-        await showTauriProjector(displayId);
-      }
-      setProjectorActive(true);
-      setProjectorDisplayId(displayId);
-    },
-    [setProjectorActive, setProjectorDisplayId]
-  );
-
-  const stopProjector = useCallback(async () => {
-    if (isTauriRuntime()) await hideTauriProjector();
-    setProjectorActive(false);
-    setProjectorDisplayId(null);
-  }, [setProjectorActive, setProjectorDisplayId]);
+export default function useWindowProjectorControls({ startProjector, stopProjector, showConfirm }) {
 
   const minimizeWindow = useCallback(() => {
     if (isTauriRuntime()) {

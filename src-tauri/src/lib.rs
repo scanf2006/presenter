@@ -1,7 +1,9 @@
 mod background;
 mod diagnostics;
+mod download_task;
 mod hymn_import;
 mod license_store;
+mod ppt_cache;
 mod projector_events;
 mod queue_store;
 mod setup_store;
@@ -23,11 +25,24 @@ use std::{
 };
 use tauri::{AppHandle, Emitter, Manager};
 
-static YOUTUBE_CANCEL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
 #[tauri::command]
-fn cancel_youtube_download() {
-    YOUTUBE_CANCEL.store(true, std::sync::atomic::Ordering::Relaxed);
+fn begin_youtube_download() -> Result<u64, String> {
+    download_task::TASKS
+        .lock()
+        .map_err(|_| "Download unavailable")?
+        .begin()
+}
+#[tauri::command]
+fn finish_youtube_download(task_id: u64) {
+    if let Ok(mut tasks) = download_task::TASKS.lock() {
+        tasks.finish(task_id);
+    }
+}
+#[tauri::command]
+fn cancel_youtube_download(task_id: u64) {
+    if let Ok(tasks) = download_task::TASKS.lock() {
+        tasks.cancel(task_id);
+    }
 }
 
 #[derive(Serialize)]
@@ -491,7 +506,11 @@ fn youtube_tool_path(app: &AppHandle, name: &str) -> Option<PathBuf> {
 }
 
 #[tauri::command]
-async fn youtube_cache_download(app: AppHandle, input_url: String) -> YouTubeDownloadResult {
+async fn youtube_cache_download(
+    app: AppHandle,
+    input_url: String,
+    task_id: u64,
+) -> YouTubeDownloadResult {
     tauri::async_runtime::spawn_blocking(move || {
         static DOWNLOAD_LOCK: Mutex<()> = Mutex::new(());
         let fail = |error: String| YouTubeDownloadResult {
@@ -506,7 +525,18 @@ async fn youtube_cache_download(app: AppHandle, input_url: String) -> YouTubeDow
         let Ok(_guard) = DOWNLOAD_LOCK.try_lock() else {
             return fail("A download is already running.".into());
         };
-        YOUTUBE_CANCEL.store(false, std::sync::atomic::Ordering::Relaxed);
+        let _completion = download_task::Completion(task_id);
+        let token = match download_task::TASKS
+            .lock()
+            .ok()
+            .and_then(|tasks| tasks.token(task_id).ok())
+        {
+            Some(token) => token,
+            None => return fail("Download task unavailable.".into()),
+        };
+        if token.load(std::sync::atomic::Ordering::Relaxed) {
+            return fail("Task cancelled.".into());
+        }
         diagnostics::record(&app, "youtube_started");
         let video_id = match youtube_video_id(&input_url) {
             Ok(video_id) => video_id,
@@ -568,6 +598,10 @@ async fn youtube_cache_download(app: AppHandle, input_url: String) -> YouTubeDow
             Ok(child) => child,
             Err(error) => return fail(error.to_string()),
         };
+        let _job = match background::ProcessJob::attach(&mut child) {
+            Ok(job) => job,
+            Err(error) => return fail(error),
+        };
         let stderr = child.stderr.take().map(|stream| {
             thread::spawn(move || {
                 let mut detail = String::new();
@@ -597,7 +631,8 @@ async fn youtube_cache_download(app: AppHandle, input_url: String) -> YouTubeDow
                 }
             })
         });
-        let outcome = background::wait(&mut child, Duration::from_secs(30 * 60), &YOUTUBE_CANCEL);
+        let outcome = background::wait(&mut child, Duration::from_secs(30 * 60), &token);
+        drop(_job);
         if let Some(reader) = progress {
             let _ = reader.join();
         }
@@ -605,7 +640,16 @@ async fn youtube_cache_download(app: AppHandle, input_url: String) -> YouTubeDow
             Ok(status) => status,
             Err(error) => {
                 let _ = fs::remove_file(&output_path);
-                diagnostics::record(&app, "youtube_cancelled_or_timed_out");
+                diagnostics::record(
+                    &app,
+                    if error == "Task cancelled." {
+                        "youtube_cancelled"
+                    } else if error == "Task timed out." {
+                        "youtube_timed_out"
+                    } else {
+                        "youtube_failed"
+                    },
+                );
                 let _ = app.emit(
                     "youtube-download-progress",
                     serde_json::json!({"status":"error"}),
@@ -903,6 +947,10 @@ fn delete_media_file(app: AppHandle, file_path: String) -> Result<(), String> {
 #[tauri::command]
 async fn convert_ppt(app: AppHandle, ppt_path: String) -> PptConvertResult {
     tauri::async_runtime::spawn_blocking(move || {
+        static CONVERSION_LOCK: Mutex<()> = Mutex::new(());
+        let _guard = CONVERSION_LOCK
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
         let source = match managed_media_path(&app, &ppt_path) {
             Ok(path) => path,
             Err(error) => {
@@ -951,7 +999,7 @@ async fn convert_ppt(app: AppHandle, ppt_path: String) -> PptConvertResult {
             }
         };
         let cached = collect_ppt_slides(&output_dir);
-        if !cached.is_empty() {
+        if !cached.is_empty() && ppt_cache::complete(&output_dir) {
             return PptConvertResult {
                 success: true,
                 slide_count: cached.len(),
@@ -960,7 +1008,7 @@ async fn convert_ppt(app: AppHandle, ppt_path: String) -> PptConvertResult {
                 error: None,
             };
         }
-        if let Err(error) = fs::create_dir_all(&output_dir) {
+        if let Err(error) = ppt_cache::prepare(&output_dir) {
             return PptConvertResult {
                 success: false,
                 slides: vec![],
@@ -999,64 +1047,39 @@ async fn convert_ppt(app: AppHandle, ppt_path: String) -> PptConvertResult {
                 }
             }
         };
-        let deadline = SystemTime::now() + Duration::from_secs(120);
-        loop {
-            match child.try_wait() {
-                Ok(Some(status)) if status.success() => break,
-                Ok(Some(status)) => {
-                    let detail = match child.wait_with_output() {
-                        Ok(output) => format!(
-                            "{}\n{}",
-                            String::from_utf8_lossy(&output.stderr).trim(),
-                            String::from_utf8_lossy(&output.stdout).trim()
-                        )
-                        .trim()
-                        .to_string(),
-                        Err(error) => error.to_string(),
-                    };
-                    return PptConvertResult {
-                        success: false,
-                        slides: vec![],
-                        output_dir: output_dir.to_string_lossy().into_owned(),
-                        slide_count: 0,
-                        error: Some(if detail.is_empty() {
-                            format!("PowerPoint conversion exited with {status}.")
-                        } else {
-                            detail
-                        }),
-                    };
+        let _job = match background::ProcessJob::attach(&mut child) {
+            Ok(job) => job,
+            Err(error) => {
+                return PptConvertResult {
+                    success: false,
+                    slides: vec![],
+                    output_dir: output_dir.to_string_lossy().into_owned(),
+                    slide_count: 0,
+                    error: Some(error),
                 }
-                Err(error) => {
-                    return PptConvertResult {
-                        success: false,
-                        slides: vec![],
-                        output_dir: output_dir.to_string_lossy().into_owned(),
-                        slide_count: 0,
-                        error: Some(error.to_string()),
-                    }
-                }
-                Ok(None) if SystemTime::now() >= deadline => {
-                    background::terminate(&mut child);
-                    return PptConvertResult {
-                        success: false,
-                        slides: vec![],
-                        output_dir: output_dir.to_string_lossy().into_owned(),
-                        slide_count: 0,
-                        error: Some("TIMEOUT".to_string()),
-                    };
-                }
-                Ok(None) => std::thread::sleep(Duration::from_millis(250)),
             }
-        }
-        let _ = child.wait_with_output();
-        let slides = collect_ppt_slides(&output_dir);
-        if slides.is_empty() {
-            PptConvertResult {
+        };
+        if let Err(error) = background::wait_captured(&mut child, _job, Duration::from_secs(120)) {
+            return PptConvertResult {
                 success: false,
-                slides,
+                slides: vec![],
                 output_dir: output_dir.to_string_lossy().into_owned(),
                 slide_count: 0,
-                error: Some("PowerPoint produced no slide images.".to_string()),
+                error: Some(if error == "Task timed out." {
+                    "TIMEOUT".into()
+                } else {
+                    error
+                }),
+            };
+        }
+        let slides = collect_ppt_slides(&output_dir);
+        if let Err(error) = ppt_cache::finish(&output_dir, slides.len()) {
+            PptConvertResult {
+                success: false,
+                slides: vec![],
+                output_dir: output_dir.to_string_lossy().into_owned(),
+                slide_count: 0,
+                error: Some(error),
             }
         } else {
             PptConvertResult {
@@ -1186,6 +1209,13 @@ fn monitors(app: &AppHandle) -> Result<Vec<tauri::Monitor>, String> {
         .ok_or("Control window is unavailable.")?
         .available_monitors()
         .map_err(|error| error.to_string())
+}
+
+fn monitor_id(monitor: &tauri::Monitor) -> String {
+    monitor
+        .name()
+        .cloned()
+        .unwrap_or_else(|| format!("unnamed:{}:{}", monitor.position().x, monitor.position().y))
 }
 
 fn push_health_check(
@@ -1447,16 +1477,15 @@ async fn get_displays(app: AppHandle) -> Result<Vec<DisplayInfo>, String> {
         .map(|monitor| *monitor.position());
     current
         .into_iter()
-        .enumerate()
-        .map(|(index, monitor)| {
+        .map(|monitor| {
             let position = monitor.position();
             let size = monitor.size();
             Ok(DisplayInfo {
-                id: index.to_string(),
+                id: monitor_id(&monitor),
                 label: monitor
                     .name()
                     .cloned()
-                    .unwrap_or_else(|| format!("Display {}", index + 1)),
+                    .unwrap_or_else(|| "Display".to_string()),
                 is_primary: primary == Some(*position),
                 x: position.x,
                 y: position.y,
@@ -1473,11 +1502,7 @@ async fn show_projector(app: AppHandle, display_id: String) -> Result<(), String
     license_store::ensure_projection_access(&app)?;
     let monitor = monitors(&app)?
         .into_iter()
-        .nth(
-            display_id
-                .parse::<usize>()
-                .map_err(|_| "Invalid display.")?,
-        )
+        .find(|monitor| monitor_id(monitor) == display_id)
         .ok_or("Selected display is unavailable.")?;
     let projector = app
         .get_webview_window("projector")
@@ -1555,16 +1580,16 @@ fn queue_save(app: AppHandle, items: Vec<serde_json::Value>) -> Result<SuccessRe
 }
 
 #[tauri::command]
-fn license_get_status(app: AppHandle) -> license_store::Status {
+fn license_get_status(app: AppHandle) -> Result<license_store::Status, String> {
     license_store::status(&app)
 }
 
 #[tauri::command]
-fn license_get_device_id() -> license_store::DeviceIdResult {
-    license_store::DeviceIdResult {
+fn license_get_device_id() -> Result<license_store::DeviceIdResult, String> {
+    Ok(license_store::DeviceIdResult {
         success: true,
-        device_id: license_store::device_id(),
-    }
+        device_id: license_store::device_id()?,
+    })
 }
 
 #[tauri::command]
@@ -1758,6 +1783,11 @@ pub fn run() {
             },
         )))
         .plugin(tauri_plugin_dialog::init())
+        .on_window_event(|window, event| {
+            if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
+                window.app_handle().exit(0);
+            }
+        })
         .setup(|app| {
             diagnostics::record(app.handle(), "app_started");
             #[cfg(debug_assertions)]
@@ -1775,6 +1805,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             cancel_youtube_download,
+            begin_youtube_download,
+            finish_youtube_download,
             diagnostics::export_diagnostics,
             bible_get_books,
             bible_get_verses,

@@ -2,7 +2,7 @@ name: Quality Gate
 
 on:
   push:
-    branches: [master]
+    branches: [master, 'codex/**']
   pull_request:
     branches: [master]
 
@@ -17,7 +17,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install Dependencies
@@ -25,3 +25,18 @@ jobs:
 
       - name: Run Commercial Gate
         run: npm run -s commercial:gate
+
+      - name: Setup Rust
+        run: rustup toolchain install stable --profile minimal --component rustfmt
+
+      - name: Check Rust formatting
+        run: cargo +stable fmt --manifest-path src-tauri/Cargo.toml --check
+
+      - name: Prepare native runtime resources
+        run: npm run runtime:prepare
+
+      - name: Compile Rust
+        run: cargo +stable check --locked --manifest-path src-tauri/Cargo.toml
+
+      - name: Test Rust
+        run: cargo +stable test --locked --manifest-path src-tauri/Cargo.toml

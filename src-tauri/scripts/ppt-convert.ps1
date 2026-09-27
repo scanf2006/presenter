@@ -67,6 +67,7 @@ try {
     }
 
     $slideCount = $presentation.Slides.Count
+    [System.IO.File]::WriteAllText((Join-Path $OutputDir 'expected-slides.json'), [string]$slideCount)
     for ($i = 1; $i -le $slideCount; $i++) {
         $slide = $presentation.Slides.Item($i)
         $outputFile = Join-Path $OutputDir ("slide_{0:D3}.png" -f $i)

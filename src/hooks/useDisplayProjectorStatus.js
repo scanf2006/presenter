@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
-import { getTauriDisplays } from '../utils/tauriProjector';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { getTauriDisplays, hideTauriProjector, showTauriProjector } from '../utils/tauriProjector';
+import { createProjectionController } from '../utils/projectionController';
 
 const BROWSER_FALLBACK_DISPLAYS = [
   {
@@ -19,22 +20,39 @@ const BROWSER_FALLBACK_DISPLAYS = [
 ];
 
 export default function useDisplayProjectorStatus({ isTauri }) {
-  const [displays, setDisplays] = useState(BROWSER_FALLBACK_DISPLAYS);
+  const [displays, setDisplays] = useState(isTauri ? [] : BROWSER_FALLBACK_DISPLAYS);
   const [projectorActive, setProjectorActive] = useState(false);
-  const [projectorDisplayId, setProjectorDisplayId] = useState(null);
+  const [projectorDisplayId, updateProjectorDisplayId] = useState(null);
+  const [controller] = useState(() => createProjectionController({
+    show: (id) => isTauri ? showTauriProjector(id) : Promise.resolve(),
+    hide: () => isTauri ? hideTauriProjector() : Promise.resolve(),
+    onState: ({ selected, active }) => {
+      updateProjectorDisplayId(selected);
+      setProjectorActive(active);
+    },
+  }));
+  const refreshing = useRef(false);
+  const startProjector = useCallback((id) => controller.select(id, displays), [controller, displays]);
+  const stopProjector = useCallback(() => controller.select(null, displays), [controller, displays]);
 
   const refreshDisplays = useCallback(async () => {
+    if (refreshing.current) return;
+    refreshing.current = true;
     try {
       if (isTauri) {
+        const revision = controller.revision();
         const nextDisplays = await getTauriDisplays();
         setDisplays((current) =>
           JSON.stringify(current) === JSON.stringify(nextDisplays) ? current : nextDisplays
         );
+        await controller.refresh(nextDisplays, revision);
       }
     } catch (err) {
       console.warn('[useDisplayProjectorStatus] getDisplays failed:', err);
+    } finally {
+      refreshing.current = false;
     }
-  }, [isTauri]);
+  }, [isTauri, controller]);
 
   useEffect(() => {
     if (isTauri) {
@@ -57,7 +75,7 @@ export default function useDisplayProjectorStatus({ isTauri }) {
     projectorActive,
     projectorDisplayId,
     refreshDisplays,
-    setProjectorActive,
-    setProjectorDisplayId,
+    startProjector,
+    stopProjector,
   };
 }
