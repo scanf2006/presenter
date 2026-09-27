@@ -205,14 +205,39 @@ fn command(program: &str, args: &[&str]) -> String {
     #[cfg(target_os = "windows")]
     command.creation_flags(0x08000000);
     command
-        .output()
-        .ok()
-        .filter(|out| out.status.success())
-        .map(|out| String::from_utf8_lossy(&out.stdout).trim().into())
-        .unwrap_or_default()
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null());
+    let Ok(mut child) = command.spawn() else {
+        return String::new();
+    };
+    let stdout = child.stdout.take().unwrap();
+    let reader = std::thread::spawn(move || {
+        use std::io::Read;
+        let mut bytes = Vec::new();
+        let _ = stdout.take(64 * 1024).read_to_end(&mut bytes);
+        bytes
+    });
+    let result = crate::background::wait(
+        &mut child,
+        std::time::Duration::from_secs(5),
+        &std::sync::atomic::AtomicBool::new(false),
+    );
+    let bytes = reader.join().unwrap_or_default();
+    if result.is_ok_and(|status| status.success()) {
+        String::from_utf8_lossy(&bytes).trim().into()
+    } else {
+        String::new()
+    }
 }
 
 pub fn device_id() -> String {
+    static CACHE: Mutex<Option<String>> = Mutex::new(None);
+    let mut cache = CACHE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some(id) = cache.as_ref() {
+        return id.clone();
+    }
     let guid_output = command(
         "reg",
         &[
@@ -246,14 +271,18 @@ pub fn device_id() -> String {
             )
         });
     let digest = Sha256::digest(format!("{PRODUCT}|{guid}|win32-x64|{cpu}").as_bytes());
-    format!(
+    let id = format!(
         "CDPDEV-{}",
         digest
             .iter()
             .take(12)
             .map(|value| format!("{value:02X}"))
             .collect::<String>()
-    )
+    );
+    if !guid.is_empty() && !cpu.is_empty() {
+        *cache = Some(id.clone());
+    }
+    id
 }
 
 fn eula_proof(accepted_at: &str) -> String {

@@ -43,6 +43,11 @@ export const toggleMaximizeTauriWindow = () => invoke('toggle_maximize_main_wind
 export const closeTauriWindow = () => invoke('close_main_window');
 export const startTauriWindowDragging = () => getCurrentWindow().startDragging();
 export const downloadTauriYouTube = (inputUrl) => invoke('youtube_cache_download', { inputUrl });
+export const cancelTauriYouTube = () => invoke('cancel_youtube_download');
+export async function exportTauriDiagnostics() {
+  const folder = await open({ directory: true, multiple: false });
+  return folder ? invoke('export_diagnostics', { folder }) : null;
+}
 export const loadTauriQueue = () => invoke('queue_load');
 export const saveTauriQueue = (items) => invoke('queue_save', { items });
 export const getTauriLicenseStatus = () => invoke('license_get_status');

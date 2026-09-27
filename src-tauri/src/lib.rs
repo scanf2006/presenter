@@ -1,3 +1,5 @@
+mod background;
+mod diagnostics;
 mod hymn_import;
 mod license_store;
 mod projector_events;
@@ -20,6 +22,13 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Emitter, Manager};
+
+static YOUTUBE_CANCEL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[tauri::command]
+fn cancel_youtube_download() {
+    YOUTUBE_CANCEL.store(true, std::sync::atomic::Ordering::Relaxed);
+}
 
 #[derive(Serialize)]
 struct DisplayInfo {
@@ -484,6 +493,7 @@ fn youtube_tool_path(app: &AppHandle, name: &str) -> Option<PathBuf> {
 #[tauri::command]
 async fn youtube_cache_download(app: AppHandle, input_url: String) -> YouTubeDownloadResult {
     tauri::async_runtime::spawn_blocking(move || {
+        static DOWNLOAD_LOCK: Mutex<()> = Mutex::new(());
         let fail = |error: String| YouTubeDownloadResult {
             success: false,
             local_path: String::new(),
@@ -493,6 +503,11 @@ async fn youtube_cache_download(app: AppHandle, input_url: String) -> YouTubeDow
             reused: false,
             error: Some(error),
         };
+        let Ok(_guard) = DOWNLOAD_LOCK.try_lock() else {
+            return fail("A download is already running.".into());
+        };
+        YOUTUBE_CANCEL.store(false, std::sync::atomic::Ordering::Relaxed);
+        diagnostics::record(&app, "youtube_started");
         let video_id = match youtube_video_id(&input_url) {
             Ok(video_id) => video_id,
             Err(error) => return fail(error),
@@ -522,7 +537,8 @@ async fn youtube_cache_download(app: AppHandle, input_url: String) -> YouTubeDow
         command.args([
             "--no-playlist",
             "--no-warnings",
-            "--no-part",
+            "--socket-timeout",
+            "30",
             "--retries",
             "3",
             "--fragment-retries",
@@ -559,28 +575,43 @@ async fn youtube_cache_download(app: AppHandle, input_url: String) -> YouTubeDow
                 detail
             })
         });
-        if let Some(stdout) = child.stdout.take() {
-            for line in BufReader::new(stdout).lines().map_while(Result::ok) {
-                if let Some(raw_percent) = line.strip_prefix("PROGRESS:") {
-                    let percent = raw_percent
-                        .trim()
-                        .trim_end_matches('%')
-                        .trim()
-                        .parse::<f64>()
-                        .ok();
-                    let _ = app.emit(
-                        "youtube-download-progress",
-                        serde_json::json!({
-                            "status": "downloading",
-                            "percent": percent,
-                        }),
-                    );
+        let progress_app = app.clone();
+        let progress = child.stdout.take().map(|stdout| {
+            thread::spawn(move || {
+                for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+                    if let Some(raw_percent) = line.strip_prefix("PROGRESS:") {
+                        let percent = raw_percent
+                            .trim()
+                            .trim_end_matches('%')
+                            .trim()
+                            .parse::<f64>()
+                            .ok();
+                        let _ = progress_app.emit(
+                            "youtube-download-progress",
+                            serde_json::json!({
+                                "status": "downloading",
+                                "percent": percent,
+                            }),
+                        );
+                    }
                 }
-            }
+            })
+        });
+        let outcome = background::wait(&mut child, Duration::from_secs(30 * 60), &YOUTUBE_CANCEL);
+        if let Some(reader) = progress {
+            let _ = reader.join();
         }
-        let status = match child.wait() {
+        let status = match outcome {
             Ok(status) => status,
-            Err(error) => return fail(error.to_string()),
+            Err(error) => {
+                let _ = fs::remove_file(&output_path);
+                diagnostics::record(&app, "youtube_cancelled_or_timed_out");
+                let _ = app.emit(
+                    "youtube-download-progress",
+                    serde_json::json!({"status":"error"}),
+                );
+                return fail(error);
+            }
         };
         let detail = stderr
             .and_then(|reader| reader.join().ok())
@@ -592,12 +623,15 @@ async fn youtube_cache_download(app: AppHandle, input_url: String) -> YouTubeDow
                 .map(|meta| meta.len() >= 1024 * 100)
                 .unwrap_or(false)
         {
+            diagnostics::record(&app, "youtube_failed");
+            let _ = fs::remove_file(&output_path);
             return fail(if detail.is_empty() {
                 "YouTube download failed.".to_string()
             } else {
                 detail
             });
         }
+        diagnostics::record(&app, "youtube_completed");
         YouTubeDownloadResult {
             success: true,
             local_path: output_path.to_string_lossy().into_owned(),
@@ -1002,7 +1036,7 @@ async fn convert_ppt(app: AppHandle, ppt_path: String) -> PptConvertResult {
                     }
                 }
                 Ok(None) if SystemTime::now() >= deadline => {
-                    let _ = child.kill();
+                    background::terminate(&mut child);
                     return PptConvertResult {
                         success: false,
                         slides: vec![],
@@ -1189,6 +1223,7 @@ fn now_ms() -> u64 {
 
 #[tauri::command]
 fn startup_health_check(app: AppHandle) -> StartupHealthReport {
+    diagnostics::record(&app, "health_checked");
     let mut checks = Vec::new();
     match monitors(&app) {
         Ok(displays) if displays.len() > 1 => push_health_check(
@@ -1389,13 +1424,28 @@ fn startup_health_check(app: AppHandle) -> StartupHealthReport {
 
 #[tauri::command]
 async fn get_displays(app: AppHandle) -> Result<Vec<DisplayInfo>, String> {
+    static LAST_TOPOLOGY: Mutex<String> = Mutex::new(String::new());
+    let current = monitors(&app)?;
+    let topology = format!(
+        "{:?}",
+        current
+            .iter()
+            .map(|m| (m.position(), m.size(), m.scale_factor()))
+            .collect::<Vec<_>>()
+    );
+    if let Ok(mut previous) = LAST_TOPOLOGY.lock() {
+        if *previous != topology {
+            *previous = topology;
+            diagnostics::record(&app, "displays_changed");
+        }
+    }
     let primary = app
         .get_webview_window("main")
         .ok_or("Control window is unavailable.")?
         .primary_monitor()
         .map_err(|error| error.to_string())?
         .map(|monitor| *monitor.position());
-    monitors(&app)?
+    current
         .into_iter()
         .enumerate()
         .map(|(index, monitor)| {
@@ -1419,6 +1469,7 @@ async fn get_displays(app: AppHandle) -> Result<Vec<DisplayInfo>, String> {
 
 #[tauri::command]
 async fn show_projector(app: AppHandle, display_id: String) -> Result<(), String> {
+    diagnostics::record(&app, "projector_requested");
     license_store::ensure_projection_access(&app)?;
     let monitor = monitors(&app)?
         .into_iter()
@@ -1444,7 +1495,9 @@ async fn show_projector(app: AppHandle, display_id: String) -> Result<(), String
     projector
         .set_fullscreen(true)
         .map_err(|error| error.to_string())?;
-    projector.set_focus().map_err(|error| error.to_string())
+    projector.set_focus().map_err(|error| error.to_string())?;
+    diagnostics::record(&app, "projector_shown");
+    Ok(())
 }
 
 #[tauri::command]
@@ -1706,6 +1759,7 @@ pub fn run() {
         )))
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            diagnostics::record(app.handle(), "app_started");
             #[cfg(debug_assertions)]
             {
                 app.handle().plugin(
@@ -1720,6 +1774,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            cancel_youtube_download,
+            diagnostics::export_diagnostics,
             bible_get_books,
             bible_get_verses,
             bible_search,

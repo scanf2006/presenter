@@ -50,6 +50,9 @@
 
 1. Background debug log
 - Tauri uses `tauri-plugin-log` in debug builds.
+- All builds also keep the latest 200 structured diagnostic events in the app log directory. System Info exports a JSON report containing only the app version, allowlisted event names and timestamps; it excludes license data, media paths and URLs.
+- Device identity queries run hidden with a five-second timeout per command; only complete successful identities are cached for the process lifetime.
+- YouTube downloads run one at a time with a 30-minute overall deadline and a Cancel action. Partial downloads retain the downloader's temporary suffix and failed final output is removed. PPT timeout handling terminates and reaps the converter process tree.
 
 2. Goal
 - Avoid blocking hot paths with sync log writes while preserving shutdown durability.
