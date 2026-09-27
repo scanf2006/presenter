@@ -4,7 +4,7 @@ import App from './App';
 import { I18nProvider } from './contexts/I18nContext';
 import './index.css';
 
-// 注入 Polyfill 解决最新版 pdfjs-dist 在当前 Electron 版本的兼容性问题
+// 注入 Polyfill 解决最新版 pdfjs-dist 在桌面 WebView 中的兼容性问题
 if (!Uint8Array.prototype.toHex) {
   Uint8Array.prototype.toHex = function() {
     return Array.from(this).map(b => b.toString(16).padStart(2, '0')).join('');

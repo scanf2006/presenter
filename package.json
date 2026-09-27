@@ -1,45 +1,7 @@
 {
   "name": "churchdisplay-pro",
-  "version": "0.3.206",
+  "version": "0.3.207",
   "description": "ChurchDisplay Pro - Worship projection system",
-  "main": "electron/main.js",
-  "build": {
-    "appId": "com.aiden.churchdisplaypro",
-    "productName": "churchdisplay-pro",
-    "files": [
-      "electron/**/*",
-      "shared/**/*",
-      "dist/**/*",
-      "package.json",
-      "LICENSE",
-      "EULA.md"
-    ],
-    "asarUnpack": [
-      "electron/ppt-convert.ps1"
-    ],
-    "extraResources": [
-      {
-        "from": "data",
-        "to": "data",
-        "filter": [
-          "bible_*.db"
-        ]
-      },
-      {
-        "from": "vendor/youtube-runtime",
-        "to": "youtube-runtime"
-      }
-    ],
-    "win": {
-      "target": [
-        "nsis"
-      ]
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true
-    }
-  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -48,21 +10,17 @@
     "i18n:check": "node scripts/check-i18n-encoding.js",
     "build:zh:check": "node scripts/check-zh-build-artifact.js",
     "commercial:gate": "node scripts/commercial-gate.js",
-    "lint": "eslint \"src/**/*.{js,jsx}\" \"electron/**/*.js\"",
+    "lint": "eslint \"src/**/*.{js,jsx}\"",
     "format": "prettier --write .",
     "runtime:prepare": "powershell -ExecutionPolicy Bypass -File scripts/prepare-youtube-runtime.ps1",
-    "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5199 && electron .\"",
     "tauri:check": "set PATH=%USERPROFILE%\\.cargo\\bin;%PATH%&& cargo check --manifest-path src-tauri/Cargo.toml",
     "tauri:dev": "set PATH=%USERPROFILE%\\.cargo\\bin;%PATH%&& tauri dev",
-    "electron:build": "npm run runtime:prepare && vite build && electron-builder",
-    "electron:build:unsigned": "npm run runtime:prepare && vite build && electron-builder --win nsis --x64 --config.win.signAndEditExecutable=false",
-    "electron:build:zh:unsigned": "npm run runtime:prepare && set VITE_APP_LOCALE=zh-CN&& vite build && electron-builder --win nsis --x64 --config electron-builder.zh.json --config.win.signAndEditExecutable=false",
-    "electron:build:lite:unsigned": "npm run runtime:prepare && vite build && electron-builder --win nsis --x64 --config electron-builder.lite.json --config.win.signAndEditExecutable=false",
+    "tauri:build": "npm run runtime:prepare && tauri build --bundles nsis",
+    "tauri:build:zh": "npm run runtime:prepare && set VITE_APP_LOCALE=zh-CN&& tauri build --bundles nsis",
     "license:generate": "node scripts/generate-license.js",
     "diagnostics:incident-bundle": "node scripts/incident-bundle.js"
   },
   "dependencies": {
-    "@distube/ytdl-core": "^4.16.12",
     "@fontsource/long-cang": "^5.2.8",
     "@fontsource/lxgw-wenkai-mono-tc": "^5.2.9",
     "@fontsource/lxgw-wenkai-tc": "^5.2.9",
@@ -74,18 +32,11 @@
     "@fontsource/zcool-xiaowei": "^5.2.8",
     "@fontsource/zhi-mang-xing": "^5.2.8",
     "@tauri-apps/api": "^2.11.1",
-    "@tauri-apps/plugin-dialog": "^2.7.3",
-    "iconv-lite": "^0.7.2",
-    "play-dl": "^1.9.7",
-    "sql.js": "^1.14.1",
-    "yt-dlp-wrap": "^2.3.12"
+    "@tauri-apps/plugin-dialog": "^2.7.3"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.4",
     "@vitejs/plugin-react": "^4.3.4",
-    "concurrently": "^9.1.0",
-    "electron": "^33.2.0",
-    "electron-builder": "^25.1.8",
     "eslint": "^8.57.0",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.0.1",
@@ -93,7 +44,6 @@
     "prettier": "^3.5.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "vite": "^6.0.3",
-    "wait-on": "^8.0.1"
+    "vite": "^6.0.3"
   }
 }

@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "churchdisplay-pro",
-  "version": "0.3.206",
+  "version": "0.3.207",
   "identifier": "com.aiden.churchdisplaypro",
   "build": {
     "frontendDist": "../dist",
@@ -13,8 +13,10 @@
     "windows": [
       {
         "title": "ChurchDisplay Pro",
-        "width": 800,
-        "height": 600,
+        "width": 1400,
+        "height": 900,
+        "visible": true,
+        "backgroundColor": "#060816",
         "resizable": true,
         "decorations": false,
         "fullscreen": false
@@ -50,7 +52,7 @@
     "resources": {
       "../data/bible_cuvs.db": "bible_cuvs.db",
       "../data/bible_kjv.db": "bible_kjv.db",
-      "../electron/ppt-convert.ps1": "ppt-convert.ps1",
+      "scripts/ppt-convert.ps1": "ppt-convert.ps1",
       "../vendor/youtube-runtime/yt-dlp.exe": "youtube-runtime/yt-dlp.exe",
       "../vendor/youtube-runtime/ffmpeg.exe": "youtube-runtime/ffmpeg.exe",
       "../vendor/youtube-runtime/deno.exe": "youtube-runtime/deno.exe"

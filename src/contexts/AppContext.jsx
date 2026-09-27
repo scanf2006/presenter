@@ -5,7 +5,6 @@ import React, {
   useCallback,
   useRef,
   useMemo,
-  useEffect,
 } from 'react';
 import useToastMessage from '../hooks/useToastMessage';
 
@@ -18,7 +17,6 @@ export function useAppContext() {
 }
 
 export function AppProvider({ children }) {
-  const isElectron = typeof window.churchDisplay !== 'undefined';
   const [activeSection, setActiveSection] = useState('text');
   const { toast, autosaveToast, showToast } = useToastMessage();
 
@@ -60,29 +58,8 @@ export function AppProvider({ children }) {
     dialogResolveRef.current = null;
   }, []);
 
-  // ── Listen for main-process exit confirmation request (Alt+F4 / taskbar close) ──
-  const showConfirmRef = useRef(showConfirm);
-  useEffect(() => {
-    showConfirmRef.current = showConfirm;
-  }, [showConfirm]);
-
-  useEffect(() => {
-    if (!isElectron || typeof window.churchDisplay?.onConfirmExitRequest !== 'function') return;
-    const cleanup = window.churchDisplay.onConfirmExitRequest(async () => {
-      const ok = await showConfirmRef.current(
-        'Confirm Exit',
-        'Are you sure you want to exit ChurchDisplay Pro?\nUnsaved temporary changes may be lost.'
-      );
-      if (typeof window.churchDisplay?.confirmExitResponse === 'function') {
-        window.churchDisplay.confirmExitResponse(ok);
-      }
-    });
-    return cleanup;
-  }, [isElectron]);
-
   const value = useMemo(
     () => ({
-      isElectron,
       activeSection,
       setActiveSection,
       toast,
@@ -94,7 +71,6 @@ export function AppProvider({ children }) {
       showConfirm,
     }),
     [
-      isElectron,
       activeSection,
       toast,
       autosaveToast,

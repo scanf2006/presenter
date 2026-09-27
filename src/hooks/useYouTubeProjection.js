@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { normalizeYouTubeWatchUrl, getYouTubeVideoIdFromPayload, buildYouTubeEmbedUrl } from '../utils/youtube';
 import { downloadTauriYouTube, isTauriRuntime } from '../utils/tauriProjector';
 
-export default function useYouTubeProjection({ isElectron }) {
+export default function useYouTubeProjection() {
   const normalizeYouTubeUrl = useCallback((payload) => {
     const direct = payload?.url?.trim();
     if (direct) {
@@ -51,34 +51,14 @@ export default function useYouTubeProjection({ isElectron }) {
       };
     }
 
-    if (!isElectron) {
-      return {
-        type: 'youtube',
-        videoId: payload.videoId || '',
-        url: inputUrl,
-        name: payload.name || 'YouTube',
-        youtubeMode: 'watch-page',
-      };
-    }
-
-    if (typeof window.churchDisplay?.youtubeCacheDownload !== 'function') {
-      throw new Error('This build does not include YouTube cache downloader.');
-    }
-
-    const resolved = await window.churchDisplay.youtubeCacheDownload(inputUrl);
-    if (!resolved?.success || !resolved?.localPath) {
-      throw new Error(resolved?.error || 'YouTube cache download failed.');
-    }
-
     return {
-      type: 'video',
-      path: resolved.localPath,
-      name: resolved.title || payload.name || 'YouTube Video',
-      source: 'youtube-cache',
-      videoId: resolved.videoId || payload.videoId || '',
-      originalUrl: resolved.originalUrl || inputUrl,
+      type: 'youtube',
+      videoId: payload.videoId || '',
+      url: inputUrl,
+      name: payload.name || 'YouTube',
+      youtubeMode: 'watch-page',
     };
-  }, [isElectron, normalizeYouTubeUrl]);
+  }, [normalizeYouTubeUrl]);
 
   return {
     normalizeYouTubeUrl,

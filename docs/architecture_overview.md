@@ -2,21 +2,15 @@
 
 ## Runtime Layers
 
-1. `electron/main.js`
-- Composition root only.
-- Wires services, IPC registration, window runtime, startup runtime, and lifecycle runtime.
+1. `src-tauri/src/lib.rs`
+- Tauri command registration and application composition root.
+- Delegates persistence helpers to `queue_store.rs`, `setup_store.rs`, and typed projector events to `projector_events.rs`.
 
-2. `electron/services/*`
-- Single-responsibility modules for:
-- Window lifecycle and projector orchestration
-- Media protocol/path safety
-- Setup bundle import/export
-- PPT runtime path resolution
-- Download / YouTube fallback
-- Logging and startup wiring
+2. `src-tauri/src/*`
+- Rust command implementations for display/projector control, media, PowerPoint conversion, songs, Bible, setup bundles, queue persistence, and YouTube cache downloads.
 
-3. `electron/ipc/*`
-- Feature-focused IPC handlers (`queue`, `setup-bundle`, `youtube`, `projector-events`, etc.).
+3. `src/utils/tauriProjector.js`
+- Renderer-side Tauri command boundary. UI code should use this module rather than importing Tauri APIs directly.
 
 4. `src/components/*`
 - React control UI + projector view.
@@ -30,21 +24,21 @@
 - State/action domains extracted from `ControlPanel`:
 - queue, playback, projection settings, video controls, and editor transform.
 
-6. `src/constants/ui.js`
+7. `src/constants/ui.js`
 - Shared UI constants for transition limits, scene bounds, text layout/size bounds, preview constants.
 - Reduces magic numbers and keeps behavior consistent across hooks/components.
 
 ## Data/Persistence
 
 1. Queue persistence
-- IPC channel `queue-save` / `queue-load`
-- File: `projector-queue.json` under `app.getPath('userData')`
+- Tauri commands `queue_save` / `queue_load`
+- File: `projector-queue.json` under Tauri app-data storage
 
 2. App settings + license
 - JSON settings storage under userData
 
 3. Songs and Bible DB
-- SQLite-backed with bootstrap/seed runtime support
+- SQLite-backed through Tauri commands; development seed content is not shipped in the installer.
 
 4. Setup bundle
 - Smart minimal export/import with media reference collection
@@ -55,10 +49,7 @@
 ## Logging Strategy
 
 1. Background debug log
-- Service: `electron/services/bg-debug.js`
-- Appends structured lines to `bg-debug.log` in userData
-- Uses buffered asynchronous queue writes in runtime paths
-- On app quit, performs final close flush
+- Tauri uses `tauri-plugin-log` in debug builds.
 
 2. Goal
 - Avoid blocking hot paths with sync log writes while preserving shutdown durability.
@@ -71,6 +62,7 @@ Run:
 npm test
 npm run lint
 npm run build
+npm run tauri:check
 ```
 
 Current baseline uses Node built-in `node:test` for zero-dependency CI-friendly checks.

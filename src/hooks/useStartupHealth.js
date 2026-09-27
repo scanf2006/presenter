@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useI18n } from '../contexts/I18nContext';
+import { getTauriStartupHealth, isTauriRuntime } from '../utils/tauriProjector';
 
-export default function useStartupHealth({ isElectron, showToast }) {
+export default function useStartupHealth({ showToast }) {
   const { t } = useI18n();
   const [startupHealthBusy, setStartupHealthBusy] = useState(false);
   const [startupHealthReport, setStartupHealthReport] = useState(null);
 
   const runStartupHealthCheck = useCallback(
     async ({ silent = false } = {}) => {
-      if (!isElectron || typeof window.churchDisplay?.startupHealthCheck !== 'function') return null;
+      if (!isTauriRuntime()) return null;
       setStartupHealthBusy(true);
       try {
-        const report = await window.churchDisplay.startupHealthCheck();
+        const report = await getTauriStartupHealth();
         setStartupHealthReport(report || null);
         if (!silent && report?.summary) {
           const { errorCount = 0, warnCount = 0 } = report.summary;
@@ -48,7 +49,7 @@ export default function useStartupHealth({ isElectron, showToast }) {
         setStartupHealthBusy(false);
       }
     },
-    [isElectron, showToast, t]
+    [showToast, t]
   );
 
   useEffect(() => {

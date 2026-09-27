@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import ControlPanel from './components/ControlPanel';
 import ProjectorView from './components/ProjectorView';
 import { useI18n } from './contexts/I18nContext';
@@ -76,6 +76,20 @@ function App() {
   const hash = window.location.hash || '';
   const pathname = window.location.pathname || '';
   const isProjector = hash.includes('projector') || pathname.includes('/projector');
+
+  useEffect(() => {
+    const splash = document.getElementById('boot-splash');
+    if (!splash) return undefined;
+    if (isProjector) {
+      splash.remove();
+      return undefined;
+    }
+    const hideSplash = window.setTimeout(() => {
+      splash.classList.add('boot-splash--leaving');
+      window.setTimeout(() => splash.remove(), 180);
+    }, 800);
+    return () => window.clearTimeout(hideSplash);
+  }, [isProjector]);
 
   if (isProjector) {
     return (

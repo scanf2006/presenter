@@ -5,11 +5,7 @@ import { useI18n } from '../contexts/I18nContext';
 import { isTauriRuntime, loadTauriQueue, saveTauriQueue } from '../utils/tauriProjector';
 
 const DEFAULT_QUEUE_STORAGE_KEY = 'churchdisplay.projectorQueue.v1';
-export default function useProjectorQueue({
-  isElectron,
-  showToast,
-  storageKey = DEFAULT_QUEUE_STORAGE_KEY,
-}) {
+export default function useProjectorQueue({ showToast, storageKey = DEFAULT_QUEUE_STORAGE_KEY }) {
   const { t } = useI18n();
   const buildQueueItem = useCallback(
     (payload, title, section) => ({
@@ -35,14 +31,6 @@ export default function useProjectorQueue({
     const restoreQueue = async () => {
       let restored = false;
       try {
-        if (isElectron && typeof window.churchDisplay?.queueLoad === 'function') {
-          const result = await window.churchDisplay.queueLoad();
-          if (result?.success === true && Array.isArray(result.items)) {
-            setProjectorQueue(result.items);
-            restored = true;
-          }
-          return;
-        }
         if (isTauriRuntime()) {
           const result = await loadTauriQueue();
           if (result?.success !== true) return;
@@ -66,16 +54,12 @@ export default function useProjectorQueue({
       }
     };
     restoreQueue();
-  }, [isElectron, storageKey]);
+  }, [storageKey]);
 
   useEffect(() => {
     if (!queueHydrated) return;
     const persistQueue = async () => {
       try {
-        if (isElectron && typeof window.churchDisplay?.queueSave === 'function') {
-          await window.churchDisplay.queueSave(projectorQueue);
-          return;
-        }
         if (isTauriRuntime()) {
           await saveTauriQueue(projectorQueue);
           return;
@@ -86,7 +70,7 @@ export default function useProjectorQueue({
       }
     };
     persistQueue();
-  }, [projectorQueue, isElectron, queueHydrated, storageKey]);
+  }, [projectorQueue, queueHydrated, storageKey]);
 
   const addOrUpdateQueueItem = useCallback(
     (payload, title, section, options = {}) => {

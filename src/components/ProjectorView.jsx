@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import useProjectorChannelSync from '../hooks/useProjectorChannelSync';
 import ProjectorTextLayer from './projector/ProjectorTextLayer';
 import PdfRenderer from './PdfRenderer';
 import {
@@ -37,21 +36,7 @@ function ProjectorView() {
   const projectorContentRevisionRef = useRef(0);
   const [adaptiveOverlayOpacity, setAdaptiveOverlayOpacity] = useState(0.1);
 
-  const isElectron = typeof window.churchDisplay !== 'undefined';
   const isTauri = isTauriRuntime();
-
-  useProjectorChannelSync({
-    isElectron,
-    transitionRef,
-    timeoutRef,
-    videoRef,
-    setTransitionConfig,
-    setContent,
-    setBackgroundContent,
-    setIsBlackout,
-    setFadeClass,
-    setTransitionMaskVisible,
-  });
 
   useEffect(() => {
     if (!isTauri) return undefined;
