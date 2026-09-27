@@ -47,8 +47,8 @@ function SystemInfoPanel() {
           try {
             const path = await exportTauriDiagnostics();
             if (path) setDiagnosticMessage(isZh ? '诊断信息已导出，不含媒体内容或许可证。' : 'Diagnostics exported without media or license data.');
-          } catch {
-            setDiagnosticMessage(isZh ? '导出失败，请选择可写入的文件夹。' : 'Export failed. Choose a writable folder.');
+          } catch (error) {
+            setDiagnosticMessage(`${isZh ? '诊断导出失败：' : 'Diagnostic export failed: '}${String(error)}`);
           } finally { setExporting(false); }
         }}>{isZh ? '导出诊断信息' : 'Export diagnostics'}</button>}
         {diagnosticMessage && <div role="status">{diagnosticMessage}</div>}

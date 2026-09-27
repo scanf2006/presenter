@@ -211,6 +211,10 @@ fn command(program: &str, args: &[&str]) -> String {
         return String::new();
     };
     let stdout = child.stdout.take().unwrap();
+    #[cfg(windows)]
+    let Ok(_job) = crate::background::ProcessJob::attach(&mut child) else {
+        return String::new();
+    };
     let reader = std::thread::spawn(move || {
         use std::io::Read;
         let mut bytes = Vec::new();
@@ -222,6 +226,8 @@ fn command(program: &str, args: &[&str]) -> String {
         std::time::Duration::from_secs(5),
         &std::sync::atomic::AtomicBool::new(false),
     );
+    #[cfg(windows)]
+    drop(_job);
     let bytes = reader.join().unwrap_or_default();
     if result.is_ok_and(|status| status.success()) {
         String::from_utf8_lossy(&bytes).trim().into()
@@ -230,13 +236,13 @@ fn command(program: &str, args: &[&str]) -> String {
     }
 }
 
-pub fn device_id() -> String {
+pub fn device_id() -> Result<String, String> {
     static CACHE: Mutex<Option<String>> = Mutex::new(None);
     let mut cache = CACHE
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     if let Some(id) = cache.as_ref() {
-        return id.clone();
+        return Ok(id.clone());
     }
     let guid_output = command(
         "reg",
@@ -270,6 +276,15 @@ pub fn device_id() -> String {
                 ],
             )
         });
+    let id = identity_from_parts(guid, &cpu)?;
+    *cache = Some(id.clone());
+    Ok(id)
+}
+
+fn identity_from_parts(guid: &str, cpu: &str) -> Result<String, String> {
+    if guid.trim().is_empty() || cpu.trim().is_empty() {
+        return Err("Device information temporarily unavailable. Please retry.".into());
+    }
     let digest = Sha256::digest(format!("{PRODUCT}|{guid}|win32-x64|{cpu}").as_bytes());
     let id = format!(
         "CDPDEV-{}",
@@ -279,17 +294,16 @@ pub fn device_id() -> String {
             .map(|value| format!("{value:02X}"))
             .collect::<String>()
     );
-    if !guid.is_empty() && !cpu.is_empty() {
-        *cache = Some(id.clone());
-    }
-    id
+    Ok(id)
 }
 
-fn eula_proof(accepted_at: &str) -> String {
-    Sha256::digest(format!("{PRODUCT}|v1|{}|{accepted_at}|{EULA_PEPPER}", device_id()).as_bytes())
-        .iter()
-        .map(|value| format!("{value:02x}"))
-        .collect()
+fn eula_proof(accepted_at: &str) -> Result<String, String> {
+    Ok(Sha256::digest(
+        format!("{PRODUCT}|v1|{}|{accepted_at}|{EULA_PEPPER}", device_id()?).as_bytes(),
+    )
+    .iter()
+    .map(|value| format!("{value:02x}"))
+    .collect())
 }
 fn version_cmp(left: &str, right: &str) -> std::cmp::Ordering {
     let parse = |value: &str| {
@@ -328,20 +342,27 @@ fn verify(key: &str, version: &str) -> Result<serde_json::Value, String> {
     VerifyingKey::<Sha256>::new(public)
         .verify(format!("CDP1.{}", parts[1]).as_bytes(), &signature)
         .map_err(|_| "License signature verification failed.")?;
+    validate_token(token, version, OffsetDateTime::now_utc(), device_id)
+}
+
+fn validate_token(
+    token: Token,
+    version: &str,
+    now: OffsetDateTime,
+    device: impl FnOnce() -> Result<String, String>,
+) -> Result<serde_json::Value, String> {
     if token.product != PRODUCT {
         return Err("License product mismatch.".into());
     }
-    if token
-        .device_id
-        .as_deref()
-        .is_some_and(|id| !id.is_empty() && id != device_id())
-    {
-        return Err("License is bound to a different device.".into());
+    if let Some(id) = token.device_id.as_deref().filter(|id| !id.is_empty()) {
+        if id != device()? {
+            return Err("License is bound to a different device.".into());
+        }
     }
     if let Some(issued) = &token.issued_at {
         if OffsetDateTime::parse(issued, &Rfc3339)
             .ok()
-            .is_some_and(|time| time > OffsetDateTime::now_utc())
+            .is_some_and(|time| time > now)
         {
             return Err(
                 "System clock appears to be set incorrectly (before license issue date).".into(),
@@ -349,7 +370,7 @@ fn verify(key: &str, version: &str) -> Result<serde_json::Value, String> {
         }
     }
     if let Some(expiry) = &token.expires_at {
-        if OffsetDateTime::now_utc()
+        if now
             > OffsetDateTime::parse(expiry, &Rfc3339)
                 .map_err(|_| "License expiry date is invalid.")?
         {
@@ -371,20 +392,24 @@ fn verify(key: &str, version: &str) -> Result<serde_json::Value, String> {
     )
 }
 
-pub fn status(app: &AppHandle) -> Status {
+pub fn status(app: &AppHandle) -> Result<Status, String> {
     let stored = load_with_legacy_migration(app)
         .ok()
         .map(|(_, data)| data)
         .unwrap_or_default();
-    let accepted = stored
-        .accepted_at
-        .as_ref()
-        .is_some_and(|at| stored.proof == eula_proof(at));
+    // An unavailable identity is not an invalid license; leave persisted state untouched.
+    if stored.accepted_at.is_some() || !stored.key.is_empty() {
+        device_id()?;
+    }
+    let accepted = match stored.accepted_at.as_ref() {
+        Some(at) => stored.proof == eula_proof(at)?,
+        None => false,
+    };
     let version = app.package_info().version.to_string();
     let result = (!stored.key.trim().is_empty()).then(|| verify(&stored.key, &version));
     let licensed = matches!(result, Some(Ok(_)));
     let trial = Some(trial_status(app, licensed));
-    match result {
+    Ok(match result {
         Some(Ok(license)) => Status {
             is_licensed: true,
             summary: license
@@ -416,22 +441,28 @@ pub fn status(app: &AppHandle) -> Status {
             error: None,
             trial,
         },
-    }
+    })
 }
 
 pub fn ensure_projection_access(app: &AppHandle) -> Result<(), String> {
-    let current = status(app);
-    if current.is_licensed
-        || !current.trial.as_ref().is_some_and(|trial| {
-            trial
-                .get("expired")
-                .and_then(|value| value.as_bool())
-                .unwrap_or(false)
-        })
-    {
-        return Ok(());
+    let current = status(app)?;
+    current.projection_access()
+}
+
+impl Status {
+    fn projection_access(&self) -> Result<(), String> {
+        if self.is_licensed
+            || !self.trial.as_ref().is_some_and(|trial| {
+                trial
+                    .get("expired")
+                    .and_then(|value| value.as_bool())
+                    .unwrap_or(false)
+            })
+        {
+            return Ok(());
+        }
+        Err("Trial expired. Please activate license to continue projection.".into())
     }
-    Err("Trial expired. Please activate license to continue projection.".into())
 }
 
 pub fn accept_eula(app: &AppHandle) -> Result<Action, String> {
@@ -439,17 +470,17 @@ pub fn accept_eula(app: &AppHandle) -> Result<Action, String> {
     let accepted_at = OffsetDateTime::now_utc()
         .format(&Rfc3339)
         .map_err(|e| e.to_string())?;
-    data.proof = eula_proof(&accepted_at);
+    data.proof = eula_proof(&accepted_at)?;
     data.accepted_at = Some(accepted_at);
     save(&path, &data)?;
     Ok(Action {
         success: true,
-        status: status(app),
+        status: status(app)?,
         error: None,
     })
 }
 pub fn activate(app: &AppHandle, key: String) -> Result<Action, String> {
-    let current = status(app);
+    let current = status(app)?;
     if !current.has_accepted_eula {
         return Ok(Action {
             success: false,
@@ -469,7 +500,7 @@ pub fn activate(app: &AppHandle, key: String) -> Result<Action, String> {
     save(&path, &data)?;
     Ok(Action {
         success: true,
-        status: status(app),
+        status: status(app)?,
         error: None,
     })
 }
@@ -481,10 +512,106 @@ pub fn clear(app: &AppHandle) -> Result<Action, String> {
     save(&path, &data)?;
     Ok(Action {
         success: true,
-        status: status(app),
+        status: status(app)?,
         error: None,
     })
 }
 pub fn eula() -> String {
     include_str!("../../EULA.md").into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn token(expiry: &str) -> Token {
+        serde_json::from_value(serde_json::json!({"product":PRODUCT,"deviceId":"device","issuedAt":"2026-01-01T00:00:00Z","expiresAt":expiry,"maxVersion":"0.3.208"})).unwrap()
+    }
+    fn now() -> OffsetDateTime {
+        OffsetDateTime::parse("2026-09-27T00:00:00Z", &Rfc3339).unwrap()
+    }
+    #[test]
+    fn license_expiry_device_and_version_rules_are_enforced() {
+        assert!(
+            validate_token(token("2026-10-01T00:00:00Z"), "0.3.208", now(), || Ok(
+                "device".into()
+            ))
+            .is_ok()
+        );
+        assert_eq!(
+            validate_token(token("2026-09-26T00:00:00Z"), "0.3.208", now(), || Ok(
+                "device".into()
+            ))
+            .unwrap_err(),
+            "License has expired."
+        );
+        assert!(
+            validate_token(token("2026-10-01T00:00:00Z"), "0.3.209", now(), || Ok(
+                "device".into()
+            ))
+            .unwrap_err()
+            .contains("up to version")
+        );
+        assert!(
+            validate_token(token("2026-10-01T00:00:00Z"), "0.3.208", now(), || Ok(
+                "different".into()
+            ))
+            .unwrap_err()
+            .contains("different device")
+        );
+        assert_eq!(
+            validate_token(token("2026-10-01T00:00:00Z"), "0.3.208", now(), || Err(
+                "device unavailable".into()
+            ))
+            .unwrap_err(),
+            "device unavailable"
+        );
+    }
+    #[test]
+    fn future_issue_and_invalid_signature_are_rejected() {
+        let mut future = token("2026-10-01T00:00:00Z");
+        future.issued_at = Some("2026-09-28T00:00:00Z".into());
+        assert!(
+            validate_token(future, "0.3.208", now(), || Ok("device".into()))
+                .unwrap_err()
+                .contains("before license issue")
+        );
+        let payload = URL_SAFE_NO_PAD
+            .encode(serde_json::to_vec(&serde_json::json!({"product":PRODUCT})).unwrap());
+        let forged = format!("CDP1.{payload}.{}", URL_SAFE_NO_PAD.encode([0u8; 256]));
+        assert!(verify(&forged, "0.3.208")
+            .unwrap_err()
+            .contains("signature verification failed"));
+    }
+    #[test]
+    fn exhausted_trial_blocks_projection_but_a_license_allows_it() {
+        let mut current = Status {
+            is_licensed: false,
+            summary: String::new(),
+            license: None,
+            has_accepted_eula: true,
+            accepted_at: None,
+            error: None,
+            trial: Some(serde_json::json!({"expired":false})),
+        };
+        assert!(current.projection_access().is_ok());
+        current.trial = Some(serde_json::json!({"expired":true}));
+        assert!(current.projection_access().is_err());
+        current.is_licensed = true;
+        assert!(current.projection_access().is_ok());
+    }
+    #[test]
+    fn missing_identity_is_an_error_and_complete_identity_is_stable() {
+        assert!(identity_from_parts("", "CPU").is_err());
+        assert!(identity_from_parts("GUID", " ").is_err());
+        let expected = Sha256::digest(format!("{PRODUCT}|GUID|win32-x64|CPU").as_bytes());
+        let expected = format!(
+            "CDPDEV-{}",
+            expected
+                .iter()
+                .take(12)
+                .map(|v| format!("{v:02X}"))
+                .collect::<String>()
+        );
+        assert_eq!(identity_from_parts("GUID", "CPU").unwrap(), expected);
+    }
 }

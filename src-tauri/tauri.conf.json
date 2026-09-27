@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "churchdisplay-pro",
-  "version": "0.3.207",
+  "version": "0.3.208",
   "identifier": "com.aiden.churchdisplaypro",
   "build": {
     "frontendDist": "../dist",

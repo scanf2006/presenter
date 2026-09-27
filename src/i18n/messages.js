@@ -52,6 +52,7 @@
       primary: 'Primary',
       projecting: 'Projecting',
       stopProjector: 'Stop Projector',
+      waitingForDisplay: 'Waiting for the selected external display. Stop to cancel automatic recovery.',
       noExternalDisplay: 'No external display detected. Connect a projector/monitor and try again.',
     },
     textEditor: {
@@ -298,6 +299,7 @@
       primary: '主屏',
       projecting: '投影中',
       stopProjector: '停止投影',
+      waitingForDisplay: '等待所选外接屏恢复连接，点击停止投影可取消自动恢复。',
       noExternalDisplay: '未检测到外接显示器。请连接投影仪/显示器后重试。',
     },
     textEditor: {

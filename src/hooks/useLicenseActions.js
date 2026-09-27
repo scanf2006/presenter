@@ -37,6 +37,8 @@ export default function useLicenseActions({
       await refreshLicenseStatus();
     } catch (err) {
       console.warn('[Legal] load failed:', err);
+      setLicenseDeviceId('');
+      setLicenseActionError(String(err));
     }
   }, [
     setShowLegalModal,

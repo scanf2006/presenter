@@ -50,7 +50,7 @@ function DisplaysSection() {
                 {t('displays.primary', 'Primary')}
               </span>
             )}
-            {projectorDisplayId === display.id && (
+            {projectorActive && projectorDisplayId === display.id && (
               <span className="display-card__badge display-card__badge--projecting">
                 {t('displays.projecting', 'Projecting')}
               </span>
@@ -59,7 +59,8 @@ function DisplaysSection() {
         ))}
       </div>
 
-      {projectorActive && (
+      {!projectorActive && projectorDisplayId !== null && <p role="status">{t('displays.waitingForDisplay', 'Waiting for the selected external display. Stop to cancel automatic recovery.')}</p>}
+      {(projectorActive || projectorDisplayId !== null) && (
         <button
           className="btn btn--danger btn--lg cp-btn-block cp-gap-top-lg"
           onClick={handleStopProjector}
