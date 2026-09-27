@@ -18,53 +18,39 @@ const BROWSER_FALLBACK_DISPLAYS = [
   },
 ];
 
-export default function useDisplayProjectorStatus({ isElectron, isTauri }) {
-  const [displays, setDisplays] = useState(() => (isElectron ? [] : BROWSER_FALLBACK_DISPLAYS));
+export default function useDisplayProjectorStatus({ isTauri }) {
+  const [displays, setDisplays] = useState(BROWSER_FALLBACK_DISPLAYS);
   const [projectorActive, setProjectorActive] = useState(false);
   const [projectorDisplayId, setProjectorDisplayId] = useState(null);
 
   const refreshDisplays = useCallback(async () => {
     try {
-      if (isElectron) {
-        setDisplays(await window.churchDisplay.getDisplays());
-      } else if (isTauri) {
-        setDisplays(await getTauriDisplays());
+      if (isTauri) {
+        const nextDisplays = await getTauriDisplays();
+        setDisplays((current) =>
+          JSON.stringify(current) === JSON.stringify(nextDisplays) ? current : nextDisplays
+        );
       }
     } catch (err) {
       console.warn('[useDisplayProjectorStatus] getDisplays failed:', err);
     }
-  }, [isElectron, isTauri]);
+  }, [isTauri]);
 
   useEffect(() => {
-    if (isElectron) {
-      let isMounted = true;
-      void refreshDisplays();
-      const offDisplaysChanged = window.churchDisplay.onDisplaysChanged(setDisplays);
-      const offProjectorStatus = window.churchDisplay.onProjectorStatus((status) => {
-        setProjectorActive(status.active);
-        setProjectorDisplayId(status.displayId || null);
-      });
-      window.churchDisplay
-        .getProjectorStatus()
-        .then((status) => {
-          if (isMounted) setProjectorActive(status.active);
-        })
-        .catch((err) => {
-          console.warn('[useDisplayProjectorStatus] getProjectorStatus failed:', err);
-        });
-
+    if (isTauri) {
+      const initialRefresh = window.setTimeout(() => {
+        void refreshDisplays();
+      }, 0);
+      const refreshTimer = window.setInterval(() => {
+        void refreshDisplays();
+      }, 5000);
       return () => {
-        isMounted = false;
-        if (typeof offDisplaysChanged === 'function') offDisplaysChanged();
-        if (typeof offProjectorStatus === 'function') offProjectorStatus();
+        window.clearTimeout(initialRefresh);
+        window.clearInterval(refreshTimer);
       };
     }
-
-    if (isTauri) {
-      void refreshDisplays();
-    }
     // browser fallback is initialized in useState
-  }, [isElectron, isTauri, refreshDisplays]);
+  }, [isTauri, refreshDisplays]);
 
   return {
     displays,

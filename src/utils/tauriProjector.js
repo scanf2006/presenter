@@ -36,6 +36,8 @@ export const convertTauriPpt = (pptPath) => invoke('convert_ppt', { pptPath });
 export const listTauriSongs = () => invoke('songs_list');
 export const saveTauriSong = (song) => invoke('songs_save', { song });
 export const deleteTauriSong = (songId) => invoke('songs_delete', { songId });
+export const searchTauriHymns = (keyword) => invoke('songs_web_site_search', { keyword });
+export const fetchTauriHymnLyrics = (sourceUrl) => invoke('songs_web_fetch_lyrics', { sourceUrl });
 export const minimizeTauriWindow = () => invoke('minimize_main_window');
 export const toggleMaximizeTauriWindow = () => invoke('toggle_maximize_main_window');
 export const closeTauriWindow = () => invoke('close_main_window');
@@ -43,6 +45,13 @@ export const startTauriWindowDragging = () => getCurrentWindow().startDragging()
 export const downloadTauriYouTube = (inputUrl) => invoke('youtube_cache_download', { inputUrl });
 export const loadTauriQueue = () => invoke('queue_load');
 export const saveTauriQueue = (items) => invoke('queue_save', { items });
+export const getTauriLicenseStatus = () => invoke('license_get_status');
+export const getTauriStartupHealth = () => invoke('startup_health_check');
+export const getTauriLicenseDeviceId = () => invoke('license_get_device_id');
+export const activateTauriLicense = (licenseKey) => invoke('license_activate', { licenseKey });
+export const clearTauriLicense = () => invoke('license_clear');
+export const acceptTauriEula = () => invoke('legal_accept_eula');
+export const getTauriLegalDocument = (docType) => invoke('legal_get_document', { docType });
 export function getMediaUrl(filePath) {
   if (!filePath || /^https?:\/\//i.test(filePath)) return filePath || '';
   return isTauriRuntime()

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { isTauriRuntime, sendToTauriProjector } from '../utils/tauriProjector';
 
 export default function useProjectorPreviewDispatch({
-  isElectron,
   transitionEnabled,
   transitionDelayMs,
   transitionDurationMs,
@@ -13,28 +12,14 @@ export default function useProjectorPreviewDispatch({
   const [previewSlide, setPreviewSlide] = useState(null);
   const [previewMaskVisible, setPreviewMaskVisible] = useState(false);
   const previewTimersRef = useRef([]);
-  const deliveryTimeoutMsRef = useRef(1800);
 
   const waitForAckWithTimeout = useCallback(async (data) => {
     if (isTauriRuntime()) {
       await sendToTauriProjector(data);
       return { ok: true, mode: 'tauri' };
     }
-    if (!isElectron || !window.churchDisplay) return { ok: true, mode: 'browser' };
-    if (typeof window.churchDisplay.sendToProjectorWithAck !== 'function') {
-      window.churchDisplay.sendToProjector(data);
-      return { ok: true, mode: 'legacy-send' };
-    }
-
-    const ackPromise = window.churchDisplay.sendToProjectorWithAck(data);
-    const timeoutPromise = new Promise((resolve) =>
-      setTimeout(
-        () => resolve({ ok: false, reason: 'ack_timeout', message: 'Projector acknowledgment timeout.' }),
-        deliveryTimeoutMsRef.current
-      )
-    );
-    return Promise.race([ackPromise, timeoutPromise]);
-  }, [isElectron]);
+    return { ok: true, mode: 'browser' };
+  }, []);
 
   const clearPreviewTimers = useCallback(() => {
     previewTimersRef.current.forEach((t) => clearTimeout(t));
@@ -74,7 +59,7 @@ export default function useProjectorPreviewDispatch({
     (data) => {
       setCurrentSlide(data);
       applyPreviewTransition(data);
-      if (isTauriRuntime() || (isElectron && window.churchDisplay)) {
+      if (isTauriRuntime()) {
         // Reliability layer: await main-process ACK with timeout and retry once on failure.
         Promise.resolve()
           .then(async () => {
@@ -94,7 +79,6 @@ export default function useProjectorPreviewDispatch({
       }
     },
     [
-      isElectron,
       applyPreviewTransition,
       waitForAckWithTimeout,
       showToast,
@@ -109,9 +93,8 @@ export default function useProjectorPreviewDispatch({
         void sendToTauriProjector(data);
         return;
       }
-      if (isElectron && window.churchDisplay) window.churchDisplay.sendToProjector(data);
     },
-    [isElectron]
+    []
   );
 
   const blackout = useCallback(() => {
@@ -119,8 +102,8 @@ export default function useProjectorPreviewDispatch({
     applyPreviewTransition(null);
     if (isTauriRuntime()) {
       void sendToTauriProjector(null);
-    } else if (isElectron && window.churchDisplay) window.churchDisplay.blackout();
-  }, [isElectron, applyPreviewTransition]);
+    }
+  }, [applyPreviewTransition]);
 
   return {
     currentSlide,

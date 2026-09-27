@@ -1,3 +1,5 @@
+mod hymn_import;
+mod license_store;
 mod projector_events;
 mod queue_store;
 mod setup_store;
@@ -28,6 +30,37 @@ struct DisplayInfo {
     y: i32,
     width: u32,
     height: u32,
+}
+
+#[derive(Serialize)]
+struct HealthCheck {
+    id: String,
+    label: String,
+    status: String,
+    detail: String,
+    action: String,
+}
+
+#[derive(Serialize)]
+struct HealthSummary {
+    #[serde(rename = "okCount")]
+    ok_count: usize,
+    #[serde(rename = "warnCount")]
+    warn_count: usize,
+    #[serde(rename = "errorCount")]
+    error_count: usize,
+}
+
+#[derive(Serialize)]
+struct StartupHealthReport {
+    success: bool,
+    #[serde(rename = "checkedAt")]
+    checked_at: u64,
+    host: String,
+    #[serde(rename = "appVersion")]
+    app_version: String,
+    summary: HealthSummary,
+    checks: Vec<HealthCheck>,
 }
 
 #[derive(Clone, Serialize)]
@@ -661,6 +694,23 @@ fn songs_delete(app: AppHandle, song_id: i64) -> Result<SuccessResult, String> {
 }
 
 #[tauri::command]
+async fn songs_web_site_search(keyword: String) -> Vec<hymn_import::HymnResult> {
+    tauri::async_runtime::spawn_blocking(move || hymn_import::search(keyword))
+        .await
+        .unwrap_or_default()
+}
+
+#[tauri::command]
+async fn songs_web_fetch_lyrics(source_url: String) -> hymn_import::LyricsResult {
+    tauri::async_runtime::spawn_blocking(move || hymn_import::lyrics(source_url))
+        .await
+        .unwrap_or(hymn_import::LyricsResult {
+            title: String::new(),
+            lyrics: String::new(),
+        })
+}
+
+#[tauri::command]
 fn minimize_main_window(app: AppHandle) -> Result<(), String> {
     app.get_webview_window("main")
         .ok_or("Control window is unavailable.")?
@@ -691,9 +741,7 @@ fn close_main_window(app: AppHandle) -> Result<(), String> {
 fn ppt_script_path(app: &AppHandle) -> Result<PathBuf, String> {
     let path = if cfg!(debug_assertions) {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .ok_or("Project root is unavailable.")?
-            .join("electron")
+            .join("scripts")
             .join("ppt-convert.ps1")
     } else {
         app.path()
@@ -1106,6 +1154,239 @@ fn monitors(app: &AppHandle) -> Result<Vec<tauri::Monitor>, String> {
         .map_err(|error| error.to_string())
 }
 
+fn push_health_check(
+    checks: &mut Vec<HealthCheck>,
+    id: &str,
+    label: &str,
+    status: &str,
+    detail: impl Into<String>,
+    action: impl Into<String>,
+) {
+    checks.push(HealthCheck {
+        id: id.into(),
+        label: label.into(),
+        status: status.into(),
+        detail: detail.into(),
+        action: action.into(),
+    });
+}
+
+fn directory_is_writable(path: &Path) -> Result<(), String> {
+    fs::create_dir_all(path).map_err(|error| error.to_string())?;
+    let probe = path.join(format!(".health-{}-{}.tmp", std::process::id(), now_ms()));
+    fs::write(&probe, b"ok").map_err(|error| error.to_string())?;
+    fs::remove_file(probe).map_err(|error| error.to_string())
+}
+
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .try_into()
+        .unwrap_or(u64::MAX)
+}
+
+#[tauri::command]
+fn startup_health_check(app: AppHandle) -> StartupHealthReport {
+    let mut checks = Vec::new();
+    match monitors(&app) {
+        Ok(displays) if displays.len() > 1 => push_health_check(
+            &mut checks,
+            "display",
+            "Display Detection",
+            "ok",
+            format!("{} displays detected.", displays.len()),
+            "",
+        ),
+        Ok(displays) if displays.len() == 1 => push_health_check(
+            &mut checks,
+            "display",
+            "Display Detection",
+            "warn",
+            "Only one display detected. External projector was not found.",
+            "Connect and enable extended display for projector output.",
+        ),
+        Ok(_) => push_health_check(
+            &mut checks,
+            "display",
+            "Display Detection",
+            "error",
+            "No display detected.",
+            "Check graphics driver / monitor connection.",
+        ),
+        Err(error) => push_health_check(
+            &mut checks,
+            "display",
+            "Display Detection",
+            "error",
+            error,
+            "Check graphics driver / monitor connection.",
+        ),
+    }
+
+    match media_root(&app) {
+        Ok(path) => match directory_is_writable(&path) {
+            Ok(()) => push_health_check(
+                &mut checks,
+                "mediaDir",
+                "Media Directory",
+                "ok",
+                path.display().to_string(),
+                "",
+            ),
+            Err(error) => push_health_check(
+                &mut checks,
+                "mediaDir",
+                "Media Directory",
+                "error",
+                error,
+                "Check folder permission or antivirus lock.",
+            ),
+        },
+        Err(error) => push_health_check(
+            &mut checks,
+            "mediaDir",
+            "Media Directory",
+            "error",
+            error,
+            "Restart app or create media folder manually.",
+        ),
+    }
+
+    match media_root(&app).map(|root| root.join("video")) {
+        Ok(path) => match directory_is_writable(&path) {
+            Ok(()) => push_health_check(
+                &mut checks,
+                "ytCache",
+                "YouTube Cache",
+                "ok",
+                "Video cache directory is writable.",
+                "",
+            ),
+            Err(error) => push_health_check(
+                &mut checks,
+                "ytCache",
+                "YouTube Cache",
+                "error",
+                error,
+                "Check folder permission or antivirus lock.",
+            ),
+        },
+        Err(error) => push_health_check(
+            &mut checks,
+            "ytCache",
+            "YouTube Cache",
+            "error",
+            error,
+            "Create the media/video directory.",
+        ),
+    }
+
+    match ppt_script_path(&app) {
+        Ok(path) => push_health_check(
+            &mut checks,
+            "pptScript",
+            "PPT Converter Script",
+            "ok",
+            path.display().to_string(),
+            "",
+        ),
+        Err(error) => push_health_check(
+            &mut checks,
+            "pptScript",
+            "PPT Converter Script",
+            "error",
+            error,
+            "Reinstall the application to restore the bundled PPT converter.",
+        ),
+    }
+
+    let cuvs = bible_db_path(&app, "cuvs");
+    let kjv = bible_db_path(&app, "kjv");
+    match (cuvs, kjv) {
+        (Ok(cuvs), Ok(_)) => push_health_check(
+            &mut checks,
+            "bibleData",
+            "Bible Data",
+            "ok",
+            cuvs.parent()
+                .map(|path| path.display().to_string())
+                .unwrap_or_default(),
+            "",
+        ),
+        (Ok(_), Err(_)) | (Err(_), Ok(_)) => push_health_check(
+            &mut checks,
+            "bibleData",
+            "Bible Data",
+            "warn",
+            "Partial Bible DB set found.",
+            "Reinstall the application to restore Bible data.",
+        ),
+        (Err(error), Err(_)) => push_health_check(
+            &mut checks,
+            "bibleData",
+            "Bible Data",
+            "error",
+            error,
+            "Reinstall the application to restore Bible data.",
+        ),
+    }
+
+    match app.path().app_data_dir().map_err(|error| error.to_string()) {
+        Ok(path) => match directory_is_writable(&path) {
+            Ok(()) => push_health_check(
+                &mut checks,
+                "songsDb",
+                "Songs Database",
+                "ok",
+                path.join("songs.db").display().to_string(),
+                "",
+            ),
+            Err(error) => push_health_check(
+                &mut checks,
+                "songsDb",
+                "Songs Database",
+                "error",
+                error,
+                "Check user-data folder permission.",
+            ),
+        },
+        Err(error) => push_health_check(
+            &mut checks,
+            "songsDb",
+            "Songs Database",
+            "error",
+            error,
+            "Check user-data folder permission.",
+        ),
+    }
+
+    let summary = checks.iter().fold(
+        HealthSummary {
+            ok_count: 0,
+            warn_count: 0,
+            error_count: 0,
+        },
+        |mut summary, check| {
+            match check.status.as_str() {
+                "error" => summary.error_count += 1,
+                "warn" => summary.warn_count += 1,
+                _ => summary.ok_count += 1,
+            }
+            summary
+        },
+    );
+    StartupHealthReport {
+        success: true,
+        checked_at: now_ms(),
+        host: std::env::var("COMPUTERNAME").unwrap_or_default(),
+        app_version: app.package_info().version.to_string(),
+        summary,
+        checks,
+    }
+}
+
 #[tauri::command]
 async fn get_displays(app: AppHandle) -> Result<Vec<DisplayInfo>, String> {
     let primary = app
@@ -1138,6 +1419,7 @@ async fn get_displays(app: AppHandle) -> Result<Vec<DisplayInfo>, String> {
 
 #[tauri::command]
 async fn show_projector(app: AppHandle, display_id: String) -> Result<(), String> {
+    license_store::ensure_projection_access(&app)?;
     let monitor = monitors(&app)?
         .into_iter()
         .nth(
@@ -1220,7 +1502,47 @@ fn queue_save(app: AppHandle, items: Vec<serde_json::Value>) -> Result<SuccessRe
 }
 
 #[tauri::command]
+fn license_get_status(app: AppHandle) -> license_store::Status {
+    license_store::status(&app)
+}
+
+#[tauri::command]
+fn license_get_device_id() -> license_store::DeviceIdResult {
+    license_store::DeviceIdResult {
+        success: true,
+        device_id: license_store::device_id(),
+    }
+}
+
+#[tauri::command]
+fn license_activate(app: AppHandle, license_key: String) -> Result<license_store::Action, String> {
+    license_store::activate(&app, license_key)
+}
+
+#[tauri::command]
+fn license_clear(app: AppHandle) -> Result<license_store::Action, String> {
+    license_store::clear(&app)
+}
+
+#[tauri::command]
+fn legal_accept_eula(app: AppHandle) -> Result<license_store::Action, String> {
+    license_store::accept_eula(&app)
+}
+
+#[tauri::command]
+fn legal_get_document(doc_type: String) -> Result<license_store::LegalDocument, String> {
+    if doc_type != "eula" {
+        return Err("Unsupported legal document.".into());
+    }
+    Ok(license_store::LegalDocument {
+        success: true,
+        text: license_store::eula(),
+    })
+}
+
+#[tauri::command]
 fn send_to_projector(app: AppHandle, payload: serde_json::Value) -> Result<(), String> {
+    license_store::ensure_projection_access(&app)?;
     let snapshot = {
         let state = app.state::<ProjectorContentState>();
         let mut content = state
@@ -1249,6 +1571,7 @@ fn send_projector_transition(
     app: AppHandle,
     payload: projector_events::ProjectorTransition,
 ) -> Result<(), String> {
+    license_store::ensure_projection_access(&app)?;
     payload.validate()?;
     app.emit_to("projector", "projector-transition", payload)
         .map_err(|error| error.to_string())
@@ -1259,6 +1582,7 @@ fn send_projector_media_command(
     app: AppHandle,
     payload: projector_events::ProjectorMediaCommand,
 ) -> Result<(), String> {
+    license_store::ensure_projection_access(&app)?;
     payload.validate()?;
     app.emit_to("projector", "projector-media-command", payload)
         .map_err(|error| error.to_string())
@@ -1402,6 +1726,8 @@ pub fn run() {
             songs_list,
             songs_save,
             songs_delete,
+            songs_web_site_search,
+            songs_web_fetch_lyrics,
             youtube_cache_download,
             minimize_main_window,
             toggle_maximize_main_window,
@@ -1412,6 +1738,13 @@ pub fn run() {
             convert_ppt,
             queue_load,
             queue_save,
+            license_get_status,
+            license_get_device_id,
+            license_activate,
+            license_clear,
+            legal_accept_eula,
+            legal_get_document,
+            startup_health_check,
             get_displays,
             show_projector,
             hide_projector,

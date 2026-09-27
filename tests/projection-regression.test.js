@@ -66,22 +66,20 @@ test('PreviewStage uses the selected projector display aspect ratio', () => {
 test('YouTube queueing does not wait for cache download', () => {
   const content = read('src/components/MediaManager.jsx');
   const queueIndex = content.indexOf('onAddPlaylist({\n      type: \'youtube\'');
-  const cacheIndex = content.indexOf('window.churchDisplay?.youtubeCacheDownload');
+  const cacheIndex = content.indexOf('downloadTauriYouTube(normalizedUrl)');
   assert.ok(queueIndex >= 0, 'Expected YouTube queue item to be added');
   assert.ok(cacheIndex > queueIndex, 'Expected cache download to start after queue insertion');
 });
 
 test('YouTube cache progress is exposed to the media manager', () => {
-  const preload = read('electron/preload.js');
   const media = read('src/components/MediaManager.jsx');
-  assert.equal(preload.includes('onYouTubeCacheProgress'), true);
+  assert.equal(media.includes("listen('youtube-download-progress'"), true);
   assert.equal(media.includes('youtubeDownload.status'), true);
   assert.equal(media.includes('<progress'), true);
 });
 
 test('YouTube cache falls back to yt-dlp when stream resolution finds no format', () => {
-  const ipc = read('electron/ipc/youtube.js');
-  assert.equal(ipc.includes('const useYtDlpFallback = !resolved?.success || !resolved?.streamUrl'), true);
-  assert.equal(ipc.includes("'youtube-download-resolve-fallback-ytdlp-start'"), true);
-  assert.equal(ipc.includes('await downloadWithYtDlp(raw, outputPath, (progress) => {'), true);
+  const rust = read('src-tauri/src/lib.rs');
+  assert.equal(rust.includes('youtube_tool_path(&app, "yt-dlp.exe")'), true);
+  assert.equal(rust.includes('"--merge-output-format"'), true);
 });

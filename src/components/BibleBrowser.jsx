@@ -61,7 +61,6 @@ function BibleBrowser({
   const versesLoadSeqRef = useRef(0);
   const isApplyingQueuePreloadRef = useRef(false);
 
-  const isElectron = typeof window.churchDisplay !== 'undefined';
   const isTauri = isTauriRuntime();
   const searchTimer = useRef(null);
   const canSyncActiveQueueBible = useCallback(
@@ -199,9 +198,7 @@ function BibleBrowser({
 
   // 加载书卷列表
   useEffect(() => {
-    if (isElectron) {
-      window.churchDisplay.bibleGetBooks(version).then(setBooks);
-    } else if (isTauri) {
+    if (isTauri) {
       getTauriBibleBooks(version).then(setBooks).catch((err) => console.warn('[Tauri] Bible books failed:', err));
     } else {
       // Browser fallback demo data
@@ -212,7 +209,7 @@ function BibleBrowser({
         { sn: 43, shortName: '约', fullName: '约翰福音', chapterCount: 21, isNewTestament: true },
       ]);
     }
-  }, [isElectron, isTauri, version]);
+  }, [isTauri, version]);
 
   // 加载经文
   useEffect(() => {
@@ -222,19 +219,7 @@ function BibleBrowser({
     setVerses([]);
     setSelectedVerses([]);
     setVersesContext(null);
-    if (isElectron) {
-      window.churchDisplay
-        .bibleGetVerses(version, selectedBook.sn, selectedChapter)
-        .then((rows) => {
-          if (loadSeq !== versesLoadSeqRef.current) return;
-          setVerses(Array.isArray(rows) ? rows : []);
-          setVersesContext({
-            bookSn: selectedBook.sn,
-            chapter: selectedChapter,
-            loadSeq,
-          });
-        });
-    } else if (isTauri) {
+    if (isTauri) {
       getTauriBibleVerses(version, selectedBook.sn, selectedChapter).then((rows) => {
         if (loadSeq !== versesLoadSeqRef.current) return;
         setVerses(rows);
@@ -253,7 +238,7 @@ function BibleBrowser({
         loadSeq,
       });
     }
-  }, [selectedBook, selectedChapter, version, isElectron, isTauri]);
+  }, [selectedBook, selectedChapter, version, isTauri]);
 
   // Parse quick index such as 创1:1 or 约3:16
   const parseQuickIndex = useCallback((query) => {
@@ -319,12 +304,10 @@ function BibleBrowser({
 
       // 延迟全文搜索
       searchTimer.current = setTimeout(async () => {
-        if (!isElectron && !isTauri) return;
+        if (!isTauri) return;
         setSearching(true);
         try {
-          const results = isElectron
-            ? await window.churchDisplay.bibleSearch(version, query.trim())
-            : await searchTauriBible(version, query.trim());
+          const results = await searchTauriBible(version, query.trim());
           setSearchResults(results);
         } catch (err) {
           console.warn('[Bible] Search failed:', err);
@@ -334,7 +317,7 @@ function BibleBrowser({
         }
       }, 500);
     },
-    [books, version, isElectron, isTauri, parseQuickIndex]
+    [books, version, isTauri, parseQuickIndex]
   );
 
   // 经文选择切换

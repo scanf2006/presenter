@@ -1,7 +1,10 @@
 import { useCallback } from 'react';
+import {
+  acceptTauriEula, activateTauriLicense, clearTauriLicense, getTauriLegalDocument,
+  getTauriLicenseDeviceId, getTauriLicenseStatus, isTauriRuntime,
+} from '../utils/tauriProjector';
 
 export default function useLicenseActions({
-  isElectron,
   setShowLegalModal,
   setLicenseActionError,
   setLicenseActionMsg,
@@ -12,22 +15,21 @@ export default function useLicenseActions({
   licenseInput,
 }) {
   const refreshLicenseStatus = useCallback(async () => {
-    if (!isElectron || typeof window.churchDisplay?.licenseGetStatus !== 'function') return;
-    const status = await window.churchDisplay.licenseGetStatus();
+    const status = isTauriRuntime() ? await getTauriLicenseStatus() : null;
     if (status) setLicenseStatus(status);
-  }, [isElectron, setLicenseStatus]);
+  }, [setLicenseStatus]);
 
   const openLegal = useCallback(async () => {
     setShowLegalModal(true);
     setLicenseActionError('');
     setLicenseActionMsg('');
     try {
-      if (isElectron && typeof window.churchDisplay?.legalGetDocument === 'function') {
-        const eula = await window.churchDisplay.legalGetDocument('eula');
+      if (isTauriRuntime()) {
+        const eula = await getTauriLegalDocument('eula');
         if (eula?.success && typeof eula.text === 'string') setEulaText(eula.text);
       }
-      if (isElectron && typeof window.churchDisplay?.licenseGetDeviceId === 'function') {
-        const device = await window.churchDisplay.licenseGetDeviceId();
+      if (isTauriRuntime()) {
+        const device = await getTauriLicenseDeviceId();
         if (device?.success && typeof device.deviceId === 'string') {
           setLicenseDeviceId(device.deviceId);
         }
@@ -37,7 +39,6 @@ export default function useLicenseActions({
       console.warn('[Legal] load failed:', err);
     }
   }, [
-    isElectron,
     setShowLegalModal,
     setLicenseActionError,
     setLicenseActionMsg,
@@ -47,7 +48,7 @@ export default function useLicenseActions({
   ]);
 
   const activateLicense = useCallback(async () => {
-    if (!isElectron || typeof window.churchDisplay?.licenseActivate !== 'function') {
+    if (!isTauriRuntime()) {
       setLicenseActionError('Current environment does not support license activation.');
       setLicenseActionMsg('');
       return;
@@ -65,7 +66,7 @@ export default function useLicenseActions({
       return;
     }
     try {
-      const result = await window.churchDisplay.licenseActivate(licenseInput.trim());
+      const result = await activateTauriLicense(licenseInput.trim());
       if (result?.success) {
         setLicenseStatus((prev) => result.status || prev);
         setLicenseActionMsg('License activated.');
@@ -79,7 +80,6 @@ export default function useLicenseActions({
       setLicenseActionMsg('');
     }
   }, [
-    isElectron,
     licenseInput,
     licenseStatus?.hasAcceptedEula,
     setLicenseStatus,
@@ -88,13 +88,13 @@ export default function useLicenseActions({
   ]);
 
   const clearLicense = useCallback(async () => {
-    if (!isElectron || typeof window.churchDisplay?.licenseClear !== 'function') {
+    if (!isTauriRuntime()) {
       setLicenseActionError('Current environment does not support clearing license.');
       setLicenseActionMsg('');
       return;
     }
     try {
-      const result = await window.churchDisplay.licenseClear();
+      const result = await clearTauriLicense();
       if (result?.success) {
         // M14-R2: Use functional update to avoid stale closure.
         setLicenseStatus((prev) => result.status || prev);
@@ -108,16 +108,16 @@ export default function useLicenseActions({
       setLicenseActionError(err.message || 'Failed to clear license.');
       setLicenseActionMsg('');
     }
-  }, [isElectron, setLicenseStatus, setLicenseActionMsg, setLicenseActionError]);
+  }, [setLicenseStatus, setLicenseActionMsg, setLicenseActionError]);
 
   const acceptEula = useCallback(async () => {
-    if (!isElectron || typeof window.churchDisplay?.legalAcceptEula !== 'function') {
+    if (!isTauriRuntime()) {
       setLicenseActionError('Current environment does not support EULA acceptance.');
       setLicenseActionMsg('');
       return;
     }
     try {
-      const result = await window.churchDisplay.legalAcceptEula();
+      const result = await acceptTauriEula();
       if (result?.success) {
         // M14-R2: Use functional update to avoid stale closure.
         setLicenseStatus((prev) => result.status || prev);
@@ -131,7 +131,7 @@ export default function useLicenseActions({
       setLicenseActionError(err.message || 'Operation failed.');
       setLicenseActionMsg('');
     }
-  }, [isElectron, setLicenseStatus, setLicenseActionMsg, setLicenseActionError]);
+  }, [setLicenseStatus, setLicenseActionMsg, setLicenseActionError]);
 
   return {
     openLegal,

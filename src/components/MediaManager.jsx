@@ -56,7 +56,6 @@ function MediaManager({
   const pptConvertRequestSeqRef = useRef(0);
   const staleDropStatsRef = useRef({ pdf: 0, ppt: 0 });
 
-  const isElectron = typeof window.churchDisplay !== 'undefined';
   const isTauri = isTauriRuntime();
   const { showToast, showConfirm, activeSection } = useAppContext();
   const isMediaSectionActive = activeSection === 'media';
@@ -68,9 +67,6 @@ function MediaManager({
         percent: Number.isFinite(next?.percent) ? next.percent : null,
       });
     };
-    if (typeof window.churchDisplay?.onYouTubeCacheProgress === 'function') {
-      return window.churchDisplay.onYouTubeCacheProgress(updateProgress);
-    }
     if (!isTauri) return undefined;
     let unlisten;
     listen('youtube-download-progress', (event) => updateProgress(event.payload)).then((dispose) => {
@@ -90,13 +86,6 @@ function MediaManager({
   }, []);
 
   const loadMediaFiles = useCallback(async () => {
-    if (isElectron) {
-      const type = activeFilter === 'all' ? undefined : activeFilter;
-      const files = await window.churchDisplay.getMediaList(type);
-      setMediaFiles(files);
-      return;
-    }
-
     if (isTauri) {
       const type = activeFilter === 'all' ? undefined : activeFilter;
       setMediaFiles(await listTauriMedia(type));
@@ -127,7 +116,7 @@ function MediaManager({
         createdAt: Date.now() - 3000,
       },
     ]);
-  }, [isElectron, isTauri, activeFilter]);
+  }, [isTauri, activeFilter]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -138,22 +127,19 @@ function MediaManager({
 
   const handleSelectFiles = useCallback(
     async (type) => {
-      if (!isElectron && !isTauri) return;
-      const filePaths = isElectron
-        ? await window.churchDisplay.selectFiles({ type })
-        : await selectTauriMediaFiles(type);
+      if (!isTauri) return;
+      const filePaths = await selectTauriMediaFiles(type);
       if (!Array.isArray(filePaths) || filePaths.length === 0) return;
 
       setImporting(true);
       try {
-        if (isElectron) await window.churchDisplay.importFiles(filePaths);
-        else await importTauriMedia(filePaths);
+        await importTauriMedia(filePaths);
         await loadMediaFiles();
       } finally {
         setImporting(false);
       }
     },
-    [isElectron, isTauri, loadMediaFiles]
+    [isTauri, loadMediaFiles]
   );
 
   const handleDragEnter = (e) => {
@@ -177,7 +163,7 @@ function MediaManager({
       e.stopPropagation();
       setIsDragging(false);
 
-      if (!isElectron && !isTauri) return;
+      if (!isTauri) return;
 
       const files = Array.from(e.dataTransfer.files || []);
       if (files.length === 0) return;
@@ -187,24 +173,22 @@ function MediaManager({
 
       setImporting(true);
       try {
-        if (isElectron) await window.churchDisplay.importFiles(filePaths);
-        else await importTauriMedia(filePaths);
+        await importTauriMedia(filePaths);
         await loadMediaFiles();
       } finally {
         setImporting(false);
       }
     },
-    [isElectron, isTauri, loadMediaFiles]
+    [isTauri, loadMediaFiles]
   );
 
   const handleDelete = useCallback(
     async (file) => {
-      if (!isElectron && !isTauri) return;
-      if (isElectron) await window.churchDisplay.deleteMedia(file.path);
-      else await deleteTauriMedia(file.path);
+      if (!isTauri) return;
+      await deleteTauriMedia(file.path);
       await loadMediaFiles();
     },
-    [isElectron, isTauri, loadMediaFiles]
+    [isTauri, loadMediaFiles]
   );
 
   const handleLoadPdfGrid = useCallback(
@@ -274,7 +258,7 @@ function MediaManager({
 
   const handleConvertPpt = useCallback(
     async (file) => {
-      if (!isElectron && !isTauri) return;
+      if (!isTauri) return;
       const requestSeq = ++pptConvertRequestSeqRef.current;
       // Switching to PPT invalidates any previous PDF load result.
       pdfLoadRequestSeqRef.current += 1;
@@ -289,9 +273,7 @@ function MediaManager({
       setPptConverting(true);
       let result;
       try {
-        result = isElectron
-          ? await window.churchDisplay.convertPpt(file.path)
-          : await convertTauriPpt(file.path);
+        result = await convertTauriPpt(file.path);
       } catch (error) {
         result = { success: false, error: error?.message || String(error) };
       }
@@ -322,7 +304,7 @@ function MediaManager({
         showToast(`${t('media.pptFailed', 'PPT conversion failed')}: ${result.error || t('media.unknownError', 'Unknown error')}`, 'error');
       }
     },
-    [isElectron, isTauri, showToast, t, logStaleDrop]
+    [isTauri, showToast, t, logStaleDrop]
   );
 
   const handleProjectMedia = useCallback(
@@ -399,13 +381,11 @@ function MediaManager({
     });
     showToast(t('media.youtubeQueued', 'YouTube added to queue. Caching in background.'), 'info');
 
-    if (typeof window.churchDisplay?.youtubeCacheDownload === 'function' || isTauri) {
+    if (isTauri) {
       setYoutubeDownload({ status: 'resolving', percent: null });
       void (async () => {
         try {
-          const resolved = isTauri
-            ? await downloadTauriYouTube(normalizedUrl)
-            : await window.churchDisplay.youtubeCacheDownload(normalizedUrl);
+          const resolved = await downloadTauriYouTube(normalizedUrl);
           if (resolved?.success && resolved?.localPath) {
             setYoutubeDownload({ status: 'success', percent: null });
             showToast(t('media.youtubeCached', 'YouTube cached and added to queue'));

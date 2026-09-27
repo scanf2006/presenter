@@ -21,7 +21,7 @@ export function useQueueContext() {
  * text editor state lives outside this context to avoid circular dependencies.
  */
 export function QueueProvider({ applyTextPayloadToEditor, children }) {
-  const { isElectron, setActiveSection, showToast, showConfirm } = useAppContext();
+  const { setActiveSection, showToast, showConfirm } = useAppContext();
   const {
     pushToProjector,
     resolveYouTubePayload,
@@ -73,7 +73,6 @@ export function QueueProvider({ applyTextPayloadToEditor, children }) {
     cancelRenameQueueItem,
     clearQueue,
   } = useProjectorQueue({
-    isElectron,
     showToast,
   });
 

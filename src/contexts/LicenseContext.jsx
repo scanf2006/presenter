@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import useLicenseActions from '../hooks/useLicenseActions';
-import { useAppContext } from './AppContext';
+import { getTauriLicenseStatus, isTauriRuntime } from '../utils/tauriProjector';
 
 const LicenseContext = createContext(null);
 
@@ -11,8 +11,6 @@ export function useLicenseContext() {
 }
 
 export function LicenseProvider({ children }) {
-  const { isElectron, showToast } = useAppContext();
-
   const [showLegalModal, setShowLegalModal] = useState(false);
   const [licenseStatus, setLicenseStatus] = useState({
     isLicensed: false,
@@ -29,7 +27,6 @@ export function LicenseProvider({ children }) {
   const [trialNowMs, setTrialNowMs] = useState(0);
 
   const { openLegal, activateLicense, clearLicense, acceptEula } = useLicenseActions({
-    isElectron,
     setShowLegalModal,
     setLicenseActionError,
     setLicenseActionMsg,
@@ -43,9 +40,9 @@ export function LicenseProvider({ children }) {
   // Hydrate license status on mount + poll every 10s
   useEffect(() => {
     const hydrateLicenseStatus = async () => {
-      if (!isElectron || typeof window.churchDisplay?.licenseGetStatus !== 'function') return;
+      if (!isTauriRuntime()) return;
       try {
-        const status = await window.churchDisplay.licenseGetStatus();
+        const status = await getTauriLicenseStatus();
         if (status) setLicenseStatus(status);
       } catch (err) {
         console.warn('[License] load status failed:', err);
@@ -54,27 +51,14 @@ export function LicenseProvider({ children }) {
     hydrateLicenseStatus();
 
     let timer = null;
-    if (isElectron && typeof window.churchDisplay?.licenseGetStatus === 'function') {
+    if (isTauriRuntime()) {
       timer = window.setInterval(hydrateLicenseStatus, 10000);
-    }
-
-    let offTrialWarning = null;
-    if (isElectron && typeof window.churchDisplay?.onTrialWarning === 'function') {
-      offTrialWarning = window.churchDisplay.onTrialWarning((payload) => {
-        const msg = payload?.message || 'Trial expired. Please activate license.';
-        showToast(msg);
-        setLicenseActionError(msg);
-        if (payload?.trial) {
-          setLicenseStatus((prev) => ({ ...(prev || {}), trial: payload.trial }));
-        }
-      });
     }
 
     return () => {
       if (timer) window.clearInterval(timer);
-      if (typeof offTrialWarning === 'function') offTrialWarning();
     };
-  }, [isElectron, showToast]);
+  }, []);
 
   // Trial countdown ticker
   useEffect(() => {

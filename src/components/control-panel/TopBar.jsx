@@ -1,14 +1,10 @@
 import React from 'react';
 import { useProjectorContext } from '../../contexts/ProjectorContext';
 import { useLicenseContext } from '../../contexts/LicenseContext';
-import { useAppContext } from '../../contexts/AppContext';
 import { useI18n } from '../../contexts/I18nContext';
 import {
-  closeTauriWindow,
   isTauriRuntime,
-  minimizeTauriWindow,
   startTauriWindowDragging,
-  toggleMaximizeTauriWindow,
 } from '../../utils/tauriProjector';
 
 /* ── Inline SVG icons (16×16, no external deps) ── */
@@ -79,9 +75,7 @@ const IconClose = () => (
 
 function TopBar({ appVersion, onClear }) {
   const { t } = useI18n();
-  const { showConfirm } = useAppContext();
   const isTauri = isTauriRuntime();
-  const isElectron = typeof window.churchDisplay !== 'undefined';
   const {
     projectorActive,
     handleBlackout,
@@ -93,18 +87,8 @@ function TopBar({ appVersion, onClear }) {
   const { trialLabel, trialExpired, handleOpenLegal } = useLicenseContext();
   const copyrightNotice =
     '\u6b64\u7248\u672c\u4e3a\u591a\u4f26\u591a\u795e\u53ec\u4f1a\u6d3b\u77f3\u5802\u7279\u4f9b--\u7248\u6743\u5c5e\u4e8eAiden\u6240\u6709aiden2006.video@gmail.com';
-  const reportWindowError = (action, error) => {
-    console.warn(`[Window] ${action} failed:`, error);
-    window.alert(`${action} failed: ${error?.message || error}`);
-  };
-  const handleMinimize = () => {
-    if (isElectron) handleMinimizeWindow();
-    else minimizeTauriWindow().catch((error) => reportWindowError('Minimize', error));
-  };
-  const handleMaximize = () => {
-    if (isElectron) handleToggleMaximizeWindow();
-    else toggleMaximizeTauriWindow().catch((error) => reportWindowError('Maximize', error));
-  };
+  const handleMinimize = () => handleMinimizeWindow();
+  const handleMaximize = () => handleToggleMaximizeWindow();
   const handleDragStart = (event) => {
     if (isTauri && event.button === 0) {
       startTauriWindowDragging().catch((error) =>
@@ -112,19 +96,7 @@ function TopBar({ appVersion, onClear }) {
       );
     }
   };
-  const handleClose = async () => {
-    if (isElectron) {
-      handleCloseWindow();
-      return;
-    }
-    const ok = await showConfirm(
-      'Confirm Exit',
-      'Are you sure you want to exit ChurchDisplay Pro?\nUnsaved temporary changes may be lost.'
-    );
-    if (ok) {
-      closeTauriWindow().catch((error) => reportWindowError('Close', error));
-    }
-  };
+  const handleClose = () => handleCloseWindow();
 
   return (
     <div className={`top-bar${isTauri ? ' top-bar--tauri' : ''}`}>

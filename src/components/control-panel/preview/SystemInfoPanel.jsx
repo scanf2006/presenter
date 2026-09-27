@@ -1,7 +1,7 @@
 ﻿import React from 'react';
-import { useAppContext } from '../../../contexts/AppContext';
 import { useProjectorContext } from '../../../contexts/ProjectorContext';
 import { useI18n } from '../../../contexts/I18nContext';
+import { isTauriRuntime } from '../../../utils/tauriProjector';
 
 /**
  * SystemInfoPanel renders system information (displays, projector status,
@@ -10,7 +10,7 @@ import { useI18n } from '../../../contexts/I18nContext';
 function SystemInfoPanel() {
   const { locale } = useI18n();
   const isZh = String(locale || 'en').toLowerCase().startsWith('zh');
-  const { isElectron } = useAppContext();
+  const isTauri = isTauriRuntime();
   const {
     displays,
     projectorActive,
@@ -54,7 +54,9 @@ function SystemInfoPanel() {
         </div>
         <div className="cp-meta-row">
           <span>{isZh ? '运行环境' : 'Environment'}</span>
-          <span className="cp-meta-value">{isElectron ? 'Electron' : isZh ? '浏览器' : 'Browser'}</span>
+          <span className="cp-meta-value">
+            {isTauri ? 'Tauri' : isZh ? '浏览器' : 'Browser'}
+          </span>
         </div>
         <div className="cp-meta-row">
           <span>{isZh ? '导出模式' : 'Export Mode'}</span>

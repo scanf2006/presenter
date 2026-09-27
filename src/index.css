@@ -153,7 +153,7 @@ body {
   user-select: none;
 }
 
-/* Tauri uses data-tauri-drag-region. The Electron-only drag style would
+/* Tauri uses data-tauri-drag-region. The legacy drag style would
    otherwise capture clicks on the custom window-control buttons. */
 .top-bar--tauri {
   -webkit-app-region: no-drag;

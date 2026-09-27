@@ -22,7 +22,7 @@ import useSongSectionNavigation from '../hooks/useSongSectionNavigation';
 import { useAppContext } from '../contexts/AppContext';
 import { useI18n } from '../contexts/I18nContext';
 import { PROJECTION_FONT_OPTIONS } from '../constants/fontOptions';
-import { deleteTauriSong, isTauriRuntime, listTauriSongs, saveTauriSong } from '../utils/tauriProjector';
+import { deleteTauriSong, fetchTauriHymnLyrics, isTauriRuntime, listTauriSongs, saveTauriSong, searchTauriHymns } from '../utils/tauriProjector';
 const BLANK_SECTION_INDEX = -2;
 const SONG_STYLE_DEFAULTS = {
   fontSize: 'large',
@@ -79,7 +79,6 @@ function SongManager({
   const sectionCardRefs = useRef(new Map());
   const blankSectionCardRef = useRef(null);
 
-  const isElectron = typeof window.churchDisplay !== 'undefined';
   const isTauri = isTauriRuntime();
   const fileInputRef = useRef(null);
   const { showToast, showConfirm, activeSection } = useAppContext();
@@ -111,8 +110,8 @@ function SongManager({
 
   // 加载歌曲列表
   const loadSongs = useCallback(async () => {
-    if (isElectron || isTauri) {
-      const list = isElectron ? await window.churchDisplay.songsList() : await listTauriSongs();
+    if (isTauri) {
+      const list = await listTauriSongs();
       setSongs(list);
     } else {
       // Browser fallback demo data
@@ -136,7 +135,7 @@ function SongManager({
         },
       ]);
     }
-  }, [isElectron, isTauri]);
+  }, [isTauri]);
 
   useEffect(() => {
     loadSongs();
@@ -166,8 +165,7 @@ function SongManager({
       },
     };
     try {
-      if (isElectron) await window.churchDisplay.songsSave(song);
-      else if (isTauri) await saveTauriSong(song);
+      if (isTauri) await saveTauriSong(song);
     } catch (err) {
       console.warn('[SongManager] save failed:', err?.message || err);
     }
@@ -190,7 +188,6 @@ function SongManager({
     fontFamily,
     isBold,
     textColor,
-    isElectron,
     isTauri,
     loadSongs,
     showToast,
@@ -201,15 +198,14 @@ function SongManager({
     async (songId) => {
       if (!(await showConfirm(t('songs.deleteConfirm', 'Delete this song?')))) return;
       try {
-        if (isElectron) await window.churchDisplay.songsDelete(songId);
-        else if (isTauri) await deleteTauriSong(songId);
+        if (isTauri) await deleteTauriSong(songId);
       } catch (err) {
         console.warn('[SongManager] delete failed:', err?.message || err);
       }
       if (selectedSong?.id === songId) setSelectedSong(null);
       await loadSongs();
     },
-    [isElectron, isTauri, selectedSong, loadSongs, showConfirm]
+    [isTauri, selectedSong, loadSongs, showConfirm]
   );
 
   // start editing
@@ -454,14 +450,14 @@ function SongManager({
     setSelectedSong(nextSong);
     setSongs((prev) => prev.map((s) => (s.id === nextSong.id ? { ...s, songStyle: style } : s)));
 
-    if (!isElectron && !isTauri) return;
+    if (!isTauri) return;
     const saveInput = buildSongSaveInput(nextSong);
     if (!saveInput) return;
-    const save = isElectron ? window.churchDisplay.songsSave(saveInput) : saveTauriSong(saveInput);
+    const save = saveTauriSong(saveInput);
     save.catch((err) => {
       console.warn('[SongManager] persist song style failed:', err?.message || err);
     });
-  }, [selectedSong?.id, editingSong, fontSize, fontSizePx, fontFamily, isBold, textColor, isElectron, isTauri]);
+  }, [selectedSong?.id, editingSong, fontSize, fontSizePx, fontFamily, isBold, textColor, isTauri]);
 
   // Keep active song queue card style in sync with current controls.
   // This lets different queue cards preserve their own font family/size/color settings.
@@ -524,9 +520,7 @@ function SongManager({
 
       try {
         const saveInput = buildSongSaveInput(nextSongWithStyle);
-        if (saveInput && isElectron) {
-          await window.churchDisplay.songsSave(saveInput);
-        } else if (saveInput && isTauri) {
+        if (saveInput && isTauri) {
           await saveTauriSong(saveInput);
         }
       } catch (err) {
@@ -560,7 +554,6 @@ function SongManager({
       return nextSongWithStyle;
     },
     [
-      isElectron,
       isTauri,
       onUpdateActiveQueueItem,
       fontSize,
@@ -643,8 +636,8 @@ function SongManager({
   }, []);
 
   const handleSiteSearch = useCallback(async () => {
-    if (!isElectron) {
-      showToast(t('songs.siteSearchElectronOnly', 'Site search is available in Electron build only.'), 'warning');
+    if (!isTauri) {
+      showToast(t('songs.siteSearchDesktopOnly', 'Site search is available in the desktop app only.'), 'warning');
       return;
     }
     const keyword = String(searchQuery || '').trim();
@@ -655,7 +648,7 @@ function SongManager({
     setWebSearchResults([]);
     setWebSearching(true);
     try {
-      const results = await window.churchDisplay.songsWebSiteSearch(keyword);
+      const results = await searchTauriHymns(keyword);
       const safeResults = (Array.isArray(results) ? results : []).filter((item) =>
         /^https?:\/\/(www\.)?christianstudy\.com\//i.test(String(item?.url || ''))
       );
@@ -669,11 +662,11 @@ function SongManager({
     } finally {
       setWebSearching(false);
     }
-  }, [isElectron, searchQuery, showToast]);
+  }, [isTauri, searchQuery, showToast]);
 
   const handleImportWebResult = useCallback(
     async (item, options = {}) => {
-      if (!isElectron || !item?.url) return;
+      if (!isTauri || !item?.url) return;
       const allowForce = options?.allowBlogMirror === true;
       if (
         !allowForce &&
@@ -683,7 +676,7 @@ function SongManager({
         return;
       }
       try {
-        const data = await window.churchDisplay.songsWebFetchLyrics(item.url, options);
+        const data = await fetchTauriHymnLyrics(item.url);
         const fallbackTitle = String(item.title || '').replace(/[【】]/g, '').trim();
         const importTitle = String(data?.title || fallbackTitle).trim();
         const importLyrics = String(data?.lyrics || '').trim();
@@ -703,11 +696,11 @@ function SongManager({
         showToast(t('songs.importFailed', 'Import failed'), 'error');
       }
     },
-    [isElectron, showToast]
+    [isTauri, showToast]
   );
 
   const handleImportByUrl = useCallback(async () => {
-    if (!isElectron) return;
+    if (!isTauri) return;
     const url = String(webImportUrl || '').trim();
     if (!url) {
       showToast(t('songs.pasteUrlFirst', 'Please paste christianstudy song URL first.'), 'warning');
@@ -717,13 +710,13 @@ function SongManager({
       showToast(t('songs.onlyChristianstudy', 'Only christianstudy.com URL is supported.'), 'warning');
       return;
     }
-    const data = await window.churchDisplay.songsWebFetchLyrics(url, { allowBlogMirror: false });
+    const data = await fetchTauriHymnLyrics(url);
     if (data?.title && data?.lyrics) {
       await handleImportWebResult({ url, title: '' }, { allowBlogMirror: false });
       return;
     }
     await handleImportWebResult({ url, title: '' }, { allowBlogMirror: true });
-  }, [isElectron, webImportUrl, showToast, handleImportWebResult]);
+  }, [isTauri, webImportUrl, showToast, handleImportWebResult]);
 
   // 过滤歌曲
   // R3-M: Memoize filtered songs to avoid re-filtering on every render.

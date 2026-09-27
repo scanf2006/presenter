@@ -21,7 +21,7 @@ export function useProjectorContext() {
 }
 
 export function ProjectorProvider({ children }) {
-  const { isElectron, showToast, showAlert, showConfirm } = useAppContext();
+  const { showToast, showAlert, showConfirm } = useAppContext();
   const isTauri = isTauriRuntime();
 
   const previewStageRef = useRef(null);
@@ -34,7 +34,7 @@ export function ProjectorProvider({ children }) {
     setProjectorActive,
     setProjectorDisplayId,
     refreshDisplays,
-  } = useDisplayProjectorStatus({ isElectron, isTauri });
+  } = useDisplayProjectorStatus({ isTauri });
 
   const {
     transitionEnabled,
@@ -43,7 +43,7 @@ export function ProjectorProvider({ children }) {
     setTransitionDelayMs,
     transitionDurationMs,
     setTransitionDurationMs,
-  } = useProjectionSettings({ isElectron });
+  } = useProjectionSettings();
 
   const {
     currentSlide,
@@ -52,8 +52,6 @@ export function ProjectorProvider({ children }) {
     pushToProjector,
     blackout: handleBlackout,
   } = useProjectorPreviewDispatch({
-    isElectron,
-    isTauri,
     transitionEnabled,
     transitionDelayMs,
     transitionDurationMs,
@@ -62,7 +60,7 @@ export function ProjectorProvider({ children }) {
   });
 
   const { normalizeYouTubeUrl, getYouTubeVideoId, getYouTubeEmbedUrl, resolveYouTubePayload } =
-    useYouTubeProjection({ isElectron });
+    useYouTubeProjection();
 
   const {
     startProjector: handleStartProjector,
@@ -71,7 +69,6 @@ export function ProjectorProvider({ children }) {
     toggleMaximizeWindow: handleToggleMaximizeWindow,
     closeWindow: handleCloseWindow,
   } = useWindowProjectorControls({
-    isElectron,
     setProjectorActive,
     setProjectorDisplayId,
     showConfirm,
@@ -79,8 +76,6 @@ export function ProjectorProvider({ children }) {
 
   const { exportSetupBundle: handleExportSetupBundle, importSetupBundle: handleImportSetupBundle } =
     useSetupBundleActions({
-      isElectron,
-      isTauri,
       setSetupTransferBusy,
       showToast,
       showAlert,
@@ -109,7 +104,6 @@ export function ProjectorProvider({ children }) {
   const { previewAspectRatio } = usePreviewLayoutMetrics({ displays, projectorDisplayId });
 
   const { startupHealthBusy, startupHealthReport, runStartupHealthCheck } = useStartupHealth({
-    isElectron,
     showToast,
   });
   const value = useMemo(

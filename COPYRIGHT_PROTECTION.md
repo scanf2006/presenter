@@ -9,7 +9,7 @@
   - entering activation key
   - clearing key
   - recording EULA acceptance
-- Signed offline license verification in Electron main process
+- Signed offline license verification in the Rust backend
   - format: `CDP1.<payload>.<signature>`
   - algorithm: `RSA-SHA256`
   - public key is embedded in app

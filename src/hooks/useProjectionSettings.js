@@ -5,7 +5,7 @@ import { isTauriRuntime, sendTauriProjectorTransition } from '../utils/tauriProj
 
 const TRANSITION_STORAGE_KEY = 'churchdisplay.transition.v1';
 
-export default function useProjectionSettings({ isElectron }) {
+export default function useProjectionSettings() {
   const [transitionEnabled, setTransitionEnabled] = useState(true);
   const [transitionDelayMs, setTransitionDelayMs] = useState(TRANSITION.DEFAULT_DELAY_MS);
   const [transitionDurationMs, setTransitionDurationMs] = useState(TRANSITION.DEFAULT_DURATION_MS);
@@ -52,20 +52,14 @@ export default function useProjectionSettings({ isElectron }) {
       console.warn('[Transition] persist failed:', err);
     }
 
-    if (isElectron && typeof window.churchDisplay?.sendTransition === 'function') {
-      window.churchDisplay.sendTransition({
-        enabled: transitionEnabled,
-        delayMs: transitionDelayMs,
-        durationMs: transitionDurationMs,
-      });
-    } else if (isTauriRuntime()) {
+    if (isTauriRuntime()) {
       void sendTauriProjectorTransition({
         enabled: transitionEnabled,
         delayMs: transitionDelayMs,
         durationMs: transitionDurationMs,
       });
     }
-  }, [transitionEnabled, transitionDelayMs, transitionDurationMs, isElectron]);
+  }, [transitionEnabled, transitionDelayMs, transitionDurationMs]);
 
   return {
     transitionEnabled,

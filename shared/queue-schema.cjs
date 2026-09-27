@@ -20,7 +20,7 @@ function normalizeQueueItem(rawItem, index = 0) {
     payload,
     section: String(rawItem?.section || resolveSectionFromPayloadType(payloadType)),
     createdAt,
-    ...(updatedAt ? { updatedAt } : {}),
+    ...(Number.isFinite(updatedAt) ? { updatedAt } : {}),
   };
 }
 
