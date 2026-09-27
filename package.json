@@ -1,6 +1,6 @@
 {
   "name": "churchdisplay-pro",
-  "version": "0.3.208",
+  "version": "0.3.209",
   "description": "ChurchDisplay Pro - Worship projection system",
   "scripts": {
     "dev": "vite",
