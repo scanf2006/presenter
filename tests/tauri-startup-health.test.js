@@ -9,9 +9,10 @@ const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
 const read = (...parts) => fs.readFileSync(path.join(root, ...parts), 'utf8');
+const { allRust } = require('./helpers/rust-sources');
 
 test('the startup health command stays reachable from the UI', () => {
-  assert.match(read('src-tauri', 'src', 'lib.rs'), /fn startup_health_check/);
+  assert.match(allRust(), /fn startup_health_check/);
   assert.match(read('src', 'utils', 'tauriProjector.js'), /getTauriStartupHealth/);
   assert.match(read('src', 'hooks', 'useStartupHealth.js'), /getTauriStartupHealth/);
 });

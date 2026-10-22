@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+const { allRust } = require('./helpers/rust-sources');
 
 function read(relPath) {
   return fs.readFileSync(path.resolve(__dirname, '..', relPath), 'utf8');
@@ -49,7 +50,7 @@ test('Preview media uses the same local-file URL resolver as the projector', () 
 });
 
 test('Tauri restores the latest payload when the projector window becomes ready', () => {
-  const rust = read('src-tauri/src/lib.rs');
+  const rust = allRust();
   const projector = read('src/components/ProjectorView.jsx');
   assert.equal(rust.includes('struct ProjectorContentState'), true);
   assert.equal(rust.includes('fn get_projector_content'), true);
@@ -79,7 +80,7 @@ test('YouTube cache progress is exposed to the media manager', () => {
 });
 
 test('YouTube cache falls back to yt-dlp when stream resolution finds no format', () => {
-  const rust = read('src-tauri/src/lib.rs');
+  const rust = allRust();
   assert.equal(rust.includes('youtube_tool_path(&app, "yt-dlp.exe")'), true);
   assert.equal(rust.includes('"--merge-output-format"'), true);
 });

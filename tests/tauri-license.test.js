@@ -10,9 +10,10 @@ const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
 const read = (...parts) => fs.readFileSync(path.join(root, ...parts), 'utf8');
+const { allRust, rustContaining } = require('./helpers/rust-sources');
 
 test('Tauri exposes the license and EULA command bridge', () => {
-  const rust = read('src-tauri', 'src', 'lib.rs');
+  const rust = allRust();
 
   for (const command of [
     'license_get_status',
@@ -33,18 +34,17 @@ test('every projector command checks projection access before it runs', () => {
   // The paid boundary: a new projector command that forgets this check would
   // hand out projection for free, and no unit test of license_store would
   // notice, because the command simply never asks it.
-  const commands = read('src-tauri', 'src', 'lib.rs');
-
   for (const command of [
     'async fn show_projector',
     'fn send_to_projector',
     'fn send_projector_transition',
     'fn send_projector_media_command',
   ]) {
-    const start = commands.indexOf(command);
+    const source = rustContaining(command);
+    const start = source.indexOf(command);
     assert.ok(start >= 0, `${command} should exist`);
     assert.match(
-      commands.slice(start, start + 360),
+      source.slice(start, start + 360),
       /license_store::ensure_projection_access\(&app\)\?/,
       `${command} should check projection access`
     );

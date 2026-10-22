@@ -8,6 +8,7 @@ const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
 const read = (...parts) => fs.readFileSync(path.join(root, ...parts), 'utf8');
+const { allRust } = require('./helpers/rust-sources');
 
 test('hymn import stays restricted to christianstudy hymn pages', () => {
   const rust = read('src-tauri', 'src', 'hymn_import.rs');
@@ -19,7 +20,7 @@ test('hymn import stays restricted to christianstudy hymn pages', () => {
     assert.ok(rust.includes(entry), `${entry} should exist`);
   }
   assert.match(rust, /if !safe_url\(&url\)/, 'lyrics should reject a URL outside the allowed host');
-  assert.match(read('src-tauri', 'src', 'lib.rs'), /songs_web_site_search/);
+  assert.match(allRust(), /songs_web_site_search/);
   assert.match(read('src', 'utils', 'tauriProjector.js'), /searchTauriHymns/);
   assert.match(read('src', 'components', 'SongManager.jsx'), /fetchTauriHymnLyrics/);
 });
