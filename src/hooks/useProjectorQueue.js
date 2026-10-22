@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { getQueueItemTitleFromPayload, resolveSectionForPayload } from '../utils/queueItemMeta';
 import { buildQueueEnvelope, migrateQueuePayload } from '../utils/queueSchema';
 import { useI18n } from '../contexts/I18nContext';
+import { describeError } from '../utils/errorMessage';
 import { isTauriRuntime, loadTauriQueue, saveTauriQueue } from '../utils/tauriProjector';
 
 const DEFAULT_QUEUE_STORAGE_KEY = 'churchdisplay.projectorQueue.v1';
@@ -66,11 +67,23 @@ export default function useProjectorQueue({ showToast, storageKey = DEFAULT_QUEU
         }
         window.localStorage.setItem(storageKey, JSON.stringify(buildQueueEnvelope(projectorQueue)));
       } catch (err) {
+        // A failed save leaves the service plan in memory only, so it is gone on the
+        // next restart. Warning to the console alone let a full disk, an antivirus
+        // lock or an over-cap queue pass unnoticed until the plan had vanished.
         console.warn('[Queue] persist failed:', err);
+        if (typeof showToast === 'function') {
+          showToast(
+            `${t('queue.persistFailed', 'Queue could not be saved')}: ${describeError(err)}`,
+            'error',
+            // The persist effect reruns on every queue edit, so a standing failure
+            // (full disk, locked file) must not toast every couple of seconds.
+            { dedupeWindowMs: 15000 }
+          );
+        }
       }
     };
     persistQueue();
-  }, [projectorQueue, queueHydrated, storageKey]);
+  }, [projectorQueue, queueHydrated, storageKey, showToast, t]);
 
   const addOrUpdateQueueItem = useCallback(
     (payload, title, section, options = {}) => {

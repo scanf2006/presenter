@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getTauriDisplays, hideTauriProjector, showTauriProjector } from '../utils/tauriProjector';
 import { createProjectionController } from '../utils/projectionController';
+import { sameDisplays } from '../utils/displayTopology';
 
 const BROWSER_FALLBACK_DISPLAYS = [
   {
@@ -42,9 +43,7 @@ export default function useDisplayProjectorStatus({ isTauri }) {
       if (isTauri) {
         const revision = controller.revision();
         const nextDisplays = await getTauriDisplays();
-        setDisplays((current) =>
-          JSON.stringify(current) === JSON.stringify(nextDisplays) ? current : nextDisplays
-        );
+        setDisplays((current) => (sameDisplays(current, nextDisplays) ? current : nextDisplays));
         await controller.refresh(nextDisplays, revision);
       }
     } catch (err) {

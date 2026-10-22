@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { isTauriRuntime, sendToTauriProjector } from '../utils/tauriProjector';
+import { describeError } from '../utils/errorMessage';
+
+// Blackout travels as an explicit payload instead of an absent one so the projector
+// can tell "show true black" apart from "nothing has been projected yet", and so a
+// display reconnect that restores the last payload stays black.
+export const BLACKOUT_PAYLOAD = { type: 'blackout' };
+
+const DELIVERY_RETRY_DELAY_MS = 150;
 
 export default function useProjectorPreviewDispatch({
   transitionEnabled,
@@ -13,13 +21,34 @@ export default function useProjectorPreviewDispatch({
   const [previewMaskVisible, setPreviewMaskVisible] = useState(false);
   const previewTimersRef = useRef([]);
 
-  const waitForAckWithTimeout = useCallback(async (data) => {
-    if (isTauriRuntime()) {
+  // Resolves to null on delivery, or to the failure reason after one retry.
+  // A rejected invoke is the only real failure signal available: the projector
+  // window does not acknowledge payloads, so there is nothing else to wait for.
+  const deliverToProjector = useCallback(async (data) => {
+    if (!isTauriRuntime()) return null;
+    try {
       await sendToTauriProjector(data);
-      return { ok: true, mode: 'tauri' };
+      return null;
+    } catch (firstError) {
+      // A transient failure is the projector window not being addressable yet;
+      // a refusal (expired trial) fails again and reports the backend's reason.
+      await new Promise((resolve) => setTimeout(resolve, DELIVERY_RETRY_DELAY_MS));
+      try {
+        await sendToTauriProjector(data);
+        return null;
+      } catch (retryError) {
+        return retryError || firstError;
+      }
     }
-    return { ok: true, mode: 'browser' };
   }, []);
+
+  const reportDeliveryFailure = useCallback(
+    (error, label) => {
+      if (!error || suppressDeliveryWarnings || typeof showToast !== 'function') return;
+      showToast(`${label}: ${describeError(error)}`, 'error');
+    },
+    [showToast, suppressDeliveryWarnings]
+  );
 
   const clearPreviewTimers = useCallback(() => {
     previewTimersRef.current.forEach((t) => clearTimeout(t));
@@ -59,51 +88,29 @@ export default function useProjectorPreviewDispatch({
     (data) => {
       setCurrentSlide(data);
       applyPreviewTransition(data);
-      if (isTauriRuntime()) {
-        // Reliability layer: await main-process ACK with timeout and retry once on failure.
-        Promise.resolve()
-          .then(async () => {
-            let ack = await waitForAckWithTimeout(data);
-            if (ack?.ok) return;
-            const firstReason = ack?.reason || 'unknown';
-            ack = await waitForAckWithTimeout(data);
-            if (!ack?.ok && !suppressDeliveryWarnings && typeof showToast === 'function') {
-              showToast(`Projector delivery delayed (${firstReason}).`, 'warning');
-            }
-          })
-          .catch((err) => {
-            if (!suppressDeliveryWarnings && typeof showToast === 'function') {
-              showToast(`Projector delivery failed: ${err?.message || 'Unknown error'}`, 'error');
-            }
-          });
-      }
+      void deliverToProjector(data).then((error) =>
+        reportDeliveryFailure(error, 'Projector delivery failed')
+      );
     },
-    [
-      applyPreviewTransition,
-      waitForAckWithTimeout,
-      showToast,
-      suppressDeliveryWarnings,
-    ]
+    [applyPreviewTransition, deliverToProjector, reportDeliveryFailure]
   );
 
   const resendCurrentSlideToProjector = useCallback(
     (data) => {
       if (!data) return;
-      if (isTauriRuntime()) {
-        void sendToTauriProjector(data);
-        return;
-      }
+      // Best effort after a display change; the visible state is already correct.
+      void deliverToProjector(data);
     },
-    []
+    [deliverToProjector]
   );
 
   const blackout = useCallback(() => {
     setCurrentSlide(null);
     applyPreviewTransition(null);
-    if (isTauriRuntime()) {
-      void sendToTauriProjector(null);
-    }
-  }, [applyPreviewTransition]);
+    void deliverToProjector(BLACKOUT_PAYLOAD).then((error) =>
+      reportDeliveryFailure(error, 'Blackout failed')
+    );
+  }, [applyPreviewTransition, deliverToProjector, reportDeliveryFailure]);
 
   return {
     currentSlide,

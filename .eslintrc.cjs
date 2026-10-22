@@ -35,12 +35,5 @@ module.exports = {
       files: ['src/**/*.jsx'],
       env: { browser: true, node: false },
     },
-    {
-      files: ['electron/**/*.js'],
-      env: { browser: false, node: true },
-      rules: {
-        'no-empty': 'warn',
-      },
-    },
   ],
 };

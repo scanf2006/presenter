@@ -29,11 +29,15 @@ pub fn parse_items(raw: &str) -> Result<Vec<Value>, String> {
 }
 
 pub fn save_items(queue_path: &Path, items: &[Value]) -> Result<(), String> {
-    let items = if items.len() > MAX_QUEUE_SIZE {
-        &items[..MAX_QUEUE_SIZE]
-    } else {
-        items
-    };
+    // Truncating to the cap used to drop the tail of the queue while still reporting
+    // success, so a service plan could lose its last items with nothing to show for
+    // it. Reject instead and leave the previously saved queue intact.
+    if items.len() > MAX_QUEUE_SIZE {
+        return Err(format!(
+            "Queue holds at most {MAX_QUEUE_SIZE} items but {} were sent; nothing was saved.",
+            items.len()
+        ));
+    }
     let json = serde_json::to_vec_pretty(&QueueEnvelopeForSave {
         schema_version: 2,
         items,
@@ -108,6 +112,27 @@ mod tests {
             items
         );
         assert!(!path.with_extension("json.bak").exists());
+        fs::remove_dir_all(path.parent().expect("test directory")).expect("test cleanup");
+    }
+
+    #[test]
+    fn an_oversized_queue_is_rejected_instead_of_silently_truncated() {
+        let path = temporary_queue_path();
+        let kept = vec![serde_json::json!({"id": "kept"})];
+        save_items(&path, &kept).expect("queue saves");
+
+        let oversized = (0..=MAX_QUEUE_SIZE)
+            .map(|index| serde_json::json!({"id": index}))
+            .collect::<Vec<_>>();
+        let error = save_items(&path, &oversized).expect_err("oversized queue is rejected");
+        assert!(error.contains(&MAX_QUEUE_SIZE.to_string()));
+
+        // A rejected save must leave the previously stored queue readable.
+        assert_eq!(
+            parse_items(&fs::read_to_string(&path).expect("previous queue survives"))
+                .expect("previous queue parses"),
+            kept
+        );
         fs::remove_dir_all(path.parent().expect("test directory")).expect("test cleanup");
     }
 }

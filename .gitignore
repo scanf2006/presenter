@@ -10,3 +10,7 @@ app.log
 keys/
 
 diagnostics/
+
+# Local media library snapshot: not referenced by the app or bundled into
+# the installer, and far too large for git. Keep seed metadata, drop the blobs.
+data/seed/media/

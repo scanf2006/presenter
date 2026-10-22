@@ -216,6 +216,7 @@
     queue: {
       untitled: 'Untitled Content',
       autoSaved: 'Auto-saved to selected queue card',
+      persistFailed: 'Queue could not be saved',
     },
     health: {
       criticalFound: 'Health check found critical issue(s)',
@@ -462,6 +463,7 @@
     queue: {
       untitled: '未命名内容',
       autoSaved: '已自动保存到当前选中队列卡片',
+      persistFailed: '队列保存失败',
     },
     health: {
       criticalFound: '健康检查发现严重问题数',

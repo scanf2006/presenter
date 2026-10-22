@@ -48,23 +48,45 @@ fn entities(text: &str) -> String {
         .replace("&quot;", "\"")
         .replace("&#39;", "'")
 }
-fn plain(html: &str) -> String {
+/// Marks a real line break while the tags are still being stripped. Newlines in
+/// the source are only formatting, so they must not be mistaken for breaks:
+/// these pages put one after almost every `<br>`.
+const BREAK: &str = "\u{1}";
+
+/// Splits the markup into display lines. A piece that holds nothing but
+/// whitespace comes from two breaks in a row, which is how these pages separate
+/// verses, so it is kept as an empty entry for the caller to interpret.
+fn pieces(html: &str) -> Vec<String> {
     let tags = Regex::new("(?is)<[^>]+>").expect("tags regex");
-    entities(
-        &tags.replace_all(
-            &html
-                .replace("<br>", "\n")
-                .replace("<br/>", "\n")
-                .replace("<br />", "\n")
-                .replace("</p>", "\n"),
-            " ",
-        ),
-    )
-    .lines()
-    .map(str::trim)
-    .filter(|line| !line.is_empty())
-    .collect::<Vec<_>>()
-    .join("\n")
+    let breaks = Regex::new(r"(?i)<br\s*/?>|</p>").expect("breaks regex");
+    let marked = breaks.replace_all(html, BREAK);
+    entities(&tags.replace_all(&marked, " "))
+        .split(BREAK)
+        .map(|piece| piece.split_whitespace().collect::<Vec<_>>().join(" "))
+        .collect()
+}
+fn plain(html: &str) -> String {
+    pieces(html)
+        .into_iter()
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+/// Like `plain`, but keeps one blank line wherever the page separated verses so
+/// the stanzas arrive apart instead of as a single block.
+fn plain_verses(html: &str) -> String {
+    let mut lines: Vec<String> = Vec::new();
+    for piece in pieces(html) {
+        if !piece.is_empty() {
+            lines.push(piece);
+        } else if lines.last().is_some_and(|last| !last.is_empty()) {
+            lines.push(String::new());
+        }
+    }
+    while lines.last().is_some_and(String::is_empty) {
+        lines.pop();
+    }
+    lines.join("\n")
 }
 fn safe_url(url: &str) -> bool {
     url.starts_with(HYMN_PREFIX)
@@ -135,18 +157,129 @@ pub fn lyrics(url: String) -> LyricsResult {
             lyrics: String::new(),
         };
     };
+    parse_lyrics_page(&html)
+}
+
+/// Pulls the title and lyrics out of a christianstudy hymn page. The lyrics
+/// sit in `<font size=+2> ... </FONT></p>`; that block can contain its own
+/// `<font>` tags (an empty colour tag, a small spacer), so the match runs to
+/// the `</font>` that closes the paragraph, not the first one.
+fn parse_lyrics_page(html: &str) -> LyricsResult {
     let title_re = Regex::new(r"(?is)<title>\s*([^<]+)\s*</title>").expect("title regex");
-    let body_re =
+    let block_re =
+        Regex::new(r"(?is)<font[^>]*size\s*=\s*\+2[^>]*>(.*?)</font>\s*</p>").expect("block regex");
+    let fallback_re =
         Regex::new(r"(?is)<font[^>]*size\s*=\s*\+2[^>]*>(.*?)</font>").expect("body regex");
     let title = title_re
-        .captures(&html)
+        .captures(html)
         .and_then(|capture| capture.get(1))
         .map(|match_| plain(match_.as_str()).replace('【', "").replace('】', ""))
         .unwrap_or_default();
-    let lyrics = body_re
-        .captures(&html)
-        .and_then(|capture| capture.get(1))
-        .map(|match_| plain(match_.as_str()))
+    let lyrics = [&block_re, &fallback_re]
+        .into_iter()
+        .filter_map(|re| re.captures(html)?.get(1))
+        .map(|match_| plain_verses(match_.as_str()))
+        .find(|text| !text.is_empty())
         .unwrap_or_default();
     LyricsResult { title, lyrics }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const DIVIDER: &str =
+        "<p><TABLE BORDER=\"0\"><TR><TD><IMG SRC=\" \"><br></TD></TR></TABLE></p>";
+
+    fn page(title: &str, body: &str) -> String {
+        format!(
+            "<html><head><title>{title}
+</title></head><body><p><font color=\"#3333FF\" size=+3>{title}</font>
+<br>meta</p>{DIVIDER}
+<p><font size=+2>
+{body}</FONT></p>
+{DIVIDER}</body></html>"
+        )
+    }
+
+    #[test]
+    fn plain_lyrics_block_is_parsed() {
+        let result = parse_lyrics_page(&page(
+            "【我心尊主為大】",
+            "第一行<br>
+第二行<br>
+",
+        ));
+        assert_eq!(result.title, "我心尊主為大");
+        assert_eq!(
+            result.lyrics,
+            "第一行
+第二行"
+        );
+    }
+
+    #[test]
+    fn empty_font_tag_at_start_does_not_hide_the_lyrics() {
+        // c0514 opens the lyrics block with an empty colour tag.
+        let html = page(
+            "【詩】",
+            "<font color=\"#3333FF\"></font>
+第一行<br>
+第二行<BR>
+",
+        );
+        assert_eq!(
+            parse_lyrics_page(&html).lyrics,
+            "第一行
+第二行"
+        );
+    }
+
+    #[test]
+    fn nested_spacer_font_keeps_every_verse_and_chorus() {
+        // c0600 puts a small spacer font between numbered verses.
+        let html = page(
+            "【詩】",
+            "<ol>
+<li>一節<br>
+<font size=1><br></font>
+<li>二節<br>
+</ol>
+副歌<br>
+",
+        );
+        // The page spaces the two verses apart but runs straight into the
+        // chorus, and the import keeps that shape.
+        assert_eq!(parse_lyrics_page(&html).lyrics, "一節\n\n二節\n副歌");
+    }
+
+    #[test]
+    fn a_double_break_separates_verses() {
+        // c0100 separates verses with two breaks in a row.
+        let html = page(
+            "【詩】",
+            "一節甲<br>\n一節乙<br>\n<br>\n二節甲<br>\n二節乙<br>\n",
+        );
+        assert_eq!(
+            parse_lyrics_page(&html).lyrics,
+            "一節甲\n一節乙\n\n二節甲\n二節乙"
+        );
+    }
+
+    #[test]
+    fn source_newlines_alone_do_not_split_or_separate_lines() {
+        // A newline in the markup is formatting; only a break tag ends a line.
+        assert_eq!(plain("一\n二"), "一 二");
+        assert_eq!(plain_verses("一<br>\n\n\n二"), "一\n二");
+    }
+
+    #[test]
+    fn blank_lines_are_never_left_at_the_edges_or_doubled_up() {
+        assert_eq!(plain_verses("<br><br>一<br><br><br>二<br><br>"), "一\n\n二");
+    }
+
+    #[test]
+    fn uppercase_br_splits_lines() {
+        assert_eq!(plain("一<BR>二<Br/>三"), "一\n二\n三");
+    }
 }

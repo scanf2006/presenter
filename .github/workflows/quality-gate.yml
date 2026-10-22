@@ -26,6 +26,12 @@ jobs:
       - name: Run Commercial Gate
         run: npm run -s commercial:gate
 
+      - name: Lint Frontend
+        run: npm run lint
+
+      - name: Test Frontend
+        run: npm test
+
       - name: Setup Rust
         run: rustup toolchain install stable --profile minimal --component rustfmt
 

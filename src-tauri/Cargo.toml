@@ -1,9 +1,15 @@
 [package]
+# `name` is also the built executable's name (app.exe) and is referenced by
+# src-tauri/installer-hooks.nsh. Renaming it means updating that hook, refreshing
+# Cargo.lock, and changing the install path for already-deployed machines, so it is
+# left as-is deliberately rather than by oversight.
 name = "app"
+# Crate metadata only: the shipped version comes from tauri.conf.json, which
+# overrides this for the bundle and for app.package_info().version.
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
-license = ""
+description = "ChurchDisplay Pro - worship projection system"
+authors = ["Aiden"]
+license = "LicenseRef-Proprietary"
 repository = ""
 edition = "2021"
 rust-version = "1.77.2"

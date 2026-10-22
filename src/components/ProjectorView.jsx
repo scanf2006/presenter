@@ -16,7 +16,6 @@ import {
 function ProjectorView() {
   const [content, setContent] = useState(null);
   const [backgroundContent, setBackgroundContent] = useState(null);
-  const [isBlackout, setIsBlackout] = useState(false);
   const [fadeClass, setFadeClass] = useState('');
   const [transitionMaskVisible, setTransitionMaskVisible] = useState(false);
   const [transitionConfig, setTransitionConfig] = useState({
@@ -48,7 +47,6 @@ function ProjectorView() {
     const applyContent = (nextContent) => {
       setContent(nextContent);
       setBackgroundContent(nextContent?.background || null);
-      setIsBlackout(false);
       setFadeClass('projector-view__content--fade-in');
     };
     let unlistenContent;
@@ -107,7 +105,7 @@ function ProjectorView() {
       unlistenMediaCommand?.();
       clearTimers();
     };
-  }, [isTauri, setBackgroundContent, setContent, setFadeClass, setIsBlackout, setTransitionConfig, setTransitionMaskVisible]);
+  }, [isTauri, setBackgroundContent, setContent, setFadeClass, setTransitionConfig, setTransitionMaskVisible]);
 
   useEffect(() => {
     if (content?.type !== 'video') return;
@@ -177,6 +175,9 @@ function ProjectorView() {
     (content?.originType === 'ppt' ||
       /ppt/i.test(mediaNameForDetect) ||
       /[\\/]media[\\/]ppt[\\/]/i.test(mediaPathForDetect));
+  // Blackout is carried by an explicit payload rather than an absent one: an absent
+  // payload also occurs before the first slide, where the idle backdrop should show.
+  const isBlackout = content?.type === 'blackout';
   const isTextualContent = content && isTextualSlideType(content.type);
   const hasVideoBackgroundForText = Boolean(
     isTextualContent && effectiveMedia?.type === 'video' && !effectiveMedia?.standalone

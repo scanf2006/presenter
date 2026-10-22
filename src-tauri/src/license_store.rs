@@ -22,6 +22,10 @@ use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 const PRODUCT: &str = "churchdisplay-pro";
 const EULA_PEPPER: &str = "cdp-eula-proof-2026-04";
 const TRIAL_DURATION_MS: u64 = 60 * 60 * 1000;
+// The trial clock only advances while the status is polled, and every projection
+// command polls it. Persisting on each tick rewrote the file far more often than
+// the remaining time visibly changed; a crash now costs at most this much trial.
+const TRIAL_PERSIST_INTERVAL_MS: u64 = 5_000;
 const PUBLIC_KEY: &str = concat!(
     "-----BEGIN PUBLIC KEY-----\n",
     "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1KEOk+gkfEDB8PUpJdIw\n",
@@ -117,7 +121,7 @@ fn load(path: &Path, legacy: bool) -> Result<Option<Stored>, String> {
         // Electron settings may predate these fields; current license files remain strict.
         let object = value.as_object_mut().ok_or_else(damaged)?;
         let defaults = serde_json::to_value(Stored::default()).map_err(|_| damaged())?;
-        for (key, default) in defaults.as_object().unwrap() {
+        for (key, default) in defaults.as_object().ok_or_else(damaged)? {
             object.entry(key.clone()).or_insert_with(|| default.clone());
         }
     }
@@ -209,7 +213,7 @@ fn trial_status(
             .unwrap_or(u64::MAX),
     );
     let consumed_ms = elapsed_ms.min(TRIAL_DURATION_MS);
-    if consumed_ms.saturating_sub(runtime.last_persisted_ms) >= 1000
+    if consumed_ms.saturating_sub(runtime.last_persisted_ms) >= TRIAL_PERSIST_INTERVAL_MS
         || consumed_ms == TRIAL_DURATION_MS
     {
         let mut next = load(path, false)?.unwrap_or_default();
@@ -240,7 +244,9 @@ fn command(program: &str, args: &[&str]) -> String {
     let Ok(mut child) = command.spawn() else {
         return String::new();
     };
-    let stdout = child.stdout.take().unwrap();
+    let Some(stdout) = child.stdout.take() else {
+        return String::new();
+    };
     #[cfg(windows)]
     let Ok(_job) = crate::background::ProcessJob::attach(&mut child) else {
         return String::new();
@@ -353,15 +359,31 @@ fn version_cmp(left: &str, right: &str) -> std::cmp::Ordering {
         .unwrap_or(std::cmp::Ordering::Equal)
 }
 
-fn verify(key: &str, version: &str) -> Result<serde_json::Value, String> {
-    let parts = key.trim().split('.').collect::<Vec<_>>();
+// Checking the RSA signature is the expensive half of verification and depends only
+// on the key, so a verified payload is cached per key. Deliberately narrow: only a
+// success is cached, so a transient device-identity failure cannot be remembered as
+// an invalid license, and expiry, version and device rules stay outside the cache so
+// a cached pass can never outlive them.
+fn verified_payload(key: &str) -> Result<Vec<u8>, String> {
+    static CACHE: Mutex<Option<(String, Vec<u8>)>> = Mutex::new(None);
+    let key = key.trim();
+    {
+        let cache = CACHE
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some((cached_key, payload)) = cache.as_ref() {
+            if cached_key.as_str() == key {
+                return Ok(payload.clone());
+            }
+        }
+    }
+    let parts = key.split('.').collect::<Vec<_>>();
     if parts.len() != 3 || parts[0] != "CDP1" {
         return Err("Invalid license key format.".into());
     }
     let raw = URL_SAFE_NO_PAD
         .decode(parts[1])
         .map_err(|_| "Malformed license payload.")?;
-    let token: Token = serde_json::from_slice(&raw).map_err(|_| "Malformed license payload.")?;
     let signature_bytes = URL_SAFE_NO_PAD
         .decode(parts[2])
         .map_err(|_| "Malformed license signature.")?;
@@ -369,9 +391,23 @@ fn verify(key: &str, version: &str) -> Result<serde_json::Value, String> {
         .map_err(|_| "Malformed license signature.")?;
     let public = RsaPublicKey::from_public_key_pem(PUBLIC_KEY)
         .map_err(|_| "License public key is unavailable.")?;
+    // The payload is parsed only after this check: unauthenticated input should not
+    // reach the deserializer first.
     VerifyingKey::<Sha256>::new(public)
         .verify(format!("CDP1.{}", parts[1]).as_bytes(), &signature)
         .map_err(|_| "License signature verification failed.")?;
+    {
+        let mut cache = CACHE
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        *cache = Some((key.to_string(), raw.clone()));
+    }
+    Ok(raw)
+}
+
+fn verify(key: &str, version: &str) -> Result<serde_json::Value, String> {
+    let raw = verified_payload(key)?;
+    let token: Token = serde_json::from_slice(&raw).map_err(|_| "Malformed license payload.")?;
     validate_token(token, version, OffsetDateTime::now_utc(), device_id)
 }
 
@@ -407,14 +443,13 @@ fn validate_token(
             return Err("License has expired.".into());
         }
     }
-    if token
+    if let Some(max) = token
         .max_version
         .as_deref()
-        .is_some_and(|max| version_cmp(version, max).is_gt())
+        .filter(|max| version_cmp(version, max).is_gt())
     {
         return Err(format!(
-            "License is valid up to version {}, but current version is {version}.",
-            token.max_version.unwrap()
+            "License is valid up to version {max}, but current version is {version}."
         ));
     }
     Ok(
@@ -696,6 +731,27 @@ mod tests {
         assert!(verify(&forged, "0.3.208")
             .unwrap_err()
             .contains("signature verification failed"));
+    }
+    #[test]
+    fn the_signature_is_checked_before_the_payload_is_parsed() {
+        // A bogus signature over a payload that is not even JSON: the signature
+        // failure must win, so unverified bytes never reach the deserializer.
+        let forged = format!(
+            "CDP1.{}.{}",
+            URL_SAFE_NO_PAD.encode(b"not-json-at-all"),
+            URL_SAFE_NO_PAD.encode([0u8; 256])
+        );
+        // Repeating is identical because only verified payloads enter the cache; a
+        // rejection must never be remembered in place of a real verification.
+        for _ in 0..2 {
+            assert!(verify(&forged, "0.3.208")
+                .unwrap_err()
+                .contains("signature verification failed"));
+        }
+        assert_eq!(
+            verify("nonsense", "0.3.208").unwrap_err(),
+            "Invalid license key format."
+        );
     }
     #[test]
     fn exhausted_trial_blocks_projection_but_a_license_allows_it() {

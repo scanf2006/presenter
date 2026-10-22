@@ -295,6 +295,66 @@ fn copy_tree(
     Ok(())
 }
 
+// Columns the song commands read, each with a constant default so SQLite can
+// backfill existing rows. `ALTER TABLE ... ADD COLUMN` rejects a non-constant
+// default, so timestamps use 0 here instead of the strftime default used at
+// creation. `id` and `title` are deliberately absent: a table missing those is
+// not a songs table, and failing loudly beats guessing.
+const SONGS_COLUMNS: [(&str, &str); 7] = [
+    ("author", "TEXT DEFAULT ''"),
+    ("lyrics", "TEXT NOT NULL DEFAULT ''"),
+    ("background_type", "TEXT DEFAULT ''"),
+    ("background_path", "TEXT DEFAULT ''"),
+    ("style_json", "TEXT DEFAULT ''"),
+    ("created_at", "INTEGER DEFAULT 0"),
+    ("updated_at", "INTEGER DEFAULT 0"),
+];
+
+// A songs.db carried over from the Electron release predates later columns, and
+// `CREATE TABLE IF NOT EXISTS` leaves an existing table untouched. Without this
+// backfill the first `songs_list` fails with "no such column: style_json" and the
+// whole song library becomes unreachable.
+fn ensure_songs_schema(connection: &Connection) -> Result<(), String> {
+    connection
+        .execute_batch(
+            "CREATE TABLE IF NOT EXISTS songs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                author TEXT DEFAULT '',
+                lyrics TEXT NOT NULL,
+                background_type TEXT DEFAULT '',
+                background_path TEXT DEFAULT '',
+                style_json TEXT DEFAULT '',
+                created_at INTEGER DEFAULT (strftime('%s','now')),
+                updated_at INTEGER DEFAULT (strftime('%s','now'))
+            );",
+        )
+        .map_err(|e| e.to_string())?;
+    let mut statement = connection
+        .prepare("PRAGMA table_info(songs)")
+        .map_err(|e| e.to_string())?;
+    let existing = statement
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<String>, _>>()
+        .map_err(|e| e.to_string())?;
+    // Not a block: a `?` at the tail of one keeps a temporary holding the
+    // statement's borrow alive past the block's own locals (E0597). Binding in a
+    // plain `let` drops that temporary at the end of the statement instead.
+    drop(statement);
+    for (name, definition) in SONGS_COLUMNS {
+        if existing.iter().any(|column| column.as_str() == name) {
+            continue;
+        }
+        connection
+            .execute_batch(&format!(
+                "ALTER TABLE songs ADD COLUMN {name} {definition};"
+            ))
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 fn songs_database(app: &AppHandle) -> Result<Connection, String> {
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     fs::create_dir_all(&app_data_dir).map_err(|e| e.to_string())?;
@@ -315,21 +375,7 @@ fn songs_database(app: &AppHandle) -> Result<Connection, String> {
     }
 
     let connection = Connection::open(songs_path).map_err(|e| e.to_string())?;
-    connection
-        .execute_batch(
-            "CREATE TABLE IF NOT EXISTS songs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT NOT NULL,
-                author TEXT DEFAULT '',
-                lyrics TEXT NOT NULL,
-                background_type TEXT DEFAULT '',
-                background_path TEXT DEFAULT '',
-                style_json TEXT DEFAULT '',
-                created_at INTEGER DEFAULT (strftime('%s','now')),
-                updated_at INTEGER DEFAULT (strftime('%s','now'))
-            );",
-        )
-        .map_err(|e| e.to_string())?;
+    ensure_songs_schema(&connection)?;
     Ok(connection)
 }
 
@@ -485,24 +531,15 @@ fn youtube_tool_path(app: &AppHandle, name: &str) -> Option<PathBuf> {
     if bundled.is_file() {
         return Some(bundled);
     }
-    app.path()
+    let installed = app
+        .path()
         .app_data_dir()
         .ok()?
         .parent()?
         .join("churchdisplay-pro")
         .join("tools")
-        .join(name)
-        .is_file()
-        .then(|| {
-            app.path()
-                .app_data_dir()
-                .unwrap()
-                .parent()
-                .unwrap()
-                .join("churchdisplay-pro")
-                .join("tools")
-                .join(name)
-        })
+        .join(name);
+    installed.is_file().then_some(installed)
 }
 
 #[tauri::command]
@@ -563,6 +600,10 @@ async fn youtube_cache_download(
         let Some(ytdlp) = youtube_tool_path(&app, "yt-dlp.exe") else {
             return fail("yt-dlp runtime is unavailable.".to_string());
         };
+        // Only the validated video id reaches the downloader. The host check above
+        // accepts the user's original URL, which can still carry arbitrary query
+        // parameters, so rebuild a canonical watch URL from the id instead.
+        let canonical_url = format!("https://www.youtube.com/watch?v={video_id}");
         let mut command = Command::new(ytdlp);
         command.args([
             "--no-playlist",
@@ -594,7 +635,11 @@ async fn youtube_cache_download(
                 .arg(format!("deno:{}", deno.to_string_lossy()));
         }
         command.stdout(Stdio::piped()).stderr(Stdio::piped());
-        let mut child = match command.arg(&input_url).creation_flags(0x08000000).spawn() {
+        let mut child = match command
+            .arg(&canonical_url)
+            .creation_flags(0x08000000)
+            .spawn()
+        {
             Ok(child) => child,
             Err(error) => return fail(error.to_string()),
         };
@@ -741,13 +786,18 @@ fn songs_save(app: AppHandle, song: SongInput) -> Result<SongSaveResult, String>
     let background_type = song.background_type.unwrap_or_default();
     let background_path = song.background_path.unwrap_or_default();
     let id = if let Some(id) = song.id {
-        connection
+        let updated = connection
             .execute(
                 "UPDATE songs SET title=?1, author=?2, lyrics=?3, background_type=?4, background_path=?5,
                  style_json=?6, updated_at=strftime('%s','now') WHERE id=?7",
                 rusqlite::params![song.title, author, song.lyrics, background_type, background_path, style_json, id],
             )
             .map_err(|e| e.to_string())?;
+        // A zero-row update means the song was removed elsewhere. Reporting success
+        // would tell the user their edit was stored when nothing was written.
+        if updated == 0 {
+            return Err("This song no longer exists; it may have been deleted.".to_string());
+        }
         id
     } else {
         connection
@@ -1170,6 +1220,15 @@ fn bible_get_verses(
     Ok(verses)
 }
 
+// `%` and `_` are LIKE wildcards. Unescaped, a keyword containing either matches
+// far more than the reader asked for, and a lone `%` scans every verse in the book.
+fn escape_like(keyword: &str) -> String {
+    keyword
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_")
+}
+
 #[tauri::command]
 fn bible_search(
     app: AppHandle,
@@ -1184,11 +1243,11 @@ fn bible_search(
         .prepare(
             "SELECT b.VolumeSN, b.ChapterSN, b.VerseSN, b.Lection, bi.ShortName, bi.FullName \
      FROM Bible b JOIN BibleID bi ON b.VolumeSN = bi.SN \
-     WHERE b.Lection LIKE '%' || ?1 || '%' LIMIT 100",
+     WHERE b.Lection LIKE '%' || ?1 || '%' ESCAPE '\\' LIMIT 100",
         )
         .map_err(|e| e.to_string())?;
     let results = statement
-        .query_map([keyword.trim()], |row| {
+        .query_map([escape_like(keyword.trim())], |row| {
             Ok(BibleSearchResult {
                 book_sn: row.get(0)?,
                 chapter: row.get(1)?,
@@ -1845,4 +1904,85 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Kept byte-identical to the statement `songs_list` prepares, so a column the
+    // read path needs but the migration forgets fails this test rather than a user.
+    const SONGS_LIST_QUERY: &str =
+        "SELECT id, title, author, lyrics, background_type, background_path, style_json, created_at, updated_at
+             FROM songs ORDER BY updated_at DESC, id DESC";
+
+    #[test]
+    fn a_legacy_songs_table_is_backfilled_so_the_song_list_query_runs() {
+        let connection = Connection::open_in_memory().unwrap();
+        // The shape an older Electron songs.db can have: no author, style or timestamps.
+        connection
+            .execute_batch(
+                "CREATE TABLE songs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL,
+                    lyrics TEXT NOT NULL
+                );
+                INSERT INTO songs (title, lyrics) VALUES ('Old Hymn', 'line one');",
+            )
+            .unwrap();
+        assert!(
+            connection.prepare(SONGS_LIST_QUERY).is_err(),
+            "fixture should reproduce the missing-column failure"
+        );
+
+        ensure_songs_schema(&connection).unwrap();
+
+        assert!(connection.prepare(SONGS_LIST_QUERY).is_ok());
+        let (title, lyrics, style, updated): (String, String, String, i64) = connection
+            .query_row(
+                "SELECT title, lyrics, style_json, updated_at FROM songs WHERE id = 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(title, "Old Hymn");
+        assert_eq!(lyrics, "line one");
+        assert_eq!(style, "");
+        assert_eq!(updated, 0);
+    }
+
+    #[test]
+    fn ensuring_the_schema_again_adds_nothing_and_keeps_existing_songs() {
+        let connection = Connection::open_in_memory().unwrap();
+        ensure_songs_schema(&connection).unwrap();
+        connection
+            .execute(
+                "INSERT INTO songs (title, lyrics, style_json) VALUES (?1, ?2, ?3)",
+                rusqlite::params!["New", "body", r#"{"size":1}"#],
+            )
+            .unwrap();
+
+        ensure_songs_schema(&connection).unwrap();
+
+        let style: String = connection
+            .query_row(
+                "SELECT style_json FROM songs WHERE title = 'New'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(style, r#"{"size":1}"#);
+        let columns: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('songs')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            columns,
+            SONGS_COLUMNS.len() as i64 + 2,
+            "id and title plus the backfilled set"
+        );
+    }
 }

@@ -1,27 +1,34 @@
+// Wiring guards. These only check that the startup-health command is still
+// reachable from the UI: the command's own behavior needs a live Tauri runtime,
+// and the display-dedup logic it used to assert on is now covered by real
+// behavior tests in display-topology.test.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
+const read = (...parts) => fs.readFileSync(path.join(root, ...parts), 'utf8');
 
-test('Tauri startup health checks runtime resources and writable data directories', () => {
-  const rust = fs.readFileSync(path.join(root, 'src-tauri', 'src', 'lib.rs'), 'utf8');
-  const bridge = fs.readFileSync(path.join(root, 'src', 'utils', 'tauriProjector.js'), 'utf8');
-  const hook = fs.readFileSync(path.join(root, 'src', 'hooks', 'useStartupHealth.js'), 'utf8');
-
-  for (const check of ['Display Detection', 'Media Directory', 'YouTube Cache', 'PPT Converter Script', 'Bible Data', 'Songs Database']) {
-    assert.match(rust, new RegExp(check));
-  }
-  assert.match(rust, /fn startup_health_check/);
-  assert.match(bridge, /getTauriStartupHealth/);
-  assert.match(hook, /getTauriStartupHealth/);
+test('the startup health command stays reachable from the UI', () => {
+  assert.match(read('src-tauri', 'src', 'lib.rs'), /fn startup_health_check/);
+  assert.match(read('src', 'utils', 'tauriProjector.js'), /getTauriStartupHealth/);
+  assert.match(read('src', 'hooks', 'useStartupHealth.js'), /getTauriStartupHealth/);
 });
 
-test('Tauri display topology refreshes periodically without redundant state updates', () => {
-  const hook = fs.readFileSync(path.join(root, 'src', 'hooks', 'useDisplayProjectorStatus.js'), 'utf8');
+test('the display refresh interval is cleaned up when the hook unmounts', () => {
+  const hook = read('src', 'hooks', 'useDisplayProjectorStatus.js');
 
-  assert.match(hook, /window\.setInterval/);
-  assert.match(hook, /5000/);
-  assert.match(hook, /JSON\.stringify\(current\) === JSON\.stringify\(nextDisplays\)/);
+  // A leaked interval keeps polling the backend after unmount, so every timer
+  // the hook starts has to be cleared again.
+  const started = hook.match(/window\.set(Interval|Timeout)\(/g) ?? [];
+  const cleared = hook.match(/window\.clear(Interval|Timeout)\(/g) ?? [];
+  assert.ok(started.length > 0, 'the hook should refresh displays on a timer');
+  assert.equal(cleared.length, started.length, 'every timer should be cleared on unmount');
+});
+
+test('the display refresh reuses the previous list when nothing changed', () => {
+  // Guards the wiring only; sameDisplays itself is tested behaviorally.
+  const hook = read('src', 'hooks', 'useDisplayProjectorStatus.js');
+  assert.match(hook, /sameDisplays\(current, nextDisplays\)\s*\?\s*current\s*:\s*nextDisplays/);
 });
