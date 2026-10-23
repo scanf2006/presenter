@@ -1,5 +1,6 @@
 {
-  "provenance": "Archive SHA-256 values verified against upstream GitHub release asset digests on 2026-09-27; extracted file hashes computed from those verified archives.",
+  "provenance": "Archive SHA-256 values verified against upstream GitHub release asset digests on 2026-10-23; extracted file hashes computed from those verified archives.",
+  "retention": "Pin FFmpeg to a BtbN month-end autobuild (the build published on the last day of a month). BtbN keeps those long-term - month-end tags going back two years are still served - but prunes mid-month dailies after about two weeks. The previous pin was the 2026-09-27 daily and 404'd once it was pruned, which failed CI; a pin to the newest daily would fail the same way within a fortnight.",
   "assets": [
     {
       "name": "yt-dlp 2026.08.19",
@@ -18,12 +19,12 @@
       ]
     },
     {
-      "name": "FFmpeg n8.1.3-2-g45e8e0a3ff (2026-09-27)",
-      "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-27-13-04/ffmpeg-n8.1.3-2-g45e8e0a3ff-win64-lgpl-8.1.zip",
-      "sha256": "c7e6b5ab8b09cd670a2ab1ef403b46ca3b410470f2b0b8a6cd3e0e61a2dae759",
+      "name": "FFmpeg n8.1.3-9-g29e619e767 (2026-09-30)",
+      "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-30-13-08/ffmpeg-n8.1.3-9-g29e619e767-win64-lgpl-8.1.zip",
+      "sha256": "4a7642b2264c03e8a0ce8a3825b933ee5580656f45695a086fe7e294045ffc0a",
       "files": [
-        { "name": "ffmpeg.exe", "entry": "ffmpeg-n8.1.3-2-g45e8e0a3ff-win64-lgpl-8.1/bin/ffmpeg.exe", "sha256": "9d7c91234b1ef468b8309ce17d866713e545e6870b9ac53e35fc5dfc47803c7a" },
-        { "name": "ffmpeg-LGPL.txt", "entry": "ffmpeg-n8.1.3-2-g45e8e0a3ff-win64-lgpl-8.1/LICENSE.txt", "sha256": "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768" }
+        { "name": "ffmpeg.exe", "entry": "ffmpeg-n8.1.3-9-g29e619e767-win64-lgpl-8.1/bin/ffmpeg.exe", "sha256": "3d2e4806d8ab7194705718e5c5b39a86d7b42ba8396c7f5e36f2abe65b7145ab" },
+        { "name": "ffmpeg-LGPL.txt", "entry": "ffmpeg-n8.1.3-9-g29e619e767-win64-lgpl-8.1/LICENSE.txt", "sha256": "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768" }
       ]
     }
   ]
