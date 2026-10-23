@@ -1,8 +1,8 @@
 {
   "name": "churchdisplay-pro",
-  "version": "0.3.215",
+  "version": "0.3.216",
   "engines": {
-    "node": ">=22 <23"
+    "node": ">=22"
   },
   "description": "ChurchDisplay Pro - Worship projection system",
   "scripts": {
@@ -39,7 +39,7 @@
     "pdfjs-dist": "^6.4.299"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
+    "@eslint/js": "^9.39.5",
     "@tauri-apps/cli": "^2.11.4",
     "@vitejs/plugin-react": "^4.3.4",
     "eslint": "^9.39.5",
