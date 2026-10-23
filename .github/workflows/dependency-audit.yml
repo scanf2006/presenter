@@ -1,0 +1,72 @@
+name: Dependency Audit
+
+# Advisories appear without anyone committing: the zod memory-exhaustion
+# advisory (GHSA-mrhx-c7xc-m3w5) landed on an unchanged dependency tree and
+# would not have been noticed by a push-triggered check. This runs daily, and
+# covers the Rust crates as well, which nothing checked before.
+#
+# The quality gate also runs `npm audit` so a change that introduces an
+# advisory is blocked at the pull request; this workflow is for the ones that
+# arrive on their own.
+
+on:
+  schedule:
+    # 07:00 UTC daily, before the working day in most of Asia and Europe.
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+  push:
+    paths:
+      - package-lock.json
+      - src-tauri/Cargo.lock
+      - .github/workflows/dependency-audit.yml
+
+permissions:
+  contents: read
+
+jobs:
+  npm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Report every advisory
+        # Informational, so the log shows moderate and low findings too.
+        run: npm audit || true
+
+      - name: Fail on high or critical
+        run: npm audit --audit-level=high
+
+  cargo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        run: rustup toolchain install stable --profile minimal
+
+      - name: Cache cargo-audit
+        id: cache-audit
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-audit
+          key: cargo-audit-${{ runner.os }}-v1
+
+      - name: Install cargo-audit
+        # Built from crates.io rather than pulled from a third-party action, to
+        # keep the supply chain for a security check as short as possible. The
+        # cache above means this compiles only when the cache is cold.
+        if: steps.cache-audit.outputs.cache-hit != 'true'
+        run: cargo install cargo-audit --locked
+
+      - name: Audit Rust crates
+        run: cargo audit --file src-tauri/Cargo.lock --deny warnings

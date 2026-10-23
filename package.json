@@ -1,6 +1,6 @@
 {
   "name": "churchdisplay-pro",
-  "version": "0.3.216",
+  "version": "0.3.217",
   "engines": {
     "node": ">=22"
   },

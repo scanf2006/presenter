@@ -23,6 +23,12 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
+      - name: Audit npm Dependencies
+        # Blocks a change that introduces a high-severity advisory. Advisories
+        # that appear on their own, with no commit, are caught by the scheduled
+        # dependency-audit workflow instead.
+        run: npm audit --audit-level=high
+
       - name: Run Commercial Gate
         run: npm run -s commercial:gate
 
