@@ -89,7 +89,7 @@ jobs:
           Write-Output "signature : $((Get-AuthenticodeSignature $installer.FullName).Status)"
 
       - name: Upload installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: churchdisplay-pro-${{ steps.version.outputs.value }}-${{ inputs.locale || 'zh-CN' }}-unsigned
           path: src-tauri/target/release/bundle/nsis/*-setup.exe
