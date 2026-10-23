@@ -30,7 +30,7 @@ log = "0.4"
 tauri = { version = "2.11.3", features = ["protocol-asset"] }
 tauri-plugin-log = "2"
 tauri-plugin-dialog = "2"
-rusqlite = { version = "0.37", features = ["bundled"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
 base64 = "0.22"
 rsa = { version = "0.9", features = ["sha2", "pem"] }
 sha2 = "0.10"
