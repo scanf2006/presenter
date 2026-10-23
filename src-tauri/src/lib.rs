@@ -499,6 +499,23 @@ fn import_setup_bundle(app: AppHandle, folder: String) -> SetupTransferResult {
     }
 }
 
+/// Records that a panic happened, so it stops being invisible. Without this a
+/// panic in a command reaches the UI as a bare failure and leaves nothing
+/// behind to look at afterwards.
+///
+/// The message and location go to the log only. A panic payload can carry file
+/// paths or user content, and `diagnostics` is an exportable artifact that by
+/// design holds fixed event names and timestamps alone, so it gets the event
+/// name and nothing else.
+fn install_panic_hook(app: AppHandle) {
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        log::error!("{info}");
+        diagnostics::record(&app, "panic");
+        previous(info);
+    }));
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -508,6 +525,18 @@ pub fn run() {
                 payload: serde_json::Value::Null,
             },
         )))
+        // Must be registered before any other plugin. Two instances would
+        // fight over the same external display, projector window and queue
+        // file, which double-clicking the icon is enough to cause.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            diagnostics::record(app, "second_instance_blocked");
+            if let Some(main) = app.get_webview_window("main") {
+                // Show the running instance instead of silently doing nothing.
+                let _ = main.unminimize();
+                let _ = main.show();
+                let _ = main.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_dialog::init())
         .on_window_event(|window, event| {
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
@@ -515,6 +544,7 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            install_panic_hook(app.handle().clone());
             diagnostics::record(app.handle(), "app_started");
             #[cfg(debug_assertions)]
             {
