@@ -1,6 +1,7 @@
 ﻿import React, { useEffect, useRef, useState } from 'react';
 
 import { getMediaUrl } from '../utils/tauriProjector';
+import { closePdfDocument } from '../utils/pdfDocument';
 
 /**
  * PdfRenderer - render one PDF page into a canvas with configurable fit behavior.
@@ -67,13 +68,13 @@ const PdfRenderer = ({
         const pdf = await loadingTask.promise;
 
         if (!isMounted) {
-          pdf.destroy().catch(() => {});
+          closePdfDocument(pdf);
           return;
         }
 
         // Destroy previous document before storing new one.
         if (pdfDocRef.current) {
-          pdfDocRef.current.destroy().catch(() => {});
+          closePdfDocument(pdfDocRef.current);
         }
         pdfDocRef.current = pdf;
 
@@ -91,7 +92,7 @@ const PdfRenderer = ({
     return () => {
       isMounted = false;
       if (pdfDocRef.current) {
-        pdfDocRef.current.destroy().catch(() => {});
+        closePdfDocument(pdfDocRef.current);
         pdfDocRef.current = null;
       }
     };

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { listen } from '@tauri-apps/api/event';
 import PdfThumbnail from './PdfThumbnail';
 import { getYouTubeVideoIdFromUrl, normalizeYouTubeWatchUrl } from '../utils/youtube';
+import { closePdfDocument } from '../utils/pdfDocument';
 import {
   getSelectableThumbCardStyle,
   getSelectableThumbIndexStyle,
@@ -201,7 +202,7 @@ function MediaManager({
       setPdfLoading(true);
       // M7: Destroy previous PDF document before loading new one.
       setActivePdf((prev) => {
-        if (prev?.pdfDocument) prev.pdfDocument.destroy().catch(() => {});
+        if (prev?.pdfDocument) closePdfDocument(prev.pdfDocument);
         return null;
       });
       setPptSlides(null);
@@ -224,7 +225,7 @@ function MediaManager({
         const pdfDocument = await loadingTask.promise;
         if (requestSeq !== pdfLoadRequestSeqRef.current) {
           logStaleDrop('pdf');
-          pdfDocument.destroy().catch(() => {});
+          closePdfDocument(pdfDocument);
           return;
         }
 
@@ -265,7 +266,7 @@ function MediaManager({
       pdfLoadRequestSeqRef.current += 1;
       setDetailOpenedFromQueue(Boolean(file?.deferProject));
       setActivePdf((prev) => {
-        if (prev?.pdfDocument) prev.pdfDocument.destroy().catch(() => {});
+        if (prev?.pdfDocument) closePdfDocument(prev.pdfDocument);
         return null;
       });
       setCurrentPdfPage(1);
@@ -458,7 +459,7 @@ function MediaManager({
       setPptSourcePath('');
       // M7/M10-R2: Destroy PDF document before clearing reference, using ref.
       if (activePdfRef.current?.pdfDocument) {
-        activePdfRef.current.pdfDocument.destroy().catch(() => {});
+        closePdfDocument(activePdfRef.current.pdfDocument);
       }
       setActivePdf(null);
       setCurrentSlideIndex(-1);
@@ -831,7 +832,7 @@ function MediaManager({
                 onClick={() => {
                   setDetailOpenedFromQueue(false);
                   setActivePdf((prev) => {
-                    if (prev?.pdfDocument) prev.pdfDocument.destroy().catch(() => {});
+                    if (prev?.pdfDocument) closePdfDocument(prev.pdfDocument);
                     return null;
                   });
                 }}

@@ -1,3 +1,4 @@
+use crate::now_ms;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use rsa::{
     pkcs1v15::{Signature, VerifyingKey},
@@ -14,7 +15,7 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
     sync::{Mutex, OnceLock},
-    time::{Instant, SystemTime, UNIX_EPOCH},
+    time::Instant,
 };
 use tauri::{AppHandle, Manager};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
@@ -169,14 +170,6 @@ fn load_with_legacy_migration(app: &AppHandle) -> Result<(PathBuf, Stored), Stri
         save(&path, &data)?;
     }
     Ok((path, data))
-}
-fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis()
-        .try_into()
-        .unwrap_or(u64::MAX)
 }
 fn format_duration_ms(ms: u64) -> String {
     let seconds = ms.div_ceil(1000);
@@ -601,6 +594,8 @@ pub fn eula() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
     fn storage_test_dir() -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
             "presenter-license-{}-{}",

@@ -186,7 +186,7 @@ pub(crate) fn get_media_list(
             }
         }
     }
-    files.sort_by(|left, right| right.created_at.cmp(&left.created_at));
+    files.sort_by_key(|left| std::cmp::Reverse(left.created_at));
     Ok(files)
 }
 

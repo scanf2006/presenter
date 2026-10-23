@@ -164,7 +164,7 @@ function parseSongLyricsSections(lyrics) {
 }
 
 function decodeLyricsImportBytes(bytes) {
-  let content = '';
+  let content;
   try {
     content = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
   } catch (_) {

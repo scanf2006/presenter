@@ -173,7 +173,7 @@ fn parse_lyrics_page(html: &str) -> LyricsResult {
     let title = title_re
         .captures(html)
         .and_then(|capture| capture.get(1))
-        .map(|match_| plain(match_.as_str()).replace('【', "").replace('】', ""))
+        .map(|match_| plain(match_.as_str()).replace(['【', '】'], ""))
         .unwrap_or_default();
     let lyrics = [&block_re, &fallback_re]
         .into_iter()

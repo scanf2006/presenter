@@ -1,12 +1,10 @@
 import { useEffect, useState } from 'react';
-/* eslint-disable react-hooks/exhaustive-deps */
 
 export default function useObservedWidth(ref, deps = []) {
   const [width, setWidth] = useState(0);
   // R3-M: Stringify deps to avoid spreading dynamic array into useEffect deps.
   const depsKey = JSON.stringify(deps);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const el = ref?.current;
     if (!el) return;

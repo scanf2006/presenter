@@ -1,0 +1,48 @@
+version: 2
+
+# Grouped so routine bumps arrive as a few reviewable pull requests rather than
+# one per package. The font packages move together and never affect behavior;
+# Tauri's JS packages must stay in step with the Rust crates.
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      fonts:
+        patterns:
+          - '@fontsource/*'
+      tauri:
+        patterns:
+          - '@tauri-apps/*'
+      tooling:
+        patterns:
+          - eslint
+          - 'eslint-*'
+          - prettier
+          - vite
+          - '@vitejs/*'
+    ignore:
+      # React 19 needs its own change set: this app has no component tests, so
+      # a major React bump cannot be verified automatically.
+      - dependency-name: react
+        update-types: ['version-update:semver-major']
+      - dependency-name: react-dom
+        update-types: ['version-update:semver-major']
+
+  - package-ecosystem: cargo
+    directory: /src-tauri
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      tauri:
+        patterns:
+          - tauri
+          - 'tauri-*'
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

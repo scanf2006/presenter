@@ -33,7 +33,7 @@ jobs:
         run: npm test
 
       - name: Setup Rust
-        run: rustup toolchain install stable --profile minimal --component rustfmt
+        run: rustup toolchain install stable --profile minimal --component rustfmt --component clippy
 
       - name: Check Rust formatting
         run: cargo +stable fmt --manifest-path src-tauri/Cargo.toml --check
@@ -43,6 +43,9 @@ jobs:
 
       - name: Compile Rust
         run: cargo +stable check --locked --manifest-path src-tauri/Cargo.toml
+
+      - name: Lint Rust
+        run: cargo +stable clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 
       - name: Test Rust
         run: cargo +stable test --locked --manifest-path src-tauri/Cargo.toml

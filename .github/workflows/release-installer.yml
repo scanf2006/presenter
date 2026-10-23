@@ -1,0 +1,97 @@
+name: Release Installer
+
+# Builds the NSIS installer on a clean runner, so a release does not depend on
+# one developer machine's environment. 0.3.210 was exactly that failure: the
+# build broke only because the local folder's path case differed from the path
+# Tauri passed to Vite, and nothing outside that machine could reproduce it.
+#
+# The installer this produces is UNSIGNED - see the code-signing section of
+# docs/COMMERCIAL_RELEASE_CHECKLIST.md. Treat it as a reproducible build
+# artifact to verify and smoke-test, not as something to hand to a customer
+# until signing is in place.
+
+on:
+  workflow_dispatch:
+    inputs:
+      locale:
+        description: Installer locale
+        type: choice
+        default: zh-CN
+        options: [zh-CN, default]
+  push:
+    tags: ['v*']
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Setup Rust
+        run: rustup toolchain install stable --profile minimal
+
+      - name: Cache Rust build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-release-
+
+      - name: Read version
+        id: version
+        shell: bash
+        run: echo "value=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare native runtime resources
+        run: npm run runtime:prepare
+
+      - name: Build installer
+        shell: cmd
+        run: |
+          if "${{ inputs.locale }}"=="default" (
+            npm run tauri:build
+          ) else (
+            npm run tauri:build:zh
+          )
+
+      - name: Verify the installer carries the package version
+        shell: pwsh
+        run: |
+          $version = '${{ steps.version.outputs.value }}'
+          $installer = Get-ChildItem 'src-tauri/target/release/bundle/nsis/*-setup.exe' |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $installer) { throw 'No installer was produced.' }
+          $exe = Get-Item 'src-tauri/target/release/app.exe'
+          Write-Output "installer : $($installer.Name)"
+          Write-Output "file ver  : $($exe.VersionInfo.FileVersion)"
+          Write-Output "product   : $($exe.VersionInfo.ProductVersion)"
+          if ($exe.VersionInfo.FileVersion -ne $version) {
+            throw "Executable file version $($exe.VersionInfo.FileVersion) does not match package version $version."
+          }
+          if ($installer.Name -notmatch [regex]::Escape($version)) {
+            throw "Installer name $($installer.Name) does not carry version $version."
+          }
+          # Recorded rather than enforced: signing is not set up yet.
+          Write-Output "signature : $((Get-AuthenticodeSignature $installer.FullName).Status)"
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: churchdisplay-pro-${{ steps.version.outputs.value }}-${{ inputs.locale || 'zh-CN' }}-unsigned
+          path: src-tauri/target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error
+          retention-days: 30

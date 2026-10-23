@@ -45,6 +45,35 @@ This checklist is the release gate for production-quality builds.
   - free text send
   - media send (image/video)
   - startup health check
+  - open a PDF (render and thumbnail)
+
+### Code signing (not yet in place)
+
+The installer is currently **unsigned**: `Get-AuthenticodeSignature` on the
+built `*-setup.exe` reports `NotSigned`, and `src-tauri/tauri.conf.json` sets no
+certificate. Customers therefore see a Windows SmartScreen warning on download
+and a publisher of "Unknown" in the UAC prompt, which for paid software reads as
+if the download were untrustworthy.
+
+Signing cannot be set up from the repository alone — it needs a certificate that
+has to be bought and held somewhere safe. To close this:
+
+1. Obtain an OV or EV code-signing certificate. Since June 2023 the private key
+   must live on FIPS-140-2 hardware or in a cloud signing service, so a plain
+   `.pfx` on disk is no longer an option for a new certificate.
+2. Make it reachable from the build machine (hardware token, or a cloud signing
+   service such as Azure Trusted Signing).
+3. Point Tauri at it, under `bundle.windows` in `src-tauri/tauri.conf.json`:
+   - `certificateThumbprint` for a certificate in the Windows store, or
+   - `signCommand` to delegate to the signing service's own CLI.
+4. Keep the thumbprint or signing command out of git if it is sensitive; pass it
+   through the environment in CI.
+5. Verify after building: `Get-AuthenticodeSignature <installer>` must report
+   `Valid`, and the publisher name must appear in the UAC prompt.
+
+Until then, record in the release notes that the installer is unsigned, so the
+SmartScreen warning is a known and expected part of the customer's first
+install rather than a surprise.
 
 ## 6. Release Notes (Required)
 
