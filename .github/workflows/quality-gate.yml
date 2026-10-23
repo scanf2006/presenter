@@ -38,6 +38,11 @@ jobs:
       - name: Test Frontend
         run: npm test
 
+      - name: Test Components
+        # Runs in jsdom, separate from the node:test suite above. A broken
+        # render had no way of being caught before this existed.
+        run: npm run test:components
+
       - name: Setup Rust
         run: rustup toolchain install stable --profile minimal --component rustfmt --component clippy
 

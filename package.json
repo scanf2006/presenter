@@ -1,6 +1,6 @@
 {
   "name": "churchdisplay-pro",
-  "version": "0.3.218",
+  "version": "0.3.219",
   "engines": {
     "node": ">=22"
   },
@@ -10,6 +10,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test \"tests/**/*.test.js\"",
+    "test:components": "vitest run",
+    "test:components:watch": "vitest",
     "i18n:check": "node scripts/check-i18n-encoding.js",
     "build:zh:check": "node scripts/check-zh-build-artifact.js",
     "commercial:gate": "node scripts/commercial-gate.js",
@@ -41,14 +43,18 @@
   "devDependencies": {
     "@eslint/js": "^9.39.5",
     "@tauri-apps/cli": "^2.11.4",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.8",
     "@vitejs/plugin-react": "^4.3.4",
     "eslint": "^9.39.5",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.13.0",
+    "jsdom": "^29.1.1",
     "prettier": "^3.5.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "vite": "^6.0.3"
+    "vite": "^6.0.3",
+    "vitest": "^5.0.5"
   }
 }
