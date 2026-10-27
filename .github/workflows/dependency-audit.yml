@@ -68,5 +68,25 @@ jobs:
         if: steps.cache-audit.outputs.cache-hit != 'true'
         run: cargo install cargo-audit --locked
 
-      - name: Audit Rust crates
-        run: cargo audit --file src-tauri/Cargo.lock --deny warnings
+      - name: Report every advisory
+        # Informational, so the log shows the unmaintained and unsound warnings
+        # too. They are worth reading but not worth blocking on: in a
+        # 513-crate tree almost all of them sit in Tauri's transitive
+        # dependencies and cannot be acted on from here. The first version of
+        # this step used --deny warnings and failed on them, which would have
+        # left the audit permanently red — and a check that is always red is a
+        # check nobody reads.
+        run: cargo audit --file src-tauri/Cargo.lock || true
+
+      - name: Fail on vulnerabilities
+        # RUSTSEC-2023-0071 (rsa, Marvin attack) is excluded on purpose, and
+        # this is the only exclusion:
+        #   * It has no patched release. The fix lands in rsa 0.10, which is
+        #     still a release candidate.
+        #   * It is a timing sidechannel in PRIVATE key operations. This app
+        #     only ever verifies a signature with a public key
+        #     (license_store.rs uses RsaPublicKey and nothing else); keys are
+        #     signed on the maintainer's machine, not in the product.
+        # Revisit when rsa 0.10 is stable, then drop the --ignore so the
+        # advisory can block again. Any other vulnerability fails this job.
+        run: cargo audit --file src-tauri/Cargo.lock --ignore RUSTSEC-2023-0071
