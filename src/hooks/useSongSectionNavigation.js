@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { consumeKeyEvent, isTypingTarget } from '../utils/keyboard';
 
 /**
  * Centralized song-section navigation behavior.
@@ -56,21 +57,9 @@ function useSongSectionNavigation({
     if (!selectedSong) return;
     const sections = parseLyrics(selectedSong.lyrics);
 
-    const isTypingTarget = (target) => {
-      if (!target || !(target instanceof HTMLElement)) return false;
-      const tag = String(target.tagName || '').toLowerCase();
-      return target.isContentEditable || tag === 'input' || tag === 'textarea' || tag === 'select';
-    };
-
     const onKeyDown = (event) => {
       if (isTypingTarget(event.target)) return;
-      const consumeEvent = () => {
-        event.preventDefault();
-        event.stopPropagation();
-        if (typeof event.stopImmediatePropagation === 'function') {
-          event.stopImmediatePropagation();
-        }
-      };
+      const consumeEvent = () => consumeKeyEvent(event);
       const key = event.key;
       const goPrev = key === 'ArrowLeft' || key === 'ArrowUp' || key === 'PageUp';
       const goNext = key === 'ArrowRight' || key === 'ArrowDown' || key === 'PageDown';

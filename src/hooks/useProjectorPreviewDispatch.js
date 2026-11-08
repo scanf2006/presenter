@@ -19,7 +19,12 @@ export default function useProjectorPreviewDispatch({
   const [currentSlide, setCurrentSlide] = useState(null);
   const [previewSlide, setPreviewSlide] = useState(null);
   const [previewMaskVisible, setPreviewMaskVisible] = useState(false);
+  const [blackoutActive, setBlackoutActive] = useState(false);
   const previewTimersRef = useRef([]);
+  // What was on screen when blackout started, so the second press can put it
+  // back. Blackout used to be one-way, which meant that after killing the
+  // screen mid-service the operator had to find and re-send the slide by hand.
+  const beforeBlackoutRef = useRef(null);
 
   // Resolves to null on delivery, or to the failure reason after one retry.
   // A rejected invoke is the only real failure signal available: the projector
@@ -86,6 +91,10 @@ export default function useProjectorPreviewDispatch({
 
   const pushToProjector = useCallback(
     (data) => {
+      // Sending something new ends the blackout, so a later blackout press
+      // cannot restore a slide the operator has already moved on from.
+      setBlackoutActive(false);
+      beforeBlackoutRef.current = null;
       setCurrentSlide(data);
       applyPreviewTransition(data);
       void deliverToProjector(data).then((error) =>
@@ -104,13 +113,41 @@ export default function useProjectorPreviewDispatch({
     [deliverToProjector]
   );
 
+  /**
+   * Blacks the screen, or restores what was on it if it is already black.
+   *
+   * The restore is best effort: if nothing was showing when blackout started
+   * (or it was already black), the second press just leaves it black rather
+   * than inventing a slide to show.
+   */
   const blackout = useCallback(() => {
+    if (blackoutActive) {
+      const restored = beforeBlackoutRef.current;
+      beforeBlackoutRef.current = null;
+      setBlackoutActive(false);
+      if (!restored) return;
+      setCurrentSlide(restored);
+      applyPreviewTransition(restored);
+      void deliverToProjector(restored).then((error) =>
+        reportDeliveryFailure(error, 'Restore from blackout failed')
+      );
+      return;
+    }
+
+    beforeBlackoutRef.current = currentSlide;
+    setBlackoutActive(true);
     setCurrentSlide(null);
     applyPreviewTransition(null);
     void deliverToProjector(BLACKOUT_PAYLOAD).then((error) =>
       reportDeliveryFailure(error, 'Blackout failed')
     );
-  }, [applyPreviewTransition, deliverToProjector, reportDeliveryFailure]);
+  }, [
+    blackoutActive,
+    currentSlide,
+    applyPreviewTransition,
+    deliverToProjector,
+    reportDeliveryFailure,
+  ]);
 
   return {
     currentSlide,
@@ -119,5 +156,6 @@ export default function useProjectorPreviewDispatch({
     pushToProjector,
     resendCurrentSlideToProjector,
     blackout,
+    blackoutActive,
   };
 }

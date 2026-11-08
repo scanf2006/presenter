@@ -11,8 +11,6 @@ if (!Uint8Array.prototype.toHex) {
   };
 }
 
-console.log("%c [DIAGNOSTIC] main.jsx Loaded", "color: red; font-size: 20px; font-weight: bold;");
-
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <I18nProvider>

@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useEffect, useCallback, useRef, useMemo, useState } from 'react';
 import appPkg from '../../package.json';
 import { AppProvider, useAppContext } from '../contexts/AppContext';
 import { LicenseProvider } from '../contexts/LicenseContext';
@@ -11,8 +11,11 @@ import SidebarQueue from './control-panel/SidebarQueue';
 import MainContentArea from './control-panel/MainContentArea';
 import PreviewPanel from './control-panel/PreviewPanel';
 import LegalModal from './control-panel/LegalModal';
+import ShortcutHelpModal from './control-panel/ShortcutHelpModal';
 import ToastOverlay from './control-panel/ToastOverlay';
 import AppDialog from './control-panel/AppDialog';
+import useGlobalShortcuts from '../hooks/useGlobalShortcuts';
+import { useProjectorContext } from '../contexts/ProjectorContext';
 
 const APP_VERSION = appPkg.version;
 
@@ -25,6 +28,13 @@ function ControlPanelInner() {
   const { setActiveQueueIndex, setActivePreloadItem, activeQueueIndex, projectorQueue, mediaQueueHomeToken } =
     useQueueContext();
   const { handleClearProjector, resetFreeTextEditor } = useTextEditorContext();
+  const { handleBlackout } = useProjectorContext();
+  const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
+
+  const openShortcutHelp = useCallback(() => setShortcutHelpOpen(true), []);
+  const closeShortcutHelp = useCallback(() => setShortcutHelpOpen(false), []);
+
+  useGlobalShortcuts({ onBlackout: handleBlackout, onShowHelp: openShortcutHelp });
 
   // ── Section navigation ──
   const {
@@ -57,7 +67,11 @@ function ControlPanelInner() {
 
   return (
     <div className="app-container">
-      <TopBar appVersion={APP_VERSION} onClear={handleClearProjector} />
+      <TopBar
+        appVersion={APP_VERSION}
+        onClear={handleClearProjector}
+        onShowShortcuts={openShortcutHelp}
+      />
       <SidebarQueue
         openDisplays={openDisplays}
         openText={openText}
@@ -72,6 +86,7 @@ function ControlPanelInner() {
       />
       <PreviewPanel nextQueueTitle={nextQueueTitle} />
       <LegalModal />
+      <ShortcutHelpModal open={shortcutHelpOpen} onClose={closeShortcutHelp} />
       <ToastOverlay toast={toast} />
       <ToastOverlay toast={autosaveToast} slot="autosave" />
       <AppDialog dialog={dialog} onClose={closeDialog} />

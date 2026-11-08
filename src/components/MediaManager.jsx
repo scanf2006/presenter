@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { listen } from '@tauri-apps/api/event';
 import PdfThumbnail from './PdfThumbnail';
 import { getYouTubeVideoIdFromUrl, normalizeYouTubeWatchUrl } from '../utils/youtube';
+import { consumeKeyEvent, isTypingTarget } from '../utils/keyboard';
 import { closePdfDocument } from '../utils/pdfDocument';
 import {
   getSelectableThumbCardStyle,
@@ -487,27 +488,10 @@ function MediaManager({
   }, [pptSlides, currentSlideIndex]);
 
   useEffect(() => {
-    const isTypingTarget = (target) => {
-      if (!target || !(target instanceof HTMLElement)) return false;
-      const tag = String(target.tagName || '').toLowerCase();
-      return (
-        target.isContentEditable ||
-        tag === 'input' ||
-        tag === 'textarea' ||
-        tag === 'select'
-      );
-    };
-
     const onKeyDown = (event) => {
       if (!isMediaSectionActive) return;
       if (isTypingTarget(event.target)) return;
-      const consumeEvent = () => {
-        event.preventDefault();
-        event.stopPropagation();
-        if (typeof event.stopImmediatePropagation === 'function') {
-          event.stopImmediatePropagation();
-        }
-      };
+      const consumeEvent = () => consumeKeyEvent(event);
 
       const key = event.key;
       const goPrev = key === 'ArrowLeft' || key === 'PageUp';

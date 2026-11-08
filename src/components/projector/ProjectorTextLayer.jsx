@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { TEXT_RENDER } from '../../constants/text-render';
 import { FREE_TEXT_CONTENT_WIDTH_PERCENT } from '../../utils/freeTextLayout';
+import useFitText from '../../hooks/useFitText';
 
 function ProjectorTextLayer({
   content,
@@ -11,13 +12,30 @@ function ProjectorTextLayer({
   textLayout,
   getTextSizeClass,
   getProjectorTextSize,
+  onFitChange,
 }) {
+  const fontSize = getProjectorTextSize();
+  // Remeasure whenever anything that changes the rendered height changes.
+  const { containerRef, contentRef, scale, overflowing } = useFitText([
+    content?.text,
+    content?.reference,
+    fontSize,
+    content?.fontFamily,
+    content?.fontWeight,
+    content?.type,
+  ]);
+
+  useEffect(() => {
+    if (typeof onFitChange === 'function') onFitChange({ scale, overflowing });
+  }, [onFitChange, scale, overflowing]);
+
   if (!content || (content.type !== 'text' && content.type !== 'bible' && content.type !== 'lyrics')) {
     return null;
   }
 
   return (
     <div
+      ref={containerRef}
       style={{
         ...contentStageStyle,
         zIndex: 10,
@@ -44,8 +62,14 @@ function ProjectorTextLayer({
         }}
       >
         <div
+          ref={contentRef}
           className={`projector-text ${getTextSizeClass()}`}
           style={{
+            // Scales the text down when it would otherwise run off the screen.
+            // A transform keeps the chosen font size intact and only changes how
+            // large it is drawn, so nothing reflows.
+            transform: scale === 1 ? undefined : `scale(${scale})`,
+            transformOrigin: 'center center',
             whiteSpace: 'pre-line',
             textAlign: content.type === 'bible' ? 'left' : 'center',
             lineHeight:
@@ -58,7 +82,7 @@ function ProjectorTextLayer({
             color: content.textColor || '#ffffff',
             fontFamily: content.fontFamily || "'Noto Sans SC', 'Inter', sans-serif",
             fontWeight: Number(content?.fontWeight || 700),
-            fontSize: getProjectorTextSize(),
+            fontSize,
           }}
         >
           {content.text}

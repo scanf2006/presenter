@@ -73,7 +73,7 @@ const IconClose = () => (
   </svg>
 );
 
-function TopBar({ appVersion, onClear }) {
+function TopBar({ appVersion, onClear, onShowShortcuts }) {
   const { t } = useI18n();
   const isTauri = isTauriRuntime();
   const {
@@ -146,9 +146,19 @@ function TopBar({ appVersion, onClear }) {
           <button
             className="btn btn--ghost btn--icon"
             onClick={handleBlackout}
-            title={t('topBar.blackout', 'Blackout')}
+            title={t('topBar.blackout', 'Blackout / restore (B)')}
           >
             <IconBlackout />
+          </button>
+          {/* The shortcuts all worked before, but nothing pointed at them. */}
+          <button
+            className="btn btn--ghost btn--icon"
+            onClick={onShowShortcuts}
+            title={t('topBar.shortcuts', 'Keyboard Shortcuts (?)')}
+            aria-label={t('topBar.shortcuts', 'Keyboard Shortcuts (?)')}
+            style={{ fontWeight: 700 }}
+          >
+            ?
           </button>
           <button
             className="btn btn--ghost btn--icon"
