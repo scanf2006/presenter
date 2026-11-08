@@ -1,7 +1,8 @@
-﻿import React, { useState, useEffect, useCallback, useRef } from 'react';
+﻿import React, { useState, useEffect, useCallback, useRef, useReducer } from 'react';
 import { normalizeBibleLine, normalizeBibleText } from '../utils/bibleText';
 import { PROJECTION_FONT_OPTIONS } from '../constants/fontOptions';
 import { useI18n } from '../contexts/I18nContext';
+import { bibleNavigationReducer, initialBibleNavigation } from '../utils/bibleNavigation';
 import {
   getTauriBibleBooks,
   getTauriBibleVerses,
@@ -26,18 +27,19 @@ function BibleBrowser({
   forceShowBibleCatalogToken,
 }) {
   const { t } = useI18n();
-  // 圣经版本
-  const [version, setVersion] = useState('cuvs');
-  // 书卷列表
+  // Where the reader is, as one state machine. These six values used to be
+  // separate useState calls set independently, and the combinations did not
+  // always agree: changing book or chapter left the previous verse selection
+  // behind, and switching translation reset nothing. The transitions now live
+  // in src/utils/bibleNavigation.js, where they are unit tested.
+  const [navigation, dispatchNavigation] = useReducer(
+    bibleNavigationReducer,
+    initialBibleNavigation
+  );
+  const { version, selectedBook, selectedChapter, verses, selectedVerses, versesContext } =
+    navigation;
+  // book list
   const [books, setBooks] = useState([]);
-  // selected book
-  const [selectedBook, setSelectedBook] = useState(null);
-  // 当前选中的章
-  const [selectedChapter, setSelectedChapter] = useState(null);
-  // 经文列表
-  const [verses, setVerses] = useState([]);
-  // selected verses (multi-select)
-  const [selectedVerses, setSelectedVerses] = useState([]);
   // search keyword
   const [searchQuery, setSearchQuery] = useState('');
   // 搜索结果
@@ -52,7 +54,6 @@ function BibleBrowser({
   const [bibleBackground, setBibleBackground] = useState(null);
   const [pendingPreloadSelection, setPendingPreloadSelection] = useState(null);
   const [preloadFocusVerse, setPreloadFocusVerse] = useState(null);
-  const [versesContext, setVersesContext] = useState(null);
   const [isApplyingQueuePreload, setIsApplyingQueuePreload] = useState(false);
   const verseRowRefs = useRef(new Map());
   const preloadPayloadRef = useRef(null);
@@ -199,7 +200,9 @@ function BibleBrowser({
   // 加载书卷列表
   useEffect(() => {
     if (isTauri) {
-      getTauriBibleBooks(version).then(setBooks).catch((err) => console.warn('[Tauri] Bible books failed:', err));
+      getTauriBibleBooks(version)
+        .then(setBooks)
+        .catch((err) => console.warn('[Tauri] Bible books failed:', err));
     } else {
       // Browser fallback demo data
       setBooks([
@@ -216,26 +219,39 @@ function BibleBrowser({
     if (!selectedBook || !selectedChapter) return;
     const loadSeq = ++versesLoadSeqRef.current;
     // Clear stale chapter verses immediately to avoid preload selecting old text.
-    setVerses([]);
-    setSelectedVerses([]);
-    setVersesContext(null);
+    dispatchNavigation({ type: 'versesLoading' });
     if (isTauri) {
-      getTauriBibleVerses(version, selectedBook.sn, selectedChapter).then((rows) => {
-        if (loadSeq !== versesLoadSeqRef.current) return;
-        setVerses(rows);
-        setVersesContext({ bookSn: selectedBook.sn, chapter: selectedChapter, loadSeq });
-      });
+      getTauriBibleVerses(version, selectedBook.sn, selectedChapter)
+        .then((rows) => {
+          if (loadSeq !== versesLoadSeqRef.current) return;
+          dispatchNavigation({
+            type: 'versesLoaded',
+            verses: rows,
+            context: { bookSn: selectedBook.sn, chapter: selectedChapter, loadSeq },
+          });
+        })
+        .catch((err) => {
+          // This call had no catch at all, so a failed read left the chapter
+          // blank with nothing logged and the context stamp unset, which the
+          // queue-preload effect then waited on forever.
+          if (loadSeq !== versesLoadSeqRef.current) return;
+          console.warn('[Bible] Verse load failed:', err);
+          dispatchNavigation({
+            type: 'versesFailed',
+            verses: [],
+            context: { bookSn: selectedBook.sn, chapter: selectedChapter, loadSeq },
+          });
+        });
     } else {
       if (loadSeq !== versesLoadSeqRef.current) return;
-      setVerses([
-        { verse: 1, text: '起初，神创造天地。' },
-        { verse: 2, text: '地是空虚混沌，渊面黑暗；神的灵运行在水面上。' },
-        { verse: 3, text: '神说：要有光，就有了光。' },
-      ]);
-      setVersesContext({
-        bookSn: selectedBook.sn,
-        chapter: selectedChapter,
-        loadSeq,
+      dispatchNavigation({
+        type: 'versesLoaded',
+        verses: [
+          { verse: 1, text: '起初，神创造天地。' },
+          { verse: 2, text: '地是空虚混沌，渊面黑暗；神的灵运行在水面上。' },
+          { verse: 3, text: '神说：要有光，就有了光。' },
+        ],
+        context: { bookSn: selectedBook.sn, chapter: selectedChapter, loadSeq },
       });
     }
   }, [selectedBook, selectedChapter, version, isTauri]);
@@ -295,8 +311,7 @@ function BibleBrowser({
       if (indexed) {
         const book = books.find((b) => b.sn === indexed.bookSN);
         if (book) {
-          setSelectedBook(book);
-          setSelectedChapter(indexed.chapter);
+          dispatchNavigation({ type: 'jumpTo', book, chapter: indexed.chapter });
           setSearchResults([]);
           return;
         }
@@ -322,11 +337,7 @@ function BibleBrowser({
 
   // 经文选择切换
   const toggleVerse = useCallback((verse) => {
-    setSelectedVerses((prev) => {
-      const exists = prev.find((v) => v.verse === verse.verse);
-      if (exists) return prev.filter((v) => v.verse !== verse.verse);
-      return [...prev, verse].sort((a, b) => a.verse - b.verse);
-    });
+    dispatchNavigation({ type: 'toggleVerse', verse });
   }, []);
 
   const buildSelectedPayload = useCallback(() => {
@@ -364,15 +375,13 @@ function BibleBrowser({
     const payload = buildSelectedPayload();
     if (!payload) return;
     onProjectContent(payload);
-    if (typeof onUpdateActiveQueueItem === 'function' && canSyncActiveQueueBible(payload.reference)) {
+    if (
+      typeof onUpdateActiveQueueItem === 'function' &&
+      canSyncActiveQueueBible(payload.reference)
+    ) {
       onUpdateActiveQueueItem(payload, payload.reference, 'bible');
     }
-  }, [
-    buildSelectedPayload,
-    onProjectContent,
-    onUpdateActiveQueueItem,
-    canSyncActiveQueueBible,
-  ]);
+  }, [buildSelectedPayload, onProjectContent, onUpdateActiveQueueItem, canSyncActiveQueueBible]);
 
   const handleQueueSelected = useCallback(() => {
     if (typeof onQueueContent !== 'function') return;
@@ -384,11 +393,11 @@ function BibleBrowser({
   // 投屏搜索结果中的某节经文
   const handleProjectSearchResult = useCallback(
     (result) => {
-        const payload = {
-          type: 'bible',
-          text: showVerseNumbers
-            ? normalizeBibleText(`${result.verse} ${normalizeBibleLine(result.text)}`)
-            : normalizeBibleText(`${normalizeBibleLine(result.text)}`),
+      const payload = {
+        type: 'bible',
+        text: showVerseNumbers
+          ? normalizeBibleText(`${result.verse} ${normalizeBibleLine(result.text)}`)
+          : normalizeBibleText(`${normalizeBibleLine(result.text)}`),
         reference: `${result.fullName} ${result.chapter}:${result.verse}`,
         fontSize,
         fontFamily,
@@ -396,30 +405,33 @@ function BibleBrowser({
         background: bibleBackground,
       };
       onProjectContent(payload);
-      if (typeof onUpdateActiveQueueItem === 'function' && canSyncActiveQueueBible(payload.reference)) {
+      if (
+        typeof onUpdateActiveQueueItem === 'function' &&
+        canSyncActiveQueueBible(payload.reference)
+      ) {
         onUpdateActiveQueueItem(payload, payload.reference, 'bible');
       }
     },
-      [
-        fontSize,
-        fontFamily,
-        isBold,
-        onProjectContent,
-        bibleBackground,
-        showVerseNumbers,
-        onUpdateActiveQueueItem,
-        canSyncActiveQueueBible,
+    [
+      fontSize,
+      fontFamily,
+      isBold,
+      onProjectContent,
+      bibleBackground,
+      showVerseNumbers,
+      onUpdateActiveQueueItem,
+      canSyncActiveQueueBible,
     ]
   );
 
   const handleQueueSearchResult = useCallback(
     (result) => {
       if (typeof onQueueContent !== 'function') return;
-        const payload = {
-          type: 'bible',
-          text: showVerseNumbers
-            ? normalizeBibleText(`${result.verse} ${normalizeBibleLine(result.text)}`)
-            : normalizeBibleText(`${normalizeBibleLine(result.text)}`),
+      const payload = {
+        type: 'bible',
+        text: showVerseNumbers
+          ? normalizeBibleText(`${result.verse} ${normalizeBibleLine(result.text)}`)
+          : normalizeBibleText(`${normalizeBibleLine(result.text)}`),
         reference: `${result.fullName} ${result.chapter}:${result.verse}`,
         fontSize,
         fontFamily,
@@ -478,10 +490,7 @@ function BibleBrowser({
     if (!forceShowBibleCatalogToken) return;
     setSearchQuery('');
     setSearchResults([]);
-    setSelectedBook(null);
-    setSelectedChapter(null);
-    setVerses([]);
-    setSelectedVerses([]);
+    dispatchNavigation({ type: 'reset' });
     setPendingPreloadSelection(null);
     setPreloadFocusVerse(null);
     preloadPayloadRef.current = null;
@@ -499,7 +508,7 @@ function BibleBrowser({
     currentPreloadTokenRef.current = preloadToken;
     preloadPayloadRef.current = payload;
     skipAutoProjectOnceRef.current = payload.deferProject === true;
-    setSelectedVerses([]);
+    dispatchNavigation({ type: 'clearSelectedVerses' });
     if (payload.fontSize) setFontSize(payload.fontSize);
     if (payload.fontFamily) setFontFamily(payload.fontFamily);
     if (payload.fontWeight) setIsBold(Number(payload.fontWeight) >= 600);
@@ -524,8 +533,7 @@ function BibleBrowser({
 
     setSearchResults([]);
     setSearchQuery('');
-    setSelectedBook(targetBook);
-    setSelectedChapter(parsed.chapter);
+    dispatchNavigation({ type: 'jumpTo', book: targetBook, chapter: parsed.chapter });
     setPendingPreloadSelection({
       bookSn: targetBook.sn,
       chapter: parsed.chapter,
@@ -544,7 +552,9 @@ function BibleBrowser({
 
   useEffect(() => {
     if (!pendingPreloadSelection) return;
-    if (String(pendingPreloadSelection.token || '') !== String(currentPreloadTokenRef.current || '')) {
+    if (
+      String(pendingPreloadSelection.token || '') !== String(currentPreloadTokenRef.current || '')
+    ) {
       return;
     }
     if (!selectedBook || !selectedChapter || !verses.length) return;
@@ -560,7 +570,7 @@ function BibleBrowser({
         v.verse >= pendingPreloadSelection.fromVerse && v.verse <= pendingPreloadSelection.toVerse
     );
     if (selected.length > 0) {
-      setSelectedVerses(selected);
+      dispatchNavigation({ type: 'setSelectedVerses', verses: selected });
       setPreloadFocusVerse(selected[0].verse);
 
       // Queue Bible click: project the resolved selected range immediately so first click is correct.
@@ -639,20 +649,23 @@ function BibleBrowser({
         <div className="bible-version-switch">
           <button
             className={`btn ${version === 'cuvs' ? 'btn--primary' : 'btn--ghost'} bible-version-btn`}
-            onClick={() => setVersion('cuvs')}
+            onClick={() => dispatchNavigation({ type: 'setVersion', version: 'cuvs' })}
           >
             {t('bible.versionChinese', 'Chinese CUV')}
           </button>
           <button
             className={`btn ${version === 'kjv' ? 'btn--primary' : 'btn--ghost'} bible-version-btn`}
-            onClick={() => setVersion('kjv')}
+            onClick={() => dispatchNavigation({ type: 'setVersion', version: 'kjv' })}
           >
             {t('bible.versionEnglish', 'English KJV')}
           </button>
         </div>
         <input
           type="text"
-          placeholder={t('bible.searchPlaceholder', 'Search Bible (e.g. 创1:1, 约3:16, or keywords)')}
+          placeholder={t(
+            'bible.searchPlaceholder',
+            'Search Bible (e.g. 创1:1, 约3:16, or keywords)'
+          )}
           value={searchQuery}
           onChange={(e) => handleSearch(e.target.value)}
           className="bible-search-input bible-search-input--pro"
@@ -681,10 +694,7 @@ function BibleBrowser({
             🔍 {t('bible.searchResults', 'Search Results')} ({searchResults.length})
           </h3>
           {searchResults.map((r, idx) => (
-            <div
-              key={idx}
-              className="cp-list-card cp-list-card--compact"
-            >
+            <div key={idx} className="cp-list-card cp-list-card--compact">
               <div
                 style={{
                   display: 'flex',
@@ -693,7 +703,10 @@ function BibleBrowser({
                   gap: '8px',
                 }}
               >
-                <div className="cp-list-card__clickable" onClick={() => handleProjectSearchResult(r)}>
+                <div
+                  className="cp-list-card__clickable"
+                  onClick={() => handleProjectSearchResult(r)}
+                >
                   <span className="cp-list-card__key">
                     {r.fullName} {r.chapter}:{r.verse}
                   </span>
@@ -747,11 +760,7 @@ function BibleBrowser({
                 {oldTestament.map((book) => (
                   <button
                     key={book.sn}
-                    onClick={() => {
-                      setSelectedBook(book);
-                      setSelectedChapter(null);
-                      setVerses([]);
-                    }}
+                    onClick={() => dispatchNavigation({ type: 'selectBook', book })}
                     className="bible-grid-btn"
                   >
                     {version === 'cuvs' ? book.shortName : book.fullName.substring(0, 6)}
@@ -778,11 +787,7 @@ function BibleBrowser({
                 {newTestament.map((book) => (
                   <button
                     key={book.sn}
-                    onClick={() => {
-                      setSelectedBook(book);
-                      setSelectedChapter(null);
-                      setVerses([]);
-                    }}
+                    onClick={() => dispatchNavigation({ type: 'selectBook', book })}
                     className="bible-grid-btn bible-grid-btn--nt"
                   >
                     {version === 'cuvs' ? book.shortName : book.fullName.substring(0, 6)}
@@ -798,13 +803,14 @@ function BibleBrowser({
               <div className="cp-toolbar-row cp-gap-bottom-md">
                 <button
                   className="btn btn--ghost"
-                  onClick={() => setSelectedBook(null)}
+                  onClick={() => dispatchNavigation({ type: 'clearBook' })}
                   style={{ padding: '4px 8px', fontSize: '12px' }}
                 >
                   ← {t('bible.back', 'Back')}
                 </button>
                 <h3 className="cp-section-title">
-                  📗 {selectedBook.fullName} ({selectedBook.chapterCount} {t('bible.chapters', 'chapters')})
+                  📗 {selectedBook.fullName} ({selectedBook.chapterCount}{' '}
+                  {t('bible.chapters', 'chapters')})
                 </h3>
               </div>
               <div
@@ -817,7 +823,7 @@ function BibleBrowser({
                 {Array.from({ length: selectedBook.chapterCount }, (_, i) => i + 1).map((ch) => (
                   <button
                     key={ch}
-                    onClick={() => setSelectedChapter(ch)}
+                    onClick={() => dispatchNavigation({ type: 'selectChapter', chapter: ch })}
                     className="bible-chapter-btn"
                   >
                     {ch}
@@ -844,22 +850,31 @@ function BibleBrowser({
                 <div className="cp-toolbar-row" style={{ minWidth: 0 }}>
                   <button
                     className="btn btn--ghost"
-                    onClick={() => setSelectedChapter(null)}
+                    onClick={() => dispatchNavigation({ type: 'clearChapter' })}
                     style={{ padding: '4px 8px', fontSize: '12px' }}
                   >
                     ← {t('bible.back', 'Back')}
                   </button>
                   <h3 className="cp-section-title">
-                    📗 {selectedBook.fullName} {t('bible.chapterLabel', 'Chapter')} {selectedChapter}
+                    📗 {selectedBook.fullName} {t('bible.chapterLabel', 'Chapter')}{' '}
+                    {selectedChapter}
                   </h3>
                 </div>
                 {selectedVerses.length > 0 && (
                   <div className="bible-chapter-actions">
-                    <button className="btn btn--ghost bible-chapter-action-btn" onClick={handleQueueSelected}>
-                      {t('bible.queueSelected', '+ Queue')} ({selectedVerses.length} {t('bible.versesUnit', 'verses')})
+                    <button
+                      className="btn btn--ghost bible-chapter-action-btn"
+                      onClick={handleQueueSelected}
+                    >
+                      {t('bible.queueSelected', '+ Queue')} ({selectedVerses.length}{' '}
+                      {t('bible.versesUnit', 'verses')})
                     </button>
-                    <button className="btn btn--primary bible-chapter-action-btn" onClick={handleProject}>
-                      📤 {t('bible.projectSelected', 'Project Selection')} ({selectedVerses.length} {t('bible.versesUnit', 'verses')})
+                    <button
+                      className="btn btn--primary bible-chapter-action-btn"
+                      onClick={handleProject}
+                    >
+                      📤 {t('bible.projectSelected', 'Project Selection')} ({selectedVerses.length}{' '}
+                      {t('bible.versesUnit', 'verses')})
                     </button>
                   </div>
                 )}
