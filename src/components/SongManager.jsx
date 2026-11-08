@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+﻿import React, { useState, useEffect, useCallback, useRef, useMemo, useReducer } from 'react';
 /* eslint-disable react-hooks/set-state-in-effect */
 /* eslint-disable react-hooks/exhaustive-deps */
 
@@ -21,9 +21,24 @@ import {
 import useSongSectionNavigation from '../hooks/useSongSectionNavigation';
 import { useAppContext } from '../contexts/AppContext';
 import { useI18n } from '../contexts/I18nContext';
+import {
+  BLANK_SECTION,
+  NO_SECTION,
+  initialSongEditor,
+  initialSongSelection,
+  songEditorReducer,
+  songSelectionReducer,
+} from '../utils/songWorkspace';
 import { PROJECTION_FONT_OPTIONS } from '../constants/fontOptions';
-import { deleteTauriSong, fetchTauriHymnLyrics, isTauriRuntime, listTauriSongs, saveTauriSong, searchTauriHymns } from '../utils/tauriProjector';
-const BLANK_SECTION_INDEX = -2;
+import {
+  deleteTauriSong,
+  fetchTauriHymnLyrics,
+  isTauriRuntime,
+  listTauriSongs,
+  saveTauriSong,
+  searchTauriHymns,
+} from '../utils/tauriProjector';
+const BLANK_SECTION_INDEX = BLANK_SECTION;
 const SONG_STYLE_DEFAULTS = {
   fontSize: 'large',
   fontSizePx: 72,
@@ -49,14 +64,20 @@ function SongManager({
 }) {
   // 歌曲列表
   const [songs, setSongs] = useState([]);
-  // current editing song
-  const [editingSong, setEditingSong] = useState(null);
-  // current selected song (view mode)
-  const [selectedSong, setSelectedSong] = useState(null);
+  // The editor and the on-screen selection, each as a small state machine.
+  // Opening them always set every field; CLOSING them did not, so clearing the
+  // editor left the form text behind and clearing the song left the section
+  // index pointing into a song that is no longer open. The transitions live in
+  // src/utils/songWorkspace.js, where they are unit tested.
+  const [editor, dispatchEditor] = useReducer(songEditorReducer, initialSongEditor);
+  const { song: editingSong, title: formTitle, author: formAuthor, lyrics: formLyrics } = editor;
+  const [selection, dispatchSelection] = useReducer(songSelectionReducer, initialSongSelection);
+  const { song: selectedSong, sectionIndex: selectedSectionIndex } = selection;
+  // Shaped like a setter so useSongSectionNavigation needs no change.
+  const setSelectedSectionIndex = useCallback((index) => {
+    dispatchSelection({ type: 'selectSection', index });
+  }, []);
   // 编辑表单
-  const [formTitle, setFormTitle] = useState('');
-  const [formAuthor, setFormAuthor] = useState('');
-  const [formLyrics, setFormLyrics] = useState('');
   // 投屏字号
   const [fontSize, setFontSize] = useState('large');
   const [fontSizePx, setFontSizePx] = useState(72);
@@ -64,7 +85,6 @@ function SongManager({
   const [isBold, setIsBold] = useState(true);
   const [textColor, setTextColor] = useState('#ffffff');
   const [songBackground, setSongBackground] = useState(null);
-  const [selectedSectionIndex, setSelectedSectionIndex] = useState(-1);
   // 搜索
   const [searchQuery, setSearchQuery] = useState('');
   const [webSearchResults, setWebSearchResults] = useState([]);
@@ -102,7 +122,9 @@ function SongManager({
         ? style.fontSize
         : SONG_STYLE_DEFAULTS.fontSize;
     setFontSize(nextFontSize);
-    setFontSizePx(Math.max(24, Math.min(180, Number(style.fontSizePx || SONG_STYLE_DEFAULTS.fontSizePx))));
+    setFontSizePx(
+      Math.max(24, Math.min(180, Number(style.fontSizePx || SONG_STYLE_DEFAULTS.fontSizePx)))
+    );
     setFontFamily(style.fontFamily || SONG_STYLE_DEFAULTS.fontFamily);
     setIsBold(Number(style.fontWeight || SONG_STYLE_DEFAULTS.fontWeight) >= 600);
     setTextColor(style.textColor || SONG_STYLE_DEFAULTS.textColor);
@@ -169,12 +191,8 @@ function SongManager({
     } catch (err) {
       console.warn('[SongManager] save failed:', err?.message || err);
     }
-    setEditingSong(null);
-    setSelectedSong(null);
-    setSelectedSectionIndex(-1);
-    setFormTitle('');
-    setFormAuthor('');
-    setFormLyrics('');
+    dispatchEditor({ type: 'close' });
+    dispatchSelection({ type: 'clearSong' });
     setSongBackground(null);
     await loadSongs();
   }, [
@@ -202,7 +220,7 @@ function SongManager({
       } catch (err) {
         console.warn('[SongManager] delete failed:', err?.message || err);
       }
-      if (selectedSong?.id === songId) setSelectedSong(null);
+      dispatchSelection({ type: 'songRemoved', songId });
       await loadSongs();
     },
     [isTauri, selectedSong, loadSongs, showConfirm]
@@ -210,28 +228,23 @@ function SongManager({
 
   // start editing
   const handleEdit = (song) => {
-    setEditingSong(song);
-    setFormTitle(song.title);
-    setFormAuthor(song.author || '');
-    setFormLyrics(song.lyrics);
+    dispatchEditor({ type: 'openExisting', song });
     setSongBackground(buildSongBackgroundFromSong(song));
     applySongStyle(buildSongStyleFromSong(song));
-    setSelectedSong(null);
+    dispatchSelection({ type: 'clearSong' });
   };
 
   // 新建歌曲
   const handleNew = () => {
-    setEditingSong({ id: null });
-    setFormTitle('');
-    setFormAuthor('');
-    setFormLyrics(
-      t(
+    dispatchEditor({
+      type: 'openNew',
+      lyrics: t(
         'songs.defaultTemplate',
         '(Enter first section)\n(Continue lines in same section)\n\n(Blank line starts next section)'
-      )
-    );
+      ),
+    });
     setSongBackground(null);
-    setSelectedSong(null);
+    dispatchSelection({ type: 'clearSong' });
   };
 
   const buildSelectedSongQueuePayload = useCallback(
@@ -282,11 +295,11 @@ function SongManager({
     },
     [
       fontSize,
-        fontSizePx,
-        fontFamily,
-        isBold,
-        textColor,
-        onProjectContent,
+      fontSizePx,
+      fontFamily,
+      isBold,
+      textColor,
+      onProjectContent,
       songBackground,
       selectedSong,
       onUpdateActiveQueueItem,
@@ -297,17 +310,17 @@ function SongManager({
 
   // Project a blank lyrics page (background only, no text).
   const handleProjectBlankSection = useCallback(() => {
-      const payload = {
-        type: 'lyrics',
-        text: '',
-        fontSize,
-        fontSizePx,
-        fontFamily,
-        fontWeight: isBold ? 700 : 400,
-        textColor,
-        background: songBackground,
-        disableTransitionOnce: true,
-      };
+    const payload = {
+      type: 'lyrics',
+      text: '',
+      fontSize,
+      fontSizePx,
+      fontFamily,
+      fontWeight: isBold ? 700 : 400,
+      textColor,
+      background: songBackground,
+      disableTransitionOnce: true,
+    };
     lastProjectedSectionRef.current = {
       section: {
         tag: 'BLANK',
@@ -371,15 +384,17 @@ function SongManager({
     [onQueueContent]
   );
 
-  const openSongWithoutAutoProject = useCallback((song) => {
-    if (!song) return;
-    lastProjectedSectionRef.current = null;
-    setSelectedSectionIndex(-1);
-    setEditingSong(null);
-    setSelectedSong(song);
-    setSongBackground(buildSongBackgroundFromSong(song));
-    applySongStyle(buildSongStyleFromSong(song));
-  }, [applySongStyle]);
+  const openSongWithoutAutoProject = useCallback(
+    (song) => {
+      if (!song) return;
+      lastProjectedSectionRef.current = null;
+      dispatchEditor({ type: 'close' });
+      dispatchSelection({ type: 'selectSong', song });
+      setSongBackground(buildSongBackgroundFromSong(song));
+      applySongStyle(buildSongStyleFromSong(song));
+    },
+    [applySongStyle]
+  );
 
   useEffect(() => {
     // Do not interrupt editor mode while user is creating/editing a song.
@@ -404,16 +419,15 @@ function SongManager({
     if (!selectedSong) return;
     // Switch song should not auto-project last section from previous song.
     lastProjectedSectionRef.current = null;
-    setSelectedSectionIndex(-1);
+    dispatchSelection({ type: 'selectSection', index: NO_SECTION });
     setSongBackground(buildSongBackgroundFromSong(selectedSong));
   }, [selectedSong?.id]);
 
   useEffect(() => {
     if (!forceShowSongListToken) return;
     // User explicitly clicked Songs menu: always return to songs list view.
-    setSelectedSong(null);
-    setEditingSong(null);
-    setSelectedSectionIndex(-1);
+    dispatchSelection({ type: 'clearSong' });
+    dispatchEditor({ type: 'close' });
     lastProjectedSectionRef.current = null;
     lastHandledPreloadRef.current = null;
   }, [forceShowSongListToken]);
@@ -447,7 +461,7 @@ function SongManager({
     const saved = buildSongStyleFromSong(selectedSong);
     if (JSON.stringify(saved || null) === JSON.stringify(style)) return;
     const nextSong = { ...selectedSong, songStyle: style };
-    setSelectedSong(nextSong);
+    dispatchSelection({ type: 'updateSong', song: nextSong });
     setSongs((prev) => prev.map((s) => (s.id === nextSong.id ? { ...s, songStyle: style } : s)));
 
     if (!isTauri) return;
@@ -514,7 +528,7 @@ function SongManager({
           textColor,
         },
       };
-      if (syncSelectedSong) setSelectedSong(nextSongWithStyle);
+      if (syncSelectedSong) dispatchSelection({ type: 'updateSong', song: nextSongWithStyle });
       if (syncSongBackground) setSongBackground(bg || null);
       setSongs((prev) => prev.map((s) => (s.id === nextSongWithStyle.id ? nextSongWithStyle : s)));
 
@@ -537,7 +551,10 @@ function SongManager({
         return nextSong;
       }
 
-      if (typeof onUpdateActiveQueueItem === 'function' && canSyncActiveQueueSong(nextSongWithStyle)) {
+      if (
+        typeof onUpdateActiveQueueItem === 'function' &&
+        canSyncActiveQueueSong(nextSongWithStyle)
+      ) {
         const queuePayload = buildSongQueuePayload({
           song: nextSongWithStyle,
           background: bg,
@@ -595,7 +612,7 @@ function SongManager({
       if (!unchanged) {
         persistSongBackground(pickerSong, externalBackground);
       } else {
-        setSelectedSong(pickerSong);
+        dispatchSelection({ type: 'updateSong', song: pickerSong });
       }
     }
   }, [
@@ -624,12 +641,8 @@ function SongManager({
       const content = decodeLyricsImportBytes(bytes);
       const normalizedLyrics = normalizeImportedLyrics(content);
       const title = deriveSongTitleFromImportFile(file.name);
-      setEditingSong({ id: null });
-      setSelectedSong(null);
-      setSelectedSectionIndex(-1);
-      setFormTitle(title);
-      setFormAuthor('');
-      setFormLyrics(normalizedLyrics);
+      dispatchEditor({ type: 'openImported', title, lyrics: normalizedLyrics });
+      dispatchSelection({ type: 'clearSong' });
     };
     reader.readAsArrayBuffer(file);
     event.target.value = '';
@@ -637,7 +650,10 @@ function SongManager({
 
   const handleSiteSearch = useCallback(async () => {
     if (!isTauri) {
-      showToast(t('songs.siteSearchDesktopOnly', 'Site search is available in the desktop app only.'), 'warning');
+      showToast(
+        t('songs.siteSearchDesktopOnly', 'Site search is available in the desktop app only.'),
+        'warning'
+      );
       return;
     }
     const keyword = String(searchQuery || '').trim();
@@ -677,20 +693,24 @@ function SongManager({
       }
       try {
         const data = await fetchTauriHymnLyrics(item.url);
-        const fallbackTitle = String(item.title || '').replace(/[【】]/g, '').trim();
+        const fallbackTitle = String(item.title || '')
+          .replace(/[【】]/g, '')
+          .trim();
         const importTitle = String(data?.title || fallbackTitle).trim();
         const importLyrics = String(data?.lyrics || '').trim();
         if (!importTitle || !importLyrics) {
-          showToast(t('songs.parseLyricsFailed', 'Failed to parse lyrics from selected page'), 'warning');
+          showToast(
+            t('songs.parseLyricsFailed', 'Failed to parse lyrics from selected page'),
+            'warning'
+          );
           return;
         }
-        setEditingSong({ id: null });
-        setSelectedSong(null);
-        setSelectedSectionIndex(-1);
-        setFormTitle(importTitle);
-        setFormAuthor('');
-        setFormLyrics(importLyrics);
-        showToast(t('songs.webImportSuccess', 'Web lyrics imported. Please review then save.'), 'success');
+        dispatchEditor({ type: 'openImported', title: importTitle, lyrics: importLyrics });
+        dispatchSelection({ type: 'clearSong' });
+        showToast(
+          t('songs.webImportSuccess', 'Web lyrics imported. Please review then save.'),
+          'success'
+        );
       } catch (err) {
         console.warn('[SongManager] import web song failed:', err?.message || err);
         showToast(t('songs.importFailed', 'Import failed'), 'error');
@@ -707,7 +727,10 @@ function SongManager({
       return;
     }
     if (!/^https?:\/\/(www\.)?christianstudy\.com\//i.test(url)) {
-      showToast(t('songs.onlyChristianstudy', 'Only christianstudy.com URL is supported.'), 'warning');
+      showToast(
+        t('songs.onlyChristianstudy', 'Only christianstudy.com URL is supported.'),
+        'warning'
+      );
       return;
     }
     const data = await fetchTauriHymnLyrics(url);
@@ -743,7 +766,7 @@ function SongManager({
           <h2 style={{ fontSize: '18px', fontWeight: '600' }}>
             {editingSong.id ? t('songs.edit', 'Edit') : t('songs.newSong', '+ New Song')}
           </h2>
-          <button className="btn btn--ghost" onClick={() => setEditingSong(null)}>
+          <button className="btn btn--ghost" onClick={() => dispatchEditor({ type: 'close' })}>
             {t('media.cancel', 'Cancel')}
           </button>
         </div>
@@ -753,7 +776,9 @@ function SongManager({
             type="text"
             placeholder={t('songs.songTitle', 'Song Title')}
             value={formTitle}
-            onChange={(e) => setFormTitle(e.target.value)}
+            onChange={(e) =>
+              dispatchEditor({ type: 'setField', field: 'title', value: e.target.value })
+            }
             style={{
               padding: '10px 12px',
               borderRadius: '6px',
@@ -768,7 +793,9 @@ function SongManager({
             type="text"
             placeholder={t('songs.authorOptional', 'Author (optional)')}
             value={formAuthor}
-            onChange={(e) => setFormAuthor(e.target.value)}
+            onChange={(e) =>
+              dispatchEditor({ type: 'setField', field: 'author', value: e.target.value })
+            }
             style={{
               padding: '10px 12px',
               borderRadius: '6px',
@@ -796,7 +823,9 @@ function SongManager({
           <textarea
             placeholder={t('songs.enterLyrics', 'Enter lyrics here...')}
             value={formLyrics}
-            onChange={(e) => setFormLyrics(e.target.value)}
+            onChange={(e) =>
+              dispatchEditor({ type: 'setField', field: 'lyrics', value: e.target.value })
+            }
             rows={15}
             style={{
               padding: '12px',
@@ -850,7 +879,7 @@ function SongManager({
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <button
               className="btn btn--ghost"
-              onClick={() => setSelectedSong(null)}
+              onClick={() => dispatchSelection({ type: 'clearSong' })}
               style={{ padding: '4px 8px', fontSize: '12px' }}
             >
               ← {t('songs.back', 'Back')}
@@ -902,10 +931,12 @@ function SongManager({
         </div>
 
         <div className="text-settings-card" style={{ marginBottom: '16px' }}>
-          <div className="text-settings-head">{t('songs.songTextControls', 'Song Text Controls')}</div>
+          <div className="text-settings-head">
+            {t('songs.songTextControls', 'Song Text Controls')}
+          </div>
 
-        <div className="text-settings-row">
-          <div className="text-settings-presets">
+          <div className="text-settings-row">
+            <div className="text-settings-presets">
               {[
                 { key: 'small', label: 'Small', px: 48 },
                 { key: 'medium', label: 'Medium', px: 60 },
@@ -921,17 +952,17 @@ function SongManager({
                 >
                   {s.label}
                 </button>
-            ))}
+              ))}
+            </div>
+            <label className="cp-label-row" style={{ marginBottom: 0 }}>
+              <input
+                type="checkbox"
+                checked={isBold}
+                onChange={(e) => setIsBold(e.target.checked)}
+              />
+              {t('textEditor.bold', 'Bold')}
+            </label>
           </div>
-          <label className="cp-label-row" style={{ marginBottom: 0 }}>
-            <input
-              type="checkbox"
-              checked={isBold}
-              onChange={(e) => setIsBold(e.target.checked)}
-            />
-            {t('textEditor.bold', 'Bold')}
-          </label>
-        </div>
 
           <div className="text-settings-grid">
             <label className="text-settings-field">
@@ -983,7 +1014,10 @@ function SongManager({
         </div>
 
         <p style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: '12px' }}>
-          {t('songs.slideStyleHint', 'Slide-style section cards (in order). Click a card to project.')}
+          {t(
+            'songs.slideStyleHint',
+            'Slide-style section cards (in order). Click a card to project.'
+          )}
         </p>
 
         {/* 歌词段落卡片（PPT 风格） */}
@@ -997,7 +1031,7 @@ function SongManager({
           <div
             ref={blankSectionCardRef}
             onClick={() => {
-              setSelectedSectionIndex(BLANK_SECTION_INDEX);
+              dispatchSelection({ type: 'selectSection', index: BLANK_SECTION_INDEX });
               handleProjectBlankSection();
             }}
             style={getSelectableThumbCardStyle(selectedSectionIndex === BLANK_SECTION_INDEX)}
@@ -1019,7 +1053,9 @@ function SongManager({
               <span style={{ fontSize: '11px', fontWeight: '700', color: 'var(--color-primary)' }}>
                 {t('songs.slideBlank', 'Slide Blank')}
               </span>
-              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>{t('songs.noText', 'No text')}</span>
+              <span style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>
+                {t('songs.noText', 'No text')}
+              </span>
             </div>
             <div
               style={{
@@ -1057,7 +1093,7 @@ function SongManager({
                 else sectionCardRefs.current.delete(idx);
               }}
               onClick={() => {
-                setSelectedSectionIndex(idx);
+                dispatchSelection({ type: 'selectSection', index: idx });
                 handleProjectSection(section, idx);
               }}
               style={getSelectableThumbCardStyle(idx === selectedSectionIndex)}
@@ -1103,13 +1139,13 @@ function SongManager({
                     alignItems: 'center',
                     justifyContent: 'center',
                     whiteSpace: 'pre-line',
-                      textAlign: 'center',
-                      lineHeight: '1.6',
-                      color: textColor,
-                      fontFamily: fontFamily,
-                      fontWeight: isBold ? 700 : 400,
-                      // 320px is the baseline preview width mapped from 1920px projector width.
-                      fontSize: `${Math.max(9, Math.min(28, Math.round((Number(fontSizePx || 72) * 320) / 1920)))}px`,
+                    textAlign: 'center',
+                    lineHeight: '1.6',
+                    color: textColor,
+                    fontFamily: fontFamily,
+                    fontWeight: isBold ? 700 : 400,
+                    // 320px is the baseline preview width mapped from 1920px projector width.
+                    fontSize: `${Math.max(9, Math.min(28, Math.round((Number(fontSizePx || 72) * 320) / 1920)))}px`,
                     textShadow: '2px 2px 8px rgba(0, 0, 0, 0.85)',
                     overflow: 'hidden',
                   }}
@@ -1177,7 +1213,15 @@ function SongManager({
           >
             christianstudy.com {t('songs.results', 'results')} ({webSearchResults.length})
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '180px', overflow: 'auto' }}>
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+              maxHeight: '180px',
+              overflow: 'auto',
+            }}
+          >
             {webSearchResults.map((item) => (
               <div
                 key={item.url}
@@ -1190,14 +1234,23 @@ function SongManager({
                   borderRadius: '6px',
                   background: 'var(--color-surface)',
                 }}
+              >
+                <span style={{ fontSize: '13px' }}>{item.title}</span>
+                <span
+                  style={{
+                    fontSize: '10px',
+                    color: 'var(--color-text-secondary)',
+                    flex: 1,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
                 >
-                  <span style={{ fontSize: '13px' }}>{item.title}</span>
-                  <span style={{ fontSize: '10px', color: 'var(--color-text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {item.url}
-                  </span>
-                  <button className="btn btn--ghost" onClick={() => handleImportWebResult(item)}>
-                    {t('songs.importAction', 'Import')}
-                  </button>
+                  {item.url}
+                </span>
+                <button className="btn btn--ghost" onClick={() => handleImportWebResult(item)}>
+                  {t('songs.importAction', 'Import')}
+                </button>
               </div>
             ))}
           </div>
@@ -1218,7 +1271,10 @@ function SongManager({
       >
         <input
           type="text"
-          placeholder={t('songs.directImportByUrl', 'Paste christianstudy song URL and import directly...')}
+          placeholder={t(
+            'songs.directImportByUrl',
+            'Paste christianstudy song URL and import directly...'
+          )}
           value={webImportUrl}
           onChange={(e) => setWebImportUrl(e.target.value)}
           style={{
@@ -1242,7 +1298,9 @@ function SongManager({
         <div className="empty-state empty-state--roomy">
           <div className="empty-state__icon">{t('songs.title', 'Songs')}</div>
           <div className="empty-state__title">{t('songs.noSongsYet', 'No songs yet')}</div>
-          <div className="empty-state__desc">{t('songs.startHint', 'Click "New Song" or "Import Lyrics" to start')}</div>
+          <div className="empty-state__desc">
+            {t('songs.startHint', 'Click "New Song" or "Import Lyrics" to start')}
+          </div>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -1254,11 +1312,7 @@ function SongManager({
             >
               <div>
                 <div className="cp-list-card__title">{song.title}</div>
-                {song.author && (
-                  <div className="cp-list-card__meta">
-                    {song.author}
-                  </div>
-                )}
+                {song.author && <div className="cp-list-card__meta">{song.author}</div>}
               </div>
               <div style={{ display: 'flex', gap: '6px' }}>
                 <button
