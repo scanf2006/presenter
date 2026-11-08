@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, useReducer } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import PdfThumbnail from './PdfThumbnail';
 import { getYouTubeVideoIdFromUrl, normalizeYouTubeWatchUrl } from '../utils/youtube';
 import { consumeKeyEvent, isTypingTarget } from '../utils/keyboard';
+import { initialPptViewer, isPptConverting, pptViewerReducer } from '../utils/pptViewer';
 import { closePdfDocument } from '../utils/pdfDocument';
 import {
   getSelectableThumbCardStyle,
@@ -39,11 +40,17 @@ function MediaManager({
   const [activeFilter, setActiveFilter] = useState('all');
   const [isDragging, setIsDragging] = useState(false);
   const [importing, setImporting] = useState(false);
-  const [pptConverting, setPptConverting] = useState(false);
-  const [pptError, setPptError] = useState('');
-  const [pptSlides, setPptSlides] = useState(null);
-  const [pptSourcePath, setPptSourcePath] = useState('');
-  const [currentSlideIndex, setCurrentSlideIndex] = useState(-1);
+  // The PowerPoint conversion and slide view, as one state machine. These five
+  // values used to be set separately and could disagree - see
+  // src/utils/pptViewer.js for what went wrong and the rule that replaces it.
+  const [pptViewer, dispatchPpt] = useReducer(pptViewerReducer, initialPptViewer);
+  const {
+    slides: pptSlides,
+    sourcePath: pptSourcePath,
+    error: pptError,
+    slideIndex: currentSlideIndex,
+  } = pptViewer;
+  const pptConverting = isPptConverting(pptViewer);
 
   const [pdfLoading, setPdfLoading] = useState(false);
   const [activePdf, setActivePdf] = useState(null);
@@ -72,9 +79,11 @@ function MediaManager({
     };
     if (!isTauri) return undefined;
     let unlisten;
-    listen('youtube-download-progress', (event) => updateProgress(event.payload)).then((dispose) => {
-      unlisten = dispose;
-    });
+    listen('youtube-download-progress', (event) => updateProgress(event.payload)).then(
+      (dispose) => {
+        unlisten = dispose;
+      }
+    );
     return () => unlisten?.();
   }, [isTauri]);
 
@@ -206,7 +215,7 @@ function MediaManager({
         if (prev?.pdfDocument) closePdfDocument(prev.pdfDocument);
         return null;
       });
-      setPptSlides(null);
+      dispatchPpt({ type: 'close' });
       setCurrentPdfPage(1);
 
       try {
@@ -249,7 +258,10 @@ function MediaManager({
       } catch (err) {
         if (requestSeq !== pdfLoadRequestSeqRef.current) return;
         console.error('[MediaManager] PDF load failed:', err);
-      showToast(`${t('media.pdfLoadFailed', 'Failed to load PDF thumbnails')}: ${err.message}`, 'error');
+        showToast(
+          `${t('media.pdfLoadFailed', 'Failed to load PDF thumbnails')}: ${err.message}`,
+          'error'
+        );
       } finally {
         if (requestSeq === pdfLoadRequestSeqRef.current) {
           setPdfLoading(false);
@@ -271,9 +283,7 @@ function MediaManager({
         return null;
       });
       setCurrentPdfPage(1);
-      setPptSourcePath(file?.path || '');
-      setPptError('');
-      setPptConverting(true);
+      dispatchPpt({ type: 'convertStarted', sourcePath: file?.path || '' });
       let result;
       try {
         result = await convertTauriPpt(file.path);
@@ -284,16 +294,13 @@ function MediaManager({
         logStaleDrop('ppt');
         return;
       }
-      setPptConverting(false);
-
       if (result.success && result.slides.length > 0) {
-        setPptSlides(result.slides);
-        setCurrentSlideIndex(-1);
+        dispatchPpt({ type: 'convertSucceeded', slides: result.slides });
         return;
       }
 
       if (result.error === 'TIMEOUT') {
-        setPptSourcePath('');
+        dispatchPpt({ type: 'convertFailed' });
         showToast(
           t(
             'media.pptTimeout',
@@ -302,9 +309,14 @@ function MediaManager({
           'error'
         );
       } else {
-        setPptSourcePath('');
-        setPptError(result.error || t('media.unknownError', 'Unknown error'));
-        showToast(`${t('media.pptFailed', 'PPT conversion failed')}: ${result.error || t('media.unknownError', 'Unknown error')}`, 'error');
+        dispatchPpt({
+          type: 'convertFailed',
+          error: result.error || t('media.unknownError', 'Unknown error'),
+        });
+        showToast(
+          `${t('media.pptFailed', 'PPT conversion failed')}: ${result.error || t('media.unknownError', 'Unknown error')}`,
+          'error'
+        );
       }
     },
     [isTauri, showToast, t, logStaleDrop]
@@ -316,7 +328,10 @@ function MediaManager({
         if (file.type === 'image' || file.type === 'video') {
           onPickBackground?.({ type: file.type, path: file.path, name: file.name });
         } else {
-          showToast(t('media.bgOnlyImageVideo', 'Background only supports image or video'), 'warning');
+          showToast(
+            t('media.bgOnlyImageVideo', 'Background only supports image or video'),
+            'warning'
+          );
         }
         return;
       }
@@ -400,13 +415,19 @@ function MediaManager({
           }
           setYoutubeDownload({ status: 'failed', percent: null });
           showToast(
-            t('media.youtubeCacheFailed', 'YouTube was added to queue, but offline caching failed.'),
+            t(
+              'media.youtubeCacheFailed',
+              'YouTube was added to queue, but offline caching failed.'
+            ),
             'warning'
           );
         } catch (_) {
           setYoutubeDownload({ status: 'failed', percent: null });
           showToast(
-            t('media.youtubeCacheFailed', 'YouTube was added to queue, but offline caching failed.'),
+            t(
+              'media.youtubeCacheFailed',
+              'YouTube was added to queue, but offline caching failed.'
+            ),
             'warning'
           );
         }
@@ -454,16 +475,13 @@ function MediaManager({
       // Force-home action should invalidate stale async completions.
       pdfLoadRequestSeqRef.current += 1;
       pptConvertRequestSeqRef.current += 1;
-      setPptConverting(false);
+      dispatchPpt({ type: 'close' });
       setPdfLoading(false);
-      setPptSlides(null);
-      setPptSourcePath('');
       // M7/M10-R2: Destroy PDF document before clearing reference, using ref.
       if (activePdfRef.current?.pdfDocument) {
         closePdfDocument(activePdfRef.current.pdfDocument);
       }
       setActivePdf(null);
-      setCurrentSlideIndex(-1);
       setCurrentPdfPage(1);
       setActiveFilter('all');
     }, 0);
@@ -529,7 +547,7 @@ function MediaManager({
         if (nextIndex === currentSlideIndex) return;
         const slide = pptSlides[nextIndex];
         if (!slide) return;
-        setCurrentSlideIndex(nextIndex);
+        dispatchPpt({ type: 'selectSlide', index: nextIndex });
         onProjectMedia({
           type: 'image',
           path: slide.path,
@@ -545,7 +563,14 @@ function MediaManager({
     if (!activePdf && !(Array.isArray(pptSlides) && pptSlides.length > 0)) return;
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [isMediaSectionActive, activePdf, pptSlides, currentPdfPage, currentSlideIndex, onProjectMedia]);
+  }, [
+    isMediaSectionActive,
+    activePdf,
+    pptSlides,
+    currentPdfPage,
+    currentSlideIndex,
+    onProjectMedia,
+  ]);
 
   const formatSize = (bytes) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -656,7 +681,12 @@ function MediaManager({
                 fontSize: '12px',
               }}
             >
-              <span>{t('media.backgroundPickerMode', 'Background picker mode: click an image/video to apply and return.')}</span>
+              <span>
+                {t(
+                  'media.backgroundPickerMode',
+                  'Background picker mode: click an image/video to apply and return.'
+                )}
+              </span>
               <button className="btn btn--ghost" onClick={() => onCancelBackgroundPick?.()}>
                 {t('media.cancel', 'Cancel')}
               </button>
@@ -666,7 +696,10 @@ function MediaManager({
           <div className="cp-toolbar-row cp-gap-bottom-sm">
             <input
               type="text"
-              placeholder={t('media.youtubePlaceholder', 'Paste YouTube URL (e.g. https://youtu.be/...)')}
+              placeholder={t(
+                'media.youtubePlaceholder',
+                'Paste YouTube URL (e.g. https://youtu.be/...)'
+              )}
               value={youtubeUrl}
               onChange={(e) => {
                 setYoutubeUrl(e.target.value);
@@ -677,21 +710,38 @@ function MediaManager({
             <button className="btn btn--primary" onClick={handleProjectYouTube}>
               {t('media.play', 'Play')}
             </button>
-            <button className="btn btn--ghost" onClick={handleQueueYouTube} disabled={['resolving', 'downloading'].includes(youtubeDownload.status)}>
+            <button
+              className="btn btn--ghost"
+              onClick={handleQueueYouTube}
+              disabled={['resolving', 'downloading'].includes(youtubeDownload.status)}
+            >
               {t('media.queue', 'Queue')}
             </button>
           </div>
           {youtubeDownload.status !== 'idle' && (
             <div style={{ marginTop: '-6px', marginBottom: '12px', fontSize: '12px' }}>
               {isTauri && ['resolving', 'downloading'].includes(youtubeDownload.status) && (
-                <button className="btn btn--ghost" onClick={() => cancelTauriYouTube().catch(() => showToast(t('media.youtubeDownloadFailed', 'YouTube download failed.'), 'error'))}>
+                <button
+                  className="btn btn--ghost"
+                  onClick={() =>
+                    cancelTauriYouTube().catch(() =>
+                      showToast(
+                        t('media.youtubeDownloadFailed', 'YouTube download failed.'),
+                        'error'
+                      )
+                    )
+                  }
+                >
                   {t('media.cancel', 'Cancel')}
                 </button>
               )}
-              {(youtubeDownload.status === 'resolving' || youtubeDownload.status === 'downloading') && (
+              {(youtubeDownload.status === 'resolving' ||
+                youtubeDownload.status === 'downloading') && (
                 <progress
                   max="100"
-                  value={Number.isFinite(youtubeDownload.percent) ? youtubeDownload.percent : undefined}
+                  value={
+                    Number.isFinite(youtubeDownload.percent) ? youtubeDownload.percent : undefined
+                  }
                   style={{ width: '100%', display: 'block', marginBottom: '4px' }}
                 />
               )}
@@ -756,8 +806,12 @@ function MediaManager({
             ) : (
               <>
                 <span className="media-drop-zone__icon">FILE</span>
-                <span className="media-drop-zone__text">{t('media.dragToImport', 'Drag files here to import')}</span>
-                <span className="media-drop-zone__hint">{t('media.supportsHint', 'Supports image, video, PDF and PPT')}</span>
+                <span className="media-drop-zone__text">
+                  {t('media.dragToImport', 'Drag files here to import')}
+                </span>
+                <span className="media-drop-zone__hint">
+                  {t('media.supportsHint', 'Supports image, video, PDF and PPT')}
+                </span>
               </>
             )}
           </div>
@@ -902,8 +956,7 @@ function MediaManager({
                 style={{ padding: '4px 8px', fontSize: '12px' }}
                 onClick={() => {
                   setDetailOpenedFromQueue(false);
-                  setPptSlides(null);
-                  setPptSourcePath('');
+                  dispatchPpt({ type: 'close' });
                 }}
               >
                 {t('media.close', 'Close')}
@@ -928,7 +981,7 @@ function MediaManager({
                   else pptThumbRefs.current.delete(index);
                 }}
                 onClick={() => {
-                  setCurrentSlideIndex(index);
+                  dispatchPpt({ type: 'selectSlide', index });
                   onProjectMedia({
                     type: 'image',
                     path: slide.path,
@@ -981,15 +1034,16 @@ function MediaManager({
               <div className="empty-state__icon">FILE</div>
               <div className="empty-state__title">{t('media.noMediaFiles', 'No media files')}</div>
               <div className="empty-state__desc">
-                {t('media.noMediaHint', 'Click "Import Files" or drag files into the drop zone above.')}
+                {t(
+                  'media.noMediaHint',
+                  'Click "Import Files" or drag files into the drop zone above.'
+                )}
               </div>
             </div>
           ) : (
             groupedFiles.map((group) => (
               <div key={group.type} style={{ marginBottom: '16px' }}>
-                <div
-                  className="cp-group-head"
-                >
+                <div className="cp-group-head">
                   <span>
                     {getTypeIcon(group.type)} {getTypeLabel(group.type)}
                   </span>
@@ -1088,9 +1142,7 @@ function MediaManager({
                         </div>
 
                         <div className="cp-media-card__body">
-                          <div className="cp-media-card__title">
-                            {file.name}
-                          </div>
+                          <div className="cp-media-card__title">{file.name}</div>
                           <div className="cp-media-card__meta">
                             <span>{formatSize(file.size)}</span>
                             <div className="cp-media-card__actions">
