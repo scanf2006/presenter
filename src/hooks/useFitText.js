@@ -8,14 +8,20 @@ import { computeFitScale, quantizeFitScale } from '../utils/textFit';
  * Remeasures when the container resizes (the projector window moving to another
  * display) and whenever `deps` change (new slide, new font size).
  *
- * Returns `{ containerRef, contentRef, scale, overflowing }`. `overflowing`
- * means the text does not fit even at the minimum scale, so the UI can say so
- * instead of quietly cutting it off.
+ * Returns `{ containerRef, contentRef, reserveRef, scale, tight, overflowing }`.
+ * `tight` means it fits only by going below a comfortable reading size;
+ * `overflowing` means it did not fit even at the absolute bound.
+ *
+ * Attach `reserveRef` to anything overlaid inside the container that the text
+ * must not run under — the Bible reference line is positioned absolutely at the
+ * bottom, so without this the passage could be scaled to "fit" and still end up
+ * underneath it.
  */
 export default function useFitText(deps = []) {
   const containerRef = useRef(null);
   const contentRef = useRef(null);
-  const [fit, setFit] = useState({ scale: 1, overflowing: false });
+  const reserveRef = useRef(null);
+  const [fit, setFit] = useState({ scale: 1, tight: false, overflowing: false });
 
   const measure = useCallback(() => {
     const container = containerRef.current;
@@ -35,14 +41,18 @@ export default function useFitText(deps = []) {
     const style = typeof window !== 'undefined' ? window.getComputedStyle(container) : null;
     const padding =
       (Number.parseFloat(style?.paddingTop) || 0) + (Number.parseFloat(style?.paddingBottom) || 0);
-    const availableHeight = container.clientHeight - padding;
+    // Anything overlaid at the bottom takes space the text cannot use.
+    const reserved = reserveRef.current?.offsetHeight || 0;
+    const availableHeight = container.clientHeight - padding - reserved;
 
     const next = computeFitScale({ contentHeight, availableHeight });
     const scale = quantizeFitScale(next.scale);
     setFit((current) =>
-      current.scale === scale && current.overflowing === next.overflowing
+      current.scale === scale &&
+      current.tight === next.tight &&
+      current.overflowing === next.overflowing
         ? current
-        : { scale, overflowing: next.overflowing }
+        : { scale, tight: next.tight, overflowing: next.overflowing }
     );
   }, []);
 
@@ -74,5 +84,13 @@ export default function useFitText(deps = []) {
     };
   }, [measure, depsKey]);
 
-  return { containerRef, contentRef, scale: fit.scale, overflowing: fit.overflowing, measure };
+  return {
+    containerRef,
+    contentRef,
+    reserveRef,
+    scale: fit.scale,
+    tight: fit.tight,
+    overflowing: fit.overflowing,
+    measure,
+  };
 }

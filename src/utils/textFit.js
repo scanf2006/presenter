@@ -10,32 +10,59 @@
 // exact factor, while changing the font size reflows the text and changes the
 // line count, which needs iterating to converge.
 
-/** Below this the text is too small to read from a pew, so it stops shrinking. */
-export const MIN_FIT_SCALE = 0.5;
+/**
+ * Below this the text is small enough that the operator should be told, but it
+ * is NOT a reason to stop shrinking.
+ *
+ * The first version of this treated it as a hard floor: text more than twice
+ * too tall was scaled to 50% and then left to run off the screen, on the
+ * reasoning that smaller would be unreadable. That was the wrong trade. A
+ * large Bible font with several verses is routinely three or four times too
+ * tall, so in practice the passage was still cut off — and text you cannot see
+ * at all is worse than text that is small. The floor now only raises a flag.
+ */
+export const COMFORTABLE_MIN_SCALE = 0.5;
+
+/** A sanity bound, not a design choice: below this a measurement is suspect. */
+export const ABSOLUTE_MIN_SCALE = 0.1;
 
 /**
  * How much to scale text that measures `contentHeight` to fit `availableHeight`.
  *
- * Returns `{ scale, overflowing }`. `overflowing` is true when the content does
- * not fit even at `minScale`, so the UI can tell the operator rather than
- * silently cutting the text off.
+ * Returns `{ scale, tight, overflowing }`:
+ *  - `tight` means it fits, but only by going below a comfortable reading size,
+ *    so the operator may want fewer verses or a smaller chosen font.
+ *  - `overflowing` means it does not fit even at the absolute bound, which
+ *    takes an extreme amount of text.
  */
-export function computeFitScale({ contentHeight, availableHeight, minScale = MIN_FIT_SCALE }) {
+export function computeFitScale({
+  contentHeight,
+  availableHeight,
+  minScale = ABSOLUTE_MIN_SCALE,
+  comfortableMinScale = COMFORTABLE_MIN_SCALE,
+}) {
   const content = Number(contentHeight);
   const available = Number(availableHeight);
-  const floor = Number.isFinite(minScale) ? Math.min(Math.max(minScale, 0.05), 1) : MIN_FIT_SCALE;
+  const floor = Number.isFinite(minScale)
+    ? Math.min(Math.max(minScale, 0.01), 1)
+    : ABSOLUTE_MIN_SCALE;
 
   // Before the first measurement, or in a zero-sized box, render unscaled: a
   // guess here would show the wrong size for one frame.
   if (!Number.isFinite(content) || !Number.isFinite(available)) {
-    return { scale: 1, overflowing: false };
+    return { scale: 1, tight: false, overflowing: false };
   }
-  if (content <= 0 || available <= 0) return { scale: 1, overflowing: false };
-  if (content <= available) return { scale: 1, overflowing: false };
+  if (content <= 0 || available <= 0) return { scale: 1, tight: false, overflowing: false };
+  if (content <= available) return { scale: 1, tight: false, overflowing: false };
 
   const exact = available / content;
-  if (exact < floor) return { scale: floor, overflowing: true };
-  return { scale: exact, overflowing: false };
+  const scale = Math.max(floor, exact);
+  return {
+    scale,
+    tight: scale < comfortableMinScale,
+    // Only when even the absolute bound could not accommodate it.
+    overflowing: scale > exact,
+  };
 }
 
 /**

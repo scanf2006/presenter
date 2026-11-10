@@ -16,7 +16,7 @@ function ProjectorTextLayer({
 }) {
   const fontSize = getProjectorTextSize();
   // Remeasure whenever anything that changes the rendered height changes.
-  const { containerRef, contentRef, scale, overflowing } = useFitText([
+  const { containerRef, contentRef, reserveRef, scale, tight, overflowing } = useFitText([
     content?.text,
     content?.reference,
     fontSize,
@@ -26,10 +26,13 @@ function ProjectorTextLayer({
   ]);
 
   useEffect(() => {
-    if (typeof onFitChange === 'function') onFitChange({ scale, overflowing });
-  }, [onFitChange, scale, overflowing]);
+    if (typeof onFitChange === 'function') onFitChange({ scale, tight, overflowing });
+  }, [onFitChange, scale, tight, overflowing]);
 
-  if (!content || (content.type !== 'text' && content.type !== 'bible' && content.type !== 'lyrics')) {
+  if (
+    !content ||
+    (content.type !== 'text' && content.type !== 'bible' && content.type !== 'lyrics')
+  ) {
     return null;
   }
 
@@ -91,6 +94,9 @@ function ProjectorTextLayer({
 
       {content.reference && (
         <div
+          // Measured and reserved, so the passage is not scaled to "fit" and
+          // then left running underneath this line.
+          ref={reserveRef}
           style={{
             position: 'absolute',
             right: 'clamp(28px, 4.5vw, 96px)',
