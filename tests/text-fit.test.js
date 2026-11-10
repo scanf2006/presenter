@@ -110,11 +110,7 @@ test('an unmeasured or empty box renders unscaled rather than guessing', async (
     { contentHeight: NaN, availableHeight: 800 },
     {},
   ]) {
-    assert.deepEqual(
-      computeFitScale(args),
-      FITS,
-      `${JSON.stringify(args)} should render unscaled`
-    );
+    assert.deepEqual(computeFitScale(args), FITS, `${JSON.stringify(args)} should render unscaled`);
   }
 });
 
@@ -149,4 +145,49 @@ test('quantizing keeps a heavy reduction usable rather than rounding it away', a
   const absurd = computeFitScale({ contentHeight: 20000, availableHeight: 1000 });
   assert.equal(quantizeFitScale(absurd.scale), 0.1);
   assert.ok(quantizeFitScale(absurd.scale) > 0);
+});
+
+test('a box with no layout yet is reported as unmeasured, not as zero space', async () => {
+  const { usableHeight } = await load();
+
+  for (const clientHeight of [0, -5, undefined, null, NaN, 'tall']) {
+    const result = usableHeight({ clientHeight, padding: 100, reserved: 50 });
+    assert.equal(result.measured, false, `${JSON.stringify(clientHeight)} is not a measurement`);
+    assert.equal(result.available, 0);
+  }
+});
+
+test('the usable band is the box minus its padding and whatever is reserved', async () => {
+  const { usableHeight } = await load();
+
+  assert.deepEqual(usableHeight({ clientHeight: 1080, padding: 144, reserved: 56 }), {
+    available: 880,
+    measured: true,
+  });
+  // Missing figures default to nothing reserved.
+  assert.deepEqual(usableHeight({ clientHeight: 1080 }), { available: 1080, measured: true });
+});
+
+test('reservations larger than the box fall back to the box, not to nothing', async () => {
+  // This is the bug behind text spilling off the top AND the bottom: the band
+  // came out negative, computeFitScale read that as "not measured" and returned
+  // scale 1, and the full-size text was then centred and clipped at both ends.
+  const { usableHeight, computeFitScale } = await load();
+
+  const squeezed = usableHeight({ clientHeight: 48, padding: 48, reserved: 96 });
+  assert.equal(squeezed.measured, true, 'the box is real, so this is a measurement');
+  assert.equal(squeezed.available, 48, 'fitting the whole box beats fitting nothing');
+
+  // And the scale that follows actually shrinks the text.
+  const fit = computeFitScale({ contentHeight: 5000, availableHeight: squeezed.available });
+  assert.ok(fit.scale < 1, 'it must still scale down');
+  assert.equal(fit.tight, true);
+});
+
+test('a band of exactly zero after reservations still counts as measured', async () => {
+  const { usableHeight } = await load();
+
+  const result = usableHeight({ clientHeight: 200, padding: 150, reserved: 50 });
+  assert.equal(result.measured, true);
+  assert.equal(result.available, 200);
 });

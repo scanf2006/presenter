@@ -16,14 +16,15 @@ function ProjectorTextLayer({
 }) {
   const fontSize = getProjectorTextSize();
   // Remeasure whenever anything that changes the rendered height changes.
-  const { containerRef, contentRef, reserveRef, scale, tight, overflowing } = useFitText([
-    content?.text,
-    content?.reference,
-    fontSize,
-    content?.fontFamily,
-    content?.fontWeight,
-    content?.type,
-  ]);
+  const { containerRef, contentRef, reserveRef, scale, tight, overflowing, reserveHeight } =
+    useFitText([
+      content?.text,
+      content?.reference,
+      fontSize,
+      content?.fontFamily,
+      content?.fontWeight,
+      content?.type,
+    ]);
 
   useEffect(() => {
     if (typeof onFitChange === 'function') onFitChange({ scale, tight, overflowing });
@@ -71,7 +72,16 @@ function ProjectorTextLayer({
             // Scales the text down when it would otherwise run off the screen.
             // A transform keeps the chosen font size intact and only changes how
             // large it is drawn, so nothing reflows.
-            transform: scale === 1 ? undefined : `scale(${scale})`,
+            // The flex container centres on its own middle, but the space the
+            // text may use is shorter than that by whatever is reserved at the
+            // bottom. Shifting up by half the reserve re-centres the text on
+            // the band it was actually fitted into, instead of leaving it low
+            // enough to run under the reference line. The translate is listed
+            // first so it moves by screen pixels rather than scaled ones.
+            transform:
+              scale === 1 && !reserveHeight
+                ? undefined
+                : `translateY(${-reserveHeight / 2}px) scale(${scale})`,
             transformOrigin: 'center center',
             whiteSpace: 'pre-line',
             textAlign: content.type === 'bible' ? 'left' : 'center',

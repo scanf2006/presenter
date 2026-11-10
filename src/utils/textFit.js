@@ -66,6 +66,29 @@ export function computeFitScale({
 }
 
 /**
+ * The height the text may actually use, and whether the box has been laid out
+ * at all.
+ *
+ * These two were conflated before, and that is what let text overflow in both
+ * directions: a container whose padding and reserved strip added up to more
+ * than its own height produced a negative band, which `computeFitScale` read as
+ * "not measured yet" and answered with "render unscaled". The text was then
+ * centred at full size and spilled off the top AND the bottom. Giving up on
+ * scaling is only right when there is no layout yet; when the box is real but
+ * the reservations do not fit inside it, fitting the whole box is far better
+ * than fitting nothing.
+ */
+export function usableHeight({ clientHeight, padding = 0, reserved = 0 }) {
+  const box = Number(clientHeight);
+  if (!Number.isFinite(box) || box <= 0) {
+    return { available: 0, measured: false };
+  }
+  const band = box - (Number(padding) || 0) - (Number(reserved) || 0);
+  if (band > 0) return { available: band, measured: true };
+  return { available: box, measured: true };
+}
+
+/**
  * Rounds a scale for use in a style value. Jitter of a fraction of a percent
  * between measurements would otherwise restart the CSS transition on every
  * resize tick.
