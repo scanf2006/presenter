@@ -23,6 +23,9 @@ export default function useFitText(deps = []) {
   const contentRef = useRef(null);
   const reserveRef = useRef(null);
   const [fit, setFit] = useState({ scale: 1, tight: false, overflowing: false, reserveHeight: 0 });
+  // TEMPORARY: the raw figures, so a diagnostic build can show why a passage
+  // was or was not scaled. Remove with the overlay in ProjectorTextLayer.
+  const [debug, setDebug] = useState(null);
 
   /**
    * Measures and commits. Returns false when the box has no layout yet, so the
@@ -52,10 +55,20 @@ export default function useFitText(deps = []) {
       padding,
       reserved,
     });
-    if (!measured) return false;
-
     const next = computeFitScale({ contentHeight, availableHeight: available });
     const scale = quantizeFitScale(next.scale);
+    // TEMPORARY: recorded even when unmeasured, so a build can show that case.
+    setDebug({
+      clientHeight: container.clientHeight,
+      padding: Math.round(padding),
+      reserved,
+      contentHeight,
+      available: Math.round(available),
+      measured,
+      scale,
+    });
+    if (!measured) return false;
+
     setFit((current) =>
       current.scale === scale &&
       current.tight === next.tight &&
@@ -120,5 +133,6 @@ export default function useFitText(deps = []) {
     overflowing: fit.overflowing,
     reserveHeight: fit.reserveHeight,
     measure,
+    debug,
   };
 }

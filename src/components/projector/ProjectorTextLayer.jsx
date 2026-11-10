@@ -3,6 +3,12 @@ import { TEXT_RENDER } from '../../constants/text-render';
 import { FREE_TEXT_CONTENT_WIDTH_PERCENT } from '../../utils/freeTextLayout';
 import useFitText from '../../hooks/useFitText';
 
+// TEMPORARY, for one diagnostic build only: paints the fitting measurements on
+// the projector output, because jsdom performs no layout and so no test in this
+// project can show why a passage was not scaled. Set back to false and delete
+// the overlay below once the cause is known.
+const SHOW_FIT_DIAGNOSTIC = true;
+
 function ProjectorTextLayer({
   content,
   contentStageStyle,
@@ -16,7 +22,7 @@ function ProjectorTextLayer({
 }) {
   const fontSize = getProjectorTextSize();
   // Remeasure whenever anything that changes the rendered height changes.
-  const { containerRef, contentRef, reserveRef, scale, tight, overflowing, reserveHeight } =
+  const { containerRef, contentRef, reserveRef, scale, tight, overflowing, reserveHeight, debug } =
     useFitText([
       content?.text,
       content?.reference,
@@ -101,6 +107,38 @@ function ProjectorTextLayer({
           {content.text}
         </div>
       </div>
+
+      {/* TEMPORARY diagnostic overlay — delete with SHOW_FIT_DIAGNOSTIC. */}
+      {SHOW_FIT_DIAGNOSTIC && (
+        <div
+          style={{
+            position: 'absolute',
+            left: 12,
+            top: 12,
+            zIndex: 999,
+            background: 'rgba(0,120,60,0.92)',
+            color: '#fff',
+            font: '600 15px/1.45 monospace',
+            padding: '8px 12px',
+            borderRadius: 6,
+            whiteSpace: 'pre',
+            pointerEvents: 'none',
+          }}
+        >
+          {debug
+            ? [
+                `type       ${content.type}`,
+                `box        ${debug.clientHeight}`,
+                `padding    ${debug.padding}`,
+                `reserved   ${debug.reserved}`,
+                `available  ${debug.available}`,
+                `content    ${debug.contentHeight}`,
+                `measured   ${debug.measured}`,
+                `SCALE      ${scale}`,
+              ].join('\n')
+            : 'no measurement taken'}
+        </div>
+      )}
 
       {content.reference && (
         <div
